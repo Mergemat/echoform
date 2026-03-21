@@ -3,7 +3,27 @@ import type { Project } from './types';
 
 type WatcherEvents = {
   onChange: (projectId: string, projectName: string) => void;
+  onError: (projectId: string, projectName: string, message: string) => void;
 };
+
+function watchErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    switch (code) {
+      case 'EACCES':
+        return 'Permission denied — cannot watch this project folder. Check file permissions.';
+      case 'ENOENT':
+        return 'Project folder not found — it may have been moved or deleted.';
+      case 'EMFILE':
+        return 'Too many open files — close some applications or increase the system limit.';
+      case 'ENOSPC':
+        return 'No space for file watchers — too many files are being watched system-wide.';
+      default:
+        return `File watcher error (${code}): ${err instanceof Error ? err.message : 'unknown'}`;
+    }
+  }
+  return 'File watcher encountered an unexpected error.';
+}
 
 export class ProjectWatcher {
   private watchers = new Map<string, FSWatcher>();
@@ -44,9 +64,15 @@ export class ProjectWatcher {
           this.debouncedChange(project.id, project.name);
         },
       );
+      watcher.on('error', (err: NodeJS.ErrnoException) => {
+        const msg = watchErrorMessage(err);
+        this.events.onError(project.id, project.name, msg);
+        this.unwatchProject(project.id);
+      });
       this.watchers.set(project.id, watcher);
-    } catch {
-      // watch may fail on some filesystems, silently skip
+    } catch (err) {
+      const msg = watchErrorMessage(err);
+      this.events.onError(project.id, project.name, msg);
     }
   }
 

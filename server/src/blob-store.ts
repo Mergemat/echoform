@@ -78,8 +78,23 @@ export async function storeBlob(
 
   await mkdir(blobsDir(projectPath), { recursive: true });
   const tmp = `${dest}.tmp`;
-  await writeFile(tmp, content);
-  await rename(tmp, dest);
+  try {
+    await writeFile(tmp, content);
+    await rename(tmp, dest);
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {});
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      (err as NodeJS.ErrnoException).code === 'ENOSPC'
+    ) {
+      throw new Error(
+        'Disk is full — cannot store snapshot. Free up space and try again.',
+      );
+    }
+    throw err;
+  }
   return { hash, size: content.length };
 }
 

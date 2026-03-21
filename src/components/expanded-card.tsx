@@ -2,14 +2,21 @@ import { useStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { basename } from '@/lib/path';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import type { Save, Idea } from '@/lib/types';
 import { useState } from 'react';
 import {
   ArrowCounterClockwise,
   TrashSimple,
   GitFork,
+  X,
 } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import { formatDateTime, formatSize, isAudio, isAls } from './timeline-utils';
+import { TrackThumbnail } from './track-thumbnail';
+import { SmartRestoreDialog } from './smart-restore-dialog';
 
 const TTRACK: Record<string, string> = {
   midi: 'MIDI',
@@ -35,6 +42,7 @@ export function ExpandedCard({
   const [labelVal, setLabelVal] = useState(save.label);
   const [noteVal, setNoteVal] = useState(save.note);
   const [showIdeaForm, setShowIdeaForm] = useState(false);
+  const [showSmartRestore, setShowSmartRestore] = useState(false);
   const [ideaName, setIdeaName] = useState('');
   const [computing, setComputing] = useState(false);
 
@@ -89,33 +97,35 @@ export function ExpandedCard({
     <div className="px-4 pb-4 pt-1 space-y-3 border-l-2 border-white/50 bg-white/[0.03]">
       <div className="flex items-start gap-2 pt-1">
         <div className="flex-1 min-w-0">
-          <input
+          <Input
             value={labelVal}
             onChange={(e) => setLabelVal(e.target.value)}
             onBlur={commitEdit}
-            className="bg-transparent border-b border-white/10 focus:border-white/30 text-[13px] text-white/90 font-medium w-full outline-none pb-0.5"
+            className="bg-transparent border-0 border-b border-white/10 focus-visible:border-white/30 focus-visible:ring-0 rounded-none text-[13px] text-white/90 font-medium w-full px-0 pb-0.5 h-auto"
           />
           <div className="text-[10px] text-white/25 mt-1">
             {formatDateTime(save.createdAt)}
-            {idea ? ` \u00b7 ${idea.name}` : ''}
-            {isHead ? ' \u00b7 head' : ''}
+            {idea ? ` · ${idea.name}` : ''}
+            {isHead ? ' · head' : ''}
           </div>
         </div>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={onClose}
-          className="text-white/20 hover:text-white/50 text-[11px] mt-0.5"
+          className="text-white/20 hover:text-white/50 mt-0.5"
         >
-          \u2715
-        </button>
+          <X size={12} />
+        </Button>
       </div>
 
-      <textarea
+      <Textarea
         value={noteVal}
         onChange={(e) => setNoteVal(e.target.value)}
         onBlur={commitEdit}
         placeholder="Note..."
-        className="w-full bg-white/[0.03] border border-white/[0.07] rounded px-2.5 py-2 text-[11px] text-white/60 resize-none outline-none focus:border-white/15 placeholder:text-white/15 min-h-[56px]"
+        className="w-full bg-white/[0.03] border border-white/[0.07] rounded px-2.5 py-2 text-[11px] text-white/60 resize-none focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 min-h-[56px]"
       />
 
       <div className="flex gap-2 text-[10px]">
@@ -136,6 +146,15 @@ export function ExpandedCard({
         ))}
       </div>
 
+      {save.trackSummary && save.trackSummary.length > 0 && (
+        <div>
+          <div className="text-[10px] text-white/20 uppercase tracking-wider mb-1">
+            Tracks ({save.trackSummary.length})
+          </div>
+          <TrackThumbnail tracks={save.trackSummary} />
+        </div>
+      )}
+
       {sd && (
         <div className="space-y-1.5 text-[11px]">
           {sd.tempoChange && (
@@ -144,7 +163,7 @@ export function ExpandedCard({
               <span className="font-mono text-white/40">
                 {sd.tempoChange.from}
               </span>
-              <span className="text-white/15">\u2192</span>
+              <span className="text-white/15">→</span>
               <span className="font-mono text-white/60">
                 {sd.tempoChange.to}
               </span>
@@ -157,7 +176,7 @@ export function ExpandedCard({
               <span className="font-mono text-white/40">
                 {sd.timeSignatureChange.from}
               </span>
-              <span className="text-white/15">\u2192</span>
+              <span className="text-white/15">→</span>
               <span className="font-mono text-white/60">
                 {sd.timeSignatureChange.to}
               </span>
@@ -173,9 +192,12 @@ export function ExpandedCard({
                   key={`add-${t.type}-${t.name}`}
                   className="pl-2 flex items-center gap-1.5 text-white/40"
                 >
-                  <span className="text-[9px] text-white/20 bg-white/[0.06] px-1 py-px rounded uppercase">
+                  <Badge
+                    variant="secondary"
+                    className="text-[9px] text-white/20 bg-white/[0.06] border-transparent px-1 py-px rounded uppercase h-auto"
+                  >
                     {TTRACK[t.type] ?? t.type}
-                  </span>
+                  </Badge>
                   <span className="truncate">{t.name}</span>
                 </div>
               ))}
@@ -191,9 +213,12 @@ export function ExpandedCard({
                   key={`rem-${t.type}-${t.name}`}
                   className="pl-2 flex items-center gap-1.5 text-white/30"
                 >
-                  <span className="text-[9px] text-white/15 bg-white/[0.04] px-1 py-px rounded uppercase">
+                  <Badge
+                    variant="secondary"
+                    className="text-[9px] text-white/15 bg-white/[0.04] border-transparent px-1 py-px rounded uppercase h-auto"
+                  >
                     {TTRACK[t.type] ?? t.type}
-                  </span>
+                  </Badge>
                   <span className="truncate">{t.name}</span>
                 </div>
               ))}
@@ -202,9 +227,12 @@ export function ExpandedCard({
           {sd.modifiedTracks.map((t) => (
             <div key={`mod-${t.type}-${t.name}`} className="pl-2 space-y-0.5">
               <div className="flex items-center gap-1.5 text-white/40">
-                <span className="text-[9px] text-white/20 bg-white/[0.06] px-1 py-px rounded uppercase">
+                <Badge
+                  variant="secondary"
+                  className="text-[9px] text-white/20 bg-white/[0.06] border-transparent px-1 py-px rounded uppercase h-auto"
+                >
                   {TTRACK[t.type] ?? t.type}
-                </span>
+                </Badge>
                 <span className="truncate">{t.name}</span>
                 {t.renamedFrom && (
                   <span className="text-white/20 text-[10px]">
@@ -220,7 +248,7 @@ export function ExpandedCard({
                 )}
                 {t.removedDevices.length > 0 && (
                   <div className="text-red-400/50">
-                    \u2212 {t.removedDevices.join(', ')}
+                    − {t.removedDevices.join(', ')}
                   </div>
                 )}
                 {t.clipCountDelta !== 0 && (
@@ -298,7 +326,7 @@ export function ExpandedCard({
             <div className="text-[11px] text-white/20">
               {[
                 addedOther.length > 0 && `+${addedOther.length} files`,
-                removedOther.length > 0 && `\u2212${removedOther.length} files`,
+                removedOther.length > 0 && `−${removedOther.length} files`,
                 modifiedOther.length > 0 && `~${modifiedOther.length} modified`,
               ]
                 .filter(Boolean)
@@ -334,7 +362,16 @@ export function ExpandedCard({
 
       <div className="flex flex-wrap gap-1.5 pt-0.5">
         <Button variant="ghost" size="sm" onClick={handleGoBack}>
-          <ArrowCounterClockwise size={13} data-icon="inline-start" /> Restore
+          <ArrowCounterClockwise size={13} data-icon="inline-start" /> Full
+          restore
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowSmartRestore(true)}
+        >
+          <ArrowCounterClockwise size={13} data-icon="inline-start" /> Smart
+          restore
         </Button>
         <Button
           variant="ghost"
@@ -350,14 +387,14 @@ export function ExpandedCard({
 
       {showIdeaForm && (
         <div className="bg-white/[0.03] border border-white/[0.06] rounded p-2.5 space-y-2">
-          <input
+          <Input
             value={ideaName}
             onChange={(e) => setIdeaName(e.target.value)}
             placeholder="New idea name..."
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleCreateIdea();
             }}
-            className="bg-white/[0.04] border border-white/[0.08] rounded px-2 py-1.5 text-[11px] text-white/70 w-full outline-none focus:border-white/15 placeholder:text-white/15"
+            className="bg-white/[0.04] border border-white/[0.08] rounded px-2 py-1.5 text-[11px] text-white/70 w-full focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 h-auto"
           />
           <Button
             variant="outline"
@@ -369,6 +406,20 @@ export function ExpandedCard({
           </Button>
         </div>
       )}
+
+      <SmartRestoreDialog
+        open={showSmartRestore}
+        projectId={projectId}
+        saveId={save.id}
+        onClose={() => setShowSmartRestore(false)}
+        onSuccess={(result) => {
+          toast.success(
+            result.insertedReturnCount > 0
+              ? `Restored ${result.restoredTrackNames.join(', ')} with ${result.insertedReturnCount} return${result.insertedReturnCount !== 1 ? 's' : ''}`
+              : `Restored ${result.restoredTrackNames.join(', ')}`,
+          );
+        }}
+      />
     </div>
   );
 }

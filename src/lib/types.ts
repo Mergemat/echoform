@@ -8,8 +8,13 @@ export type {
   ChangeSummary,
   SetDiff,
   TrackDiff,
+  TrackSummaryItem,
+  DiskUsage,
+  DiskUsageSave,
+  SmartRestoreTrack,
+  SmartRestoreResult,
   CompareResult,
   WsEvent,
   WsCommand,
   DiscoveredProject,
-} from "../../server/src/types";
+} from '../../server/src/types';
