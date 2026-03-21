@@ -391,6 +391,15 @@ export class AblegitService {
     return project;
   }
 
+  async toggleWatching(projectId: string, watching: boolean): Promise<Project> {
+    const state = await this.loadState();
+    const project = requireProject(state, projectId);
+    project.watching = watching;
+    project.updatedAt = new Date().toISOString();
+    await this.saveState(state);
+    return project;
+  }
+
   async deleteSave(projectId: string, saveId: string): Promise<Project> {
     const state = await this.loadState();
     const project = requireProject(state, projectId);
@@ -411,6 +420,15 @@ export class AblegitService {
 
   async resolvePreviewPath(p: string): Promise<string> {
     const resolved = resolve(p);
+    const state = await this.loadState();
+    const allowedPreviewPaths = new Set(
+      state.projects.flatMap((project) =>
+        project.saves.flatMap((save) => save.previewRefs.map((previewRef) => resolve(previewRef))),
+      ),
+    );
+    if (!allowedPreviewPaths.has(resolved)) {
+      throw new AppError("File not found", 404);
+    }
     await access(resolved);
     return resolved;
   }

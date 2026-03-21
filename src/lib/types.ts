@@ -6,6 +6,8 @@ export type {
   Idea,
   ProjectMetadata,
   ChangeSummary,
+  SetDiff,
+  TrackDiff,
   CompareResult,
   WsEvent,
   WsCommand,

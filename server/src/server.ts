@@ -6,12 +6,83 @@ import type { WsCommand, WsEvent } from "./types";
 const PORT = Number(process.env.PORT || 3001);
 const service = new AblegitService();
 const clients = new Set<{ send: (data: string) => void }>();
+const SESSION_COOKIE_NAME = "ablegit_session";
+const SESSION_TOKEN = crypto.randomUUID();
+const DEFAULT_ALLOWED_ORIGINS = [
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+const allowedOrigins = new Set(
+  [
+    ...DEFAULT_ALLOWED_ORIGINS,
+    ...(process.env.ABLEGIT_ALLOWED_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean) ?? []),
+  ],
+);
 
 function broadcast(event: WsEvent) {
   const data = JSON.stringify(event);
   for (const ws of clients) {
     try { ws.send(data); } catch { clients.delete(ws); }
   }
+}
+
+function isAllowedOrigin(origin: string | null): origin is string {
+  return origin !== null && allowedOrigins.has(origin);
+}
+
+function parseCookies(req: Request): Map<string, string> {
+  const raw = req.headers.get("cookie");
+  if (!raw) return new Map();
+  return new Map(
+    raw
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const idx = part.indexOf("=");
+        if (idx === -1) return [part, ""] as const;
+        return [decodeURIComponent(part.slice(0, idx)), decodeURIComponent(part.slice(idx + 1))] as const;
+      }),
+  );
+}
+
+function isAuthorized(req: Request): boolean {
+  return parseCookies(req).get(SESSION_COOKIE_NAME) === SESSION_TOKEN;
+}
+
+function createSessionCookie(req: Request): string {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(SESSION_TOKEN)}; Path=/; HttpOnly; SameSite=Strict${secure}`;
+}
+
+function responseHeaders(req: Request, extra: HeadersInit = {}): HeadersInit {
+  const origin = req.headers.get("origin");
+  if (isAllowedOrigin(origin)) {
+    return { ...extra, "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+  }
+  return extra;
+}
+
+function corsHeaders(req: Request): HeadersInit | null {
+  const origin = req.headers.get("origin");
+  if (!isAllowedOrigin(origin)) return null;
+  return responseHeaders(req, {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  });
+}
+
+function authorizeHttp(req: Request): AppError | null {
+  const origin = req.headers.get("origin");
+  if (origin && !isAllowedOrigin(origin)) {
+    return new AppError("Forbidden", 403);
+  }
+  if (!isAuthorized(req)) {
+    return new AppError("Unauthorized", 401);
+  }
+  return null;
 }
 
 // ── Watcher ─────────────────────────────────────────────────────────
@@ -64,8 +135,13 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       return { type: "project-updated", project };
     }
     case "go-back-to": {
-      const project = await service.goBackTo(cmd.projectId, { saveId: cmd.saveId, force: cmd.force });
-      return { type: "project-updated", project };
+      watcher.suppress(cmd.projectId);
+      try {
+        const project = await service.goBackTo(cmd.projectId, { saveId: cmd.saveId, force: cmd.force });
+        return { type: "project-updated", project };
+      } finally {
+        watcher.unsuppress(cmd.projectId);
+      }
     }
     case "compare": {
       // compare returns via HTTP for simplicity
@@ -81,10 +157,7 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       return { type: "discovered-projects", paths };
     }
     case "toggle-watching": {
-      const state = await service.loadState();
-      const project = state.projects.find((p) => p.id === cmd.projectId);
-      if (!project) return { type: "error", message: "Project not found" };
-      project.watching = cmd.watching;
+      const project = await service.toggleWatching(cmd.projectId, cmd.watching);
       if (cmd.watching) await watcher.watchProject(project);
       else watcher.unwatchProject(project.id);
       return { type: "project-updated", project };
@@ -98,19 +171,11 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
 
 // ── HTTP routes (compare + media) ───────────────────────────────────
 
-function jsonResponse(data: unknown, status = 200) {
+function jsonResponse(req: Request, data: unknown, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers: responseHeaders(req, { "Content-Type": "application/json", ...extraHeaders }),
   });
-}
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
 }
 
 // ── Start ───────────────────────────────────────────────────────────
@@ -122,14 +187,34 @@ Bun.serve({
 
     // CORS preflight
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      const headers = corsHeaders(req);
+      if (!headers) return new Response("Forbidden", { status: 403 });
+      return new Response(null, { status: 204, headers });
+    }
+
+    if (url.pathname === "/api/session" && req.method === "GET") {
+      const origin = req.headers.get("origin");
+      if (origin && !isAllowedOrigin(origin)) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      return jsonResponse(req, { ok: true }, 200, { "Set-Cookie": createSessionCookie(req) });
     }
 
     // WebSocket upgrade
     if (url.pathname === "/ws") {
+      const origin = req.headers.get("origin");
+      if (!isAllowedOrigin(origin)) return new Response("Forbidden", { status: 403 });
+      if (!isAuthorized(req)) return new Response("Unauthorized", { status: 401 });
       const upgraded = server.upgrade(req);
       if (!upgraded) return new Response("WebSocket upgrade failed", { status: 400 });
       return undefined as unknown as Response;
+    }
+
+    if (url.pathname.startsWith("/api/")) {
+      const authError = authorizeHttp(req);
+      if (authError) {
+        return jsonResponse(req, { error: authError.message }, authError.status);
+      }
     }
 
     // REST: compare
@@ -138,14 +223,14 @@ Bun.serve({
       const projectId = parts[3];
       const left = url.searchParams.get("left");
       const right = url.searchParams.get("right");
-      if (!left || !right) return jsonResponse({ error: "left and right required" }, 400);
+      if (!left || !right) return jsonResponse(req, { error: "left and right required" }, 400);
       try {
         const compare = await service.compareSaves(projectId!, left, right);
-        return jsonResponse({ compare });
+        return jsonResponse(req, { compare });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
         const message = err instanceof Error ? err.message : "Unknown error";
-        return jsonResponse({ error: message }, status);
+        return jsonResponse(req, { error: message }, status);
       }
     }
 
@@ -158,33 +243,35 @@ Bun.serve({
       try {
         const { project, changes } = await service.computeChanges(projectId, saveId);
         broadcast({ type: "project-updated", project });
-        return jsonResponse({ changes });
+        return jsonResponse(req, { changes });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
         const message = err instanceof Error ? err.message : "Unknown error";
-        return jsonResponse({ error: message }, status);
+        return jsonResponse(req, { error: message }, status);
       }
     }
 
     // REST: list projects
     if (url.pathname === "/api/projects" && req.method === "GET") {
       const projects = await service.listProjects();
-      return jsonResponse({ projects });
+      return jsonResponse(req, { projects });
     }
 
     // REST: media proxy
     if (url.pathname === "/api/media") {
       const p = url.searchParams.get("path");
-      if (!p) return jsonResponse({ error: "path required" }, 400);
+      if (!p) return jsonResponse(req, { error: "path required" }, 400);
       try {
         const resolved = await service.resolvePreviewPath(p);
-        return new Response(Bun.file(resolved), { headers: { "Access-Control-Allow-Origin": "*" } });
-      } catch {
-        return jsonResponse({ error: "File not found" }, 404);
+        return new Response(Bun.file(resolved), { headers: responseHeaders(req) });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 404;
+        const message = err instanceof Error ? err.message : "File not found";
+        return jsonResponse(req, { error: message }, status);
       }
     }
 
-    return new Response("Not found", { status: 404, headers: corsHeaders() });
+    return new Response("Not found", { status: 404, headers: responseHeaders(req) });
   },
 
   websocket: {
