@@ -1,5 +1,5 @@
-import { watch, type FSWatcher } from "node:fs";
-import type { Project } from "./types";
+import { watch, type FSWatcher } from 'node:fs';
+import type { Project } from './types';
 
 type WatcherEvents = {
   onChange: (projectId: string, projectName: string) => void;
@@ -32,12 +32,18 @@ export class ProjectWatcher {
     if (!project.watching) return;
 
     try {
-      const watcher = watch(project.projectPath, { recursive: false }, (_event, filename) => {
-        if (!filename) return;
-        if (!filename.toLowerCase().endsWith(".als")) return;
-        if (this.suppressedProjects.has(project.id)) return;
-        this.debouncedChange(project.id, project.name);
-      });
+      const watcher = watch(
+        project.projectPath,
+        { recursive: true },
+        (_event, filename) => {
+          if (!filename) return;
+          if (!filename.toLowerCase().endsWith('.als')) return;
+          if (filename.startsWith('Backup/') || filename.startsWith('Backup\\'))
+            return;
+          if (this.suppressedProjects.has(project.id)) return;
+          this.debouncedChange(project.id, project.name);
+        },
+      );
       this.watchers.set(project.id, watcher);
     } catch {
       // watch may fail on some filesystems, silently skip
