@@ -2,7 +2,7 @@ import { useStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/lib/types';
 import { Eye, EyeSlash, MagnifyingGlass } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -20,7 +20,7 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
-function ProjectItem({
+export function ProjectItem({
   project,
   selected,
 }: {
@@ -31,14 +31,20 @@ function ProjectItem({
   const send = useStore((s) => s.send);
   const currentIdea = project.ideas.find((i) => i.id === project.currentIdeaId);
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    selectProject(project.id);
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={() => selectProject(project.id)}
-      onKeyDown={(e) => e.key === 'Enter' && selectProject(project.id)}
+      onKeyDown={handleKeyDown}
       className={cn(
-        'group w-full text-left px-3 py-2.5 transition-colors rounded-md cursor-default select-none',
+        'group w-full text-left px-3 py-2.5 transition-colors rounded-md cursor-pointer select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/15',
         selected
           ? 'bg-white/[0.08] text-white'
           : 'text-white/50 hover:text-white/70 hover:bg-white/[0.04]',
@@ -61,7 +67,7 @@ function ProjectItem({
                 });
               }}
               className={cn(
-                'shrink-0 opacity-0 group-hover:opacity-100 transition-opacity',
+                'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100',
                 project.watching ? 'text-emerald-400' : 'text-white/30',
               )}
             >
