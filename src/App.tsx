@@ -5,11 +5,13 @@ import { Timeline } from '@/components/timeline';
 import { ProjectHeader } from '@/components/project-header';
 import { Toaster } from '@/components/ui/sonner';
 import { useState, useCallback, useRef } from 'react';
+import { cn } from '@/lib/utils';
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 220;
 const STORAGE_KEY = 'ablegit:sidebar-width';
+const MOBILE_BREAKPOINT = 768;
 
 function readStoredWidth(): number {
   try {
@@ -22,15 +24,27 @@ function readStoredWidth(): number {
   return DEFAULT_WIDTH;
 }
 
+function readIsMobile(): boolean {
+  return window.innerWidth < MOBILE_BREAKPOINT;
+}
+
 export function App() {
   const connect = useStore((s) => s.connect);
   const connected = useStore((s) => s.connected);
   const [sidebarWidth, setSidebarWidth] = useState(readStoredWidth);
+  const [isMobile, setIsMobile] = useState(readIsMobile);
   const dragging = useRef(false);
 
   useEffect(() => {
     connect();
   }, [connect]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(readIsMobile());
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const onDragStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -52,26 +66,40 @@ export function App() {
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#0c0c0e] text-white flex">
+    <div
+      className={cn(
+        'h-screen w-screen overflow-hidden bg-[#0c0c0e] text-white flex',
+        isMobile ? 'flex-col' : 'flex-row',
+      )}
+    >
       {/* Sidebar */}
-      <div className="relative shrink-0 flex" style={{ width: sidebarWidth }}>
+      <div
+        className={cn(
+          'relative flex min-w-0',
+          isMobile
+            ? 'h-[38vh] min-h-[240px] max-h-[360px] w-full shrink-0'
+            : 'shrink-0',
+        )}
+        style={isMobile ? undefined : { width: sidebarWidth }}
+      >
         <AppSidebar />
 
         {/* Drag handle */}
-        <div
-          onPointerDown={onDragStart}
-          onPointerMove={onDragMove}
-          onPointerUp={onDragEnd}
-          onPointerCancel={onDragEnd}
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20 group"
-        >
-          {/* Visible line that appears on hover/drag */}
-          <div className="absolute inset-y-0 left-0 w-px bg-white/[0.06] group-hover:bg-white/20 transition-colors" />
-        </div>
+        {!isMobile && (
+          <div
+            onPointerDown={onDragStart}
+            onPointerMove={onDragMove}
+            onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20 group"
+          >
+            <div className="absolute inset-y-0 left-0 w-px bg-white/[0.06] group-hover:bg-white/20 transition-colors" />
+          </div>
+        )}
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <ProjectHeader />
         <div className="flex-1 min-h-0">
           <Timeline />
