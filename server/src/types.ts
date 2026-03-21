@@ -7,7 +7,7 @@ export type AppState = {
 export type Project = {
   id: string;
   name: string;
-  adapter: "ableton";
+  adapter: 'ableton';
   projectPath: string;
   activeSetPath: string;
   createdAt: string;
@@ -33,7 +33,6 @@ export type Save = {
   note: string;
   createdAt: string;
   ideaId: string;
-  snapshotPath: string;
   previewRefs: string[];
   projectHash: string;
   metadata: ProjectMetadata;
@@ -52,10 +51,10 @@ export type ProjectMetadata = {
 };
 
 export type ChangeSummary = {
-  addedFiles: string[];     // relative paths of new files
-  removedFiles: string[];   // relative paths of deleted files
-  modifiedFiles: string[];  // relative paths of files whose size changed
-  sizeDelta: number;        // bytes gained or lost vs. previous save
+  addedFiles: string[]; // relative paths of new files
+  removedFiles: string[]; // relative paths of deleted files
+  modifiedFiles: string[]; // relative paths of files whose size changed
+  sizeDelta: number; // bytes gained or lost vs. previous save
 };
 
 export type SetDiff = {
@@ -98,23 +97,34 @@ export type CompareResult = {
 // ── WebSocket Events ────────────────────────────────────────────────
 
 export type WsEvent =
-  | { type: "projects"; projects: Project[] }
-  | { type: "project-updated"; project: Project }
-  | { type: "change-detected"; projectId: string; projectName: string }
-  | { type: "auto-saved"; projectId: string; save: Save }
-  | { type: "error"; message: string }
-  | { type: "discovered-projects"; paths: DiscoveredProject[] };
+  | { type: 'projects'; projects: Project[] }
+  | { type: 'project-updated'; project: Project }
+  | { type: 'change-detected'; projectId: string; projectName: string }
+  | { type: 'auto-saved'; projectId: string; save: Save }
+  | { type: 'error'; message: string }
+  | { type: 'discovered-projects'; paths: DiscoveredProject[] };
 
 export type WsCommand =
-  | { type: "track-project"; projectPath: string; name?: string }
-  | { type: "create-save"; projectId: string; label?: string; note?: string }
-  | { type: "create-idea"; projectId: string; fromSaveId: string; name: string }
-  | { type: "go-back-to"; projectId: string; saveId: string; force?: boolean }
-  | { type: "compare"; projectId: string; leftSaveId: string; rightSaveId: string }
-  | { type: "update-save"; projectId: string; saveId: string; note?: string; label?: string }
-  | { type: "discover-projects" }
-  | { type: "toggle-watching"; projectId: string; watching: boolean }
-  | { type: "delete-save"; projectId: string; saveId: string };
+  | { type: 'track-project'; projectPath: string; name?: string }
+  | { type: 'create-save'; projectId: string; label?: string; note?: string }
+  | { type: 'create-idea'; projectId: string; fromSaveId: string; name: string }
+  | { type: 'go-back-to'; projectId: string; saveId: string; force?: boolean }
+  | {
+      type: 'compare';
+      projectId: string;
+      leftSaveId: string;
+      rightSaveId: string;
+    }
+  | {
+      type: 'update-save';
+      projectId: string;
+      saveId: string;
+      note?: string;
+      label?: string;
+    }
+  | { type: 'discover-projects' }
+  | { type: 'toggle-watching'; projectId: string; watching: boolean }
+  | { type: 'delete-save'; projectId: string; saveId: string };
 
 export type DiscoveredProject = {
   path: string;
