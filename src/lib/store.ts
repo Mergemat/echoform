@@ -1,14 +1,21 @@
-import { create } from "zustand";
-import type { Project, Save, WsEvent, WsCommand, DiscoveredProject, CompareResult } from "@/lib/types";
+import { create } from 'zustand';
+import type {
+  Project,
+  Save,
+  WsEvent,
+  WsCommand,
+  DiscoveredProject,
+  CompareResult,
+} from '@/lib/types';
 
-const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_URL = `${wsProtocol}//${window.location.host}/ws`;
-const API_URL = "";
+const API_URL = '';
 
 type Toast = {
   id: string;
   message: string;
-  type: "info" | "success" | "error";
+  type: 'info' | 'success' | 'error';
   createdAt: number;
 };
 
@@ -17,6 +24,7 @@ type Store = {
   projects: Project[];
   selectedProjectId: string | null;
   selectedSaveId: string | null;
+  activeIdeaId: string | null;
   discoveredProjects: DiscoveredProject[];
   compare: CompareResult | null;
   toasts: Toast[];
@@ -28,12 +36,17 @@ type Store = {
   selectedSave: () => Save | null;
 
   // actions
-  connect: () => void;
+  connect: () => Promise<void>;
   send: (cmd: WsCommand) => void;
   selectProject: (id: string | null) => void;
   selectSave: (id: string | null) => void;
-  fetchCompare: (projectId: string, leftId: string, rightId: string) => Promise<void>;
-  addToast: (message: string, type?: Toast["type"]) => void;
+  setActiveIdea: (id: string) => void;
+  fetchCompare: (
+    projectId: string,
+    leftId: string,
+    rightId: string,
+  ) => Promise<void>;
+  addToast: (message: string, type?: Toast['type']) => void;
   dismissToast: (id: string) => void;
 };
 
@@ -41,6 +54,7 @@ export const useStore = create<Store>((set, get) => ({
   projects: [],
   selectedProjectId: null,
   selectedSaveId: null,
+  activeIdeaId: null,
   discoveredProjects: [],
   compare: null,
   toasts: [],
@@ -59,7 +73,25 @@ export const useStore = create<Store>((set, get) => ({
     return project.saves.find((s) => s.id === selectedSaveId) ?? null;
   },
 
-  connect: () => {
+  connect: async () => {
+    const currentWs = get().ws;
+    if (
+      currentWs &&
+      (currentWs.readyState === WebSocket.OPEN ||
+        currentWs.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/session`);
+      if (!res.ok) throw new Error('Session bootstrap failed');
+    } catch {
+      set({ connected: false, ws: null });
+      setTimeout(() => void get().connect(), 2000);
+      return;
+    }
+
     const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => set({ connected: true, ws });
@@ -67,34 +99,43 @@ export const useStore = create<Store>((set, get) => ({
     ws.onclose = () => {
       set({ connected: false, ws: null });
       // reconnect after 2s
-      setTimeout(() => get().connect(), 2000);
+      setTimeout(() => void get().connect(), 2000);
     };
 
     ws.onmessage = (e) => {
       const event = JSON.parse(e.data) as WsEvent;
       switch (event.type) {
-        case "projects":
+        case 'projects':
           set((s) => ({
             projects: event.projects,
-            selectedProjectId: s.selectedProjectId ?? event.projects[0]?.id ?? null,
+            selectedProjectId:
+              s.selectedProjectId ?? event.projects[0]?.id ?? null,
           }));
           break;
-        case "project-updated":
+        case 'project-updated':
           set((s) => ({
-            projects: s.projects.map((p) => (p.id === event.project.id ? event.project : p)),
+            projects: s.projects.map((p) =>
+              p.id === event.project.id ? event.project : p,
+            ),
+            selectedSaveId:
+              s.selectedProjectId === event.project.id &&
+              s.selectedSaveId &&
+              !event.project.saves.some((save) => save.id === s.selectedSaveId)
+                ? null
+                : s.selectedSaveId,
           }));
           break;
-        case "auto-saved":
-          get().addToast(`Auto-saved ${event.save.label}`, "success");
+        case 'auto-saved':
+          get().addToast(`Auto-saved ${event.save.label}`, 'success');
           break;
-        case "change-detected":
-          get().addToast(`Changes detected in ${event.projectName}`, "info");
+        case 'change-detected':
+          get().addToast(`Changes detected in ${event.projectName}`, 'info');
           break;
-        case "discovered-projects":
+        case 'discovered-projects':
           set({ discoveredProjects: event.paths });
           break;
-        case "error":
-          get().addToast(event.message, "error");
+        case 'error':
+          get().addToast(event.message, 'error');
           break;
       }
     };
@@ -107,25 +148,41 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
-  selectProject: (id) => set({ selectedProjectId: id, selectedSaveId: null, compare: null }),
-  selectSave: (id) => set({ selectedSaveId: id }),
+  selectProject: (id) =>
+    set({
+      selectedProjectId: id,
+      selectedSaveId: null,
+      activeIdeaId: null,
+      compare: null,
+    }),
+  selectSave: (id) =>
+    set((s) => ({ selectedSaveId: s.selectedSaveId === id ? null : id })),
+  setActiveIdea: (id) => set({ activeIdeaId: id, selectedSaveId: null }),
 
   fetchCompare: async (projectId, leftId, rightId) => {
     try {
-      const res = await fetch(`${API_URL}/api/projects/${projectId}/compare?left=${leftId}&right=${rightId}`);
+      const res = await fetch(
+        `${API_URL}/api/projects/${projectId}/compare?left=${leftId}&right=${rightId}`,
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       set({ compare: data.compare });
     } catch (err) {
-      get().addToast(err instanceof Error ? err.message : "Compare failed", "error");
+      get().addToast(
+        err instanceof Error ? err.message : 'Compare failed',
+        'error',
+      );
     }
   },
 
-  addToast: (message, type = "info") => {
+  addToast: (message, type = 'info') => {
     const id = crypto.randomUUID();
-    set((s) => ({ toasts: [...s.toasts, { id, message, type, createdAt: Date.now() }] }));
+    set((s) => ({
+      toasts: [...s.toasts, { id, message, type, createdAt: Date.now() }],
+    }));
     setTimeout(() => get().dismissToast(id), 4000);
   },
 
-  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismissToast: (id) =>
+    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
