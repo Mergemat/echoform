@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   access,
+  cp,
   mkdir,
   readFile,
   readdir,
@@ -14,13 +15,17 @@ import type {
   AppState,
   ChangeSummary,
   CompareResult,
+  DiskUsage,
   Idea,
   Project,
   ProjectMetadata,
   Save,
+  SmartRestoreResult,
+  SmartRestoreTrack,
   SetDiff,
+  TrackSummaryItem,
 } from './types';
-import type { ManifestEntry } from './blob-store';
+import type { Manifest, ManifestEntry } from './blob-store';
 import {
   createManifest,
   deleteManifest,
@@ -30,9 +35,11 @@ import {
   reconstructFromManifest,
   storeBlob,
 } from './blob-store';
-import { parseAlsFile } from './als-parser';
+import { parseAlsFile, extractTrackSummary } from './als-parser';
+import type { SetSnapshot } from './als-parser';
 import { diffSets, isEmptyDiff } from './als-diff';
 import { formatDiffAsLabel } from './smart-naming';
+import { listRestorableTracks, smartRestoreTracks } from './smart-restore';
 
 const AUDIO_EXTENSIONS = new Set([
   '.aif',
@@ -184,18 +191,35 @@ function autoLabel(): string {
 }
 
 /** Attempt to compute the semantic .als diff between two .als blob paths.
- *  Returns undefined on any failure — never throws. */
+ *  Returns the diff and the current snapshot. Never throws. */
 async function tryComputeSetDiff(
   prevAlsPath: string,
   currAlsPath: string,
-): Promise<SetDiff | undefined> {
+): Promise<{
+  diff: SetDiff | undefined;
+  currSnapshot: SetSnapshot | undefined;
+}> {
   try {
     const [prevSnapshot, currSnapshot] = await Promise.all([
       parseAlsFile(prevAlsPath),
       parseAlsFile(currAlsPath),
     ]);
     const diff = diffSets(prevSnapshot, currSnapshot);
-    return isEmptyDiff(diff) ? undefined : diff;
+    return {
+      diff: isEmptyDiff(diff) ? undefined : diff,
+      currSnapshot,
+    };
+  } catch {
+    return { diff: undefined, currSnapshot: undefined };
+  }
+}
+
+/** Parse a single .als file for track summary. Never throws. */
+async function tryParseSnapshot(
+  alsPath: string,
+): Promise<SetSnapshot | undefined> {
+  try {
+    return await parseAlsFile(alsPath);
   } catch {
     return undefined;
   }
@@ -225,6 +249,72 @@ async function findPrevAlsHash(
   } catch {
     return null;
   }
+}
+
+type LegacySave = Save & { snapshotPath?: string };
+
+type SaveStorageSource =
+  | { kind: 'manifest'; manifest: Manifest }
+  | { kind: 'legacy-snapshot'; snapshotPath: string };
+
+async function getSaveStorageSource(
+  projectPath: string,
+  save: Save,
+): Promise<SaveStorageSource> {
+  try {
+    const manifest = await readManifest(projectPath, save.id);
+    return { kind: 'manifest', manifest };
+  } catch (err) {
+    const legacySnapshotPath = (save as LegacySave).snapshotPath;
+    if (legacySnapshotPath) {
+      try {
+        await access(legacySnapshotPath);
+        return { kind: 'legacy-snapshot', snapshotPath: legacySnapshotPath };
+      } catch {
+        // fall through to friendly error below
+      }
+    }
+
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      (err as NodeJS.ErrnoException).code === 'ENOENT'
+    ) {
+      throw new AppError(
+        'Restore data for this save is missing. This snapshot can no longer be restored.',
+        410,
+      );
+    }
+    throw err;
+  }
+}
+
+async function getSaveAlsPath(
+  projectPath: string,
+  save: Save,
+): Promise<string> {
+  const source = await getSaveStorageSource(projectPath, save);
+  if (source.kind === 'legacy-snapshot') {
+    const legacyAlsPath = join(
+      source.snapshotPath,
+      save.metadata.activeSetPath,
+    );
+    try {
+      await access(legacyAlsPath);
+      return legacyAlsPath;
+    } catch {
+      throw new AppError('Saved .als file not found in legacy snapshot.', 404);
+    }
+  }
+
+  const alsHash = findAlsHashInEntries(
+    source.manifest.files,
+    save.metadata.activeSetPath,
+  );
+  if (!alsHash)
+    throw new AppError('Saved .als file not found in snapshot manifest.', 404);
+  return getBlobPath(projectPath, alsHash);
 }
 
 // ── Async Mutex ─────────────────────────────────────────────────────
@@ -289,8 +379,23 @@ export class AblegitService {
   private async saveState(state: AppState): Promise<void> {
     await mkdir(this.rootDir, { recursive: true });
     const tmp = `${this.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify(state, null, 2));
-    await rename(tmp, this.statePath);
+    try {
+      await writeFile(tmp, JSON.stringify(state, null, 2));
+      await rename(tmp, this.statePath);
+    } catch (err) {
+      // Clean up partial temp file
+      await rm(tmp, { force: true }).catch(() => {});
+      if (err && typeof err === 'object' && 'code' in err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'ENOSPC') {
+          throw new AppError(
+            'Disk is full — cannot save project state. Free up space and try again.',
+            507,
+          );
+        }
+      }
+      throw err;
+    }
   }
 
   /** Run a callback with exclusive state access. */
@@ -396,6 +501,10 @@ export class AblegitService {
       const prevSave = prevIdeaSaves.at(-1);
       let changes: ChangeSummary | undefined;
       let setDiff: SetDiff | undefined;
+      let trackSummary: TrackSummaryItem[] | undefined;
+
+      const currAlsHash = findAlsHashInEntries(entries, metadata.activeSetPath);
+
       if (prevSave) {
         try {
           const prevManifest = await readManifest(
@@ -410,21 +519,30 @@ export class AblegitService {
         } catch {
           // manifest missing — skip changes
         }
-        // Semantic .als diff via blob paths
+        // Semantic .als diff via blob paths + track summary
         const prevAlsHash = await findPrevAlsHash(
           project.projectPath,
           prevSave,
         );
-        const currAlsHash = findAlsHashInEntries(
-          entries,
-          metadata.activeSetPath,
-        );
         if (prevAlsHash && currAlsHash) {
-          setDiff = await tryComputeSetDiff(
+          const result = await tryComputeSetDiff(
             getBlobPath(project.projectPath, prevAlsHash),
             getBlobPath(project.projectPath, currAlsHash),
           );
+          setDiff = result.diff;
+          if (result.currSnapshot) {
+            trackSummary = extractTrackSummary(result.currSnapshot);
+          }
         }
+      }
+
+      // If we didn't get trackSummary from the diff path (first save, or no prev als),
+      // parse the current .als independently
+      if (!trackSummary && currAlsHash) {
+        const snapshot = await tryParseSnapshot(
+          getBlobPath(project.projectPath, currAlsHash),
+        );
+        if (snapshot) trackSummary = extractTrackSummary(snapshot);
       }
 
       const save: Save = {
@@ -441,6 +559,7 @@ export class AblegitService {
         auto: input?.auto ?? false,
         changes,
         setDiff,
+        trackSummary,
       };
       project.saves.push(save);
       idea.headSaveId = save.id;
@@ -494,7 +613,10 @@ export class AblegitService {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       const save = requireSave(project, input.saveId);
-      const manifest = await readManifest(project.projectPath, save.id);
+      const storageSource = await getSaveStorageSource(
+        project.projectPath,
+        save,
+      );
       const currentHead = project.saves.find(
         (s) => s.id === requireIdea(project, project.currentIdeaId).headSaveId,
       );
@@ -521,7 +643,15 @@ export class AblegitService {
       await rm(stagePath, { recursive: true, force: true });
       let renamedCurrent = false;
       try {
-        await reconstructFromManifest(project.projectPath, manifest, stagePath);
+        if (storageSource.kind === 'manifest') {
+          await reconstructFromManifest(
+            project.projectPath,
+            storageSource.manifest,
+            stagePath,
+          );
+        } else {
+          await cp(storageSource.snapshotPath, stagePath, { recursive: true });
+        }
         await rename(project.projectPath, backupPath);
         renamedCurrent = true;
         await rename(stagePath, project.projectPath);
@@ -570,6 +700,41 @@ export class AblegitService {
         },
       },
     };
+  }
+
+  async listSmartRestoreTracks(
+    projectId: string,
+    saveId: string,
+  ): Promise<SmartRestoreTrack[]> {
+    const state = await this.loadState();
+    const project = requireProject(state, projectId);
+    const save = requireSave(project, saveId);
+    const alsPath = await getSaveAlsPath(project.projectPath, save);
+    return listRestorableTracks(alsPath);
+  }
+
+  async smartRestore(
+    projectId: string,
+    saveId: string,
+    trackIds: string[],
+  ): Promise<SmartRestoreResult> {
+    if (trackIds.length === 0) {
+      throw new AppError('Select at least one track to restore.');
+    }
+
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const save = requireSave(project, saveId);
+      const sourceAlsPath = await getSaveAlsPath(project.projectPath, save);
+      const targetAlsPath = join(project.projectPath, project.activeSetPath);
+
+      return smartRestoreTracks({
+        sourceAlsPath,
+        targetAlsPath,
+        selectedTrackIds: trackIds,
+      });
+    });
   }
 
   async updateSave(
@@ -688,12 +853,16 @@ export class AblegitService {
         );
         const currAlsHash = await findPrevAlsHash(project.projectPath, save);
         if (prevAlsHash && currAlsHash) {
-          const setDiff = await tryComputeSetDiff(
+          const result = await tryComputeSetDiff(
             getBlobPath(project.projectPath, prevAlsHash),
             getBlobPath(project.projectPath, currAlsHash),
           );
-          if (setDiff) {
-            save.setDiff = setDiff;
+          if (result.diff) {
+            save.setDiff = result.diff;
+            dirty = true;
+          }
+          if (!save.trackSummary && result.currSnapshot) {
+            save.trackSummary = extractTrackSummary(result.currSnapshot);
             dirty = true;
           }
         }
@@ -701,6 +870,114 @@ export class AblegitService {
 
       if (dirty) await this.saveState(state);
       return { project, changes: save.changes ?? null };
+    });
+  }
+
+  /** Get disk usage statistics for a project. */
+  async getDiskUsage(projectId: string): Promise<DiskUsage> {
+    const state = await this.loadState();
+    const project = requireProject(state, projectId);
+
+    // Scan blobs directory for actual disk usage
+    const blobsDirPath = join(project.projectPath, '.ablegit-state', 'blobs');
+    let blobStorageBytes = 0;
+    let blobCount = 0;
+    try {
+      const entries = await readdir(blobsDirPath);
+      for (const name of entries) {
+        if (name.endsWith('.tmp')) continue;
+        const s = await stat(join(blobsDirPath, name)).catch(() => null);
+        if (s) {
+          blobStorageBytes += s.size;
+          blobCount++;
+        }
+      }
+    } catch {
+      // blobs dir doesn't exist yet
+    }
+
+    // Count manifests
+    const manifestsDirPath = join(
+      project.projectPath,
+      '.ablegit-state',
+      'manifests',
+    );
+    let manifestCount = 0;
+    try {
+      const entries = await readdir(manifestsDirPath);
+      manifestCount = entries.filter((e) => e.endsWith('.json')).length;
+    } catch {
+      // manifests dir doesn't exist yet
+    }
+
+    const autoSaves = project.saves.filter((s) => s.auto);
+    const manualSaves = project.saves.filter((s) => !s.auto);
+    const totalSnapshotBytes = project.saves.reduce(
+      (sum, s) => sum + s.metadata.sizeBytes,
+      0,
+    );
+
+    return {
+      projectId,
+      blobStorageBytes,
+      blobCount,
+      manifestCount,
+      totalSaveCount: project.saves.length,
+      autoSaveCount: autoSaves.length,
+      manualSaveCount: manualSaves.length,
+      totalSnapshotBytes,
+      dedupSavings: Math.max(0, totalSnapshotBytes - blobStorageBytes),
+      saves: project.saves.map((s) => ({
+        id: s.id,
+        label: s.label,
+        createdAt: s.createdAt,
+        snapshotBytes: s.metadata.sizeBytes,
+        auto: s.auto,
+      })),
+    };
+  }
+
+  /** Delete auto-saves older than the given number of days. Returns deleted count. */
+  async pruneSaves(
+    projectId: string,
+    olderThanDays: number,
+  ): Promise<{ project: Project; deletedCount: number }> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - olderThanDays);
+      const cutoffIso = cutoff.toISOString();
+
+      // Find auto-saves older than cutoff, but never delete head saves
+      const headSaveIds = new Set(project.ideas.map((i) => i.headSaveId));
+      const baseSaveIds = new Set(project.ideas.map((i) => i.baseSaveId));
+      const toDelete = project.saves.filter(
+        (s) =>
+          s.auto &&
+          s.createdAt < cutoffIso &&
+          !headSaveIds.has(s.id) &&
+          !baseSaveIds.has(s.id),
+      );
+
+      if (toDelete.length === 0) return { project, deletedCount: 0 };
+
+      // Delete manifests
+      for (const s of toDelete) {
+        await deleteManifest(project.projectPath, s.id);
+      }
+
+      const deleteIds = new Set(toDelete.map((s) => s.id));
+      project.saves = project.saves.filter((s) => !deleteIds.has(s.id));
+      project.updatedAt = new Date().toISOString();
+      await this.saveState(state);
+
+      // GC unreferenced blobs
+      const keepIds = project.saves.map((s) => s.id);
+      await gcBlobs(project.projectPath, keepIds);
+
+      return { project, deletedCount: toDelete.length };
     });
   }
 }

@@ -7,6 +7,8 @@ import {
   buildChips,
   type Chip,
 } from './timeline-utils';
+import { TrackThumbnail } from './track-thumbnail';
+import { Badge } from '@/components/ui/badge';
 
 export function CollapsedCard({
   save,
@@ -87,16 +89,17 @@ export function CollapsedCard({
             {formatSizeDelta(sizeDelta)}
           </span>
         )}
-        <span
+        <Badge
+          variant="secondary"
           className={cn(
-            'text-[9px] uppercase tracking-wider px-1 py-px rounded shrink-0',
+            'text-[9px] uppercase tracking-wider px-1 py-px rounded-sm shrink-0 h-auto border-transparent',
             save.auto
               ? 'text-white/20 bg-white/[0.04]'
               : 'text-white/30 bg-white/[0.06]',
           )}
         >
           {save.auto ? 'auto' : 'manual'}
-        </span>
+        </Badge>
       </div>
       {hasRow2 && (
         <div className="pl-4 flex flex-wrap items-center gap-1">
@@ -105,15 +108,16 @@ export function CollapsedCard({
           ) : (
             <>
               {visible.map((chip) => (
-                <span
+                <Badge
                   key={chip.label}
+                  variant="outline"
                   className={cn(
-                    'text-[10px] px-1.5 py-px rounded border font-mono',
+                    'text-[10px] px-1.5 py-px rounded h-auto font-mono',
                     chipColor(chip.kind),
                   )}
                 >
                   {chip.label}
-                </span>
+                </Badge>
               ))}
               {overflow > 0 && (
                 <span className="text-[10px] text-white/25">
@@ -123,6 +127,9 @@ export function CollapsedCard({
             </>
           )}
         </div>
+      )}
+      {save.trackSummary && save.trackSummary.length > 0 && (
+        <TrackThumbnail tracks={save.trackSummary} className="pl-4 pr-2" />
       )}
     </button>
   );

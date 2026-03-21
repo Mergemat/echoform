@@ -39,6 +39,14 @@ export type Save = {
   auto: boolean; // true if created by the watcher automatically
   changes?: ChangeSummary; // diff vs. previous save on the same idea
   setDiff?: SetDiff; // semantic diff of the .als XML vs. previous save
+  trackSummary?: TrackSummaryItem[]; // lightweight track list for visual thumbnails
+};
+
+export type TrackSummaryItem = {
+  name: string;
+  type: 'audio' | 'midi' | 'return' | 'group';
+  color: number; // Ableton color palette index
+  clipCount: number;
 };
 
 export type ProjectMetadata = {
@@ -131,4 +139,46 @@ export type DiscoveredProject = {
   name: string;
   setFiles: string[];
   tracked: boolean;
+};
+
+// ── Disk Usage ──────────────────────────────────────────────────────
+
+export type DiskUsage = {
+  projectId: string;
+  blobStorageBytes: number; // actual disk used by .ablegit-state/blobs/
+  blobCount: number;
+  manifestCount: number;
+  totalSaveCount: number;
+  autoSaveCount: number;
+  manualSaveCount: number;
+  /** Sum of all saves' metadata.sizeBytes — inflated vs blobStorageBytes due to dedup */
+  totalSnapshotBytes: number;
+  dedupSavings: number; // totalSnapshotBytes - blobStorageBytes
+  saves: DiskUsageSave[];
+};
+
+export type DiskUsageSave = {
+  id: string;
+  label: string;
+  createdAt: string;
+  snapshotBytes: number;
+  auto: boolean;
+};
+
+export type SmartRestoreTrack = {
+  id: string;
+  name: string;
+  type: 'audio' | 'midi' | 'group';
+  groupId: string | null;
+  dependencyTrackIds: string[];
+  dependencyReturnIds: string[];
+};
+
+export type SmartRestoreResult = {
+  restoredTrackCount: number;
+  insertedReturnCount: number;
+  restoredTrackNames: string[];
+  insertedReturnNames: string[];
+  backupPath: string;
+  targetSetPath: string;
 };
