@@ -24,6 +24,7 @@ type Store = {
   projects: Project[];
   selectedProjectId: string | null;
   selectedSaveId: string | null;
+  /** UI-only: which idea tab is selected. Distinct from server's Project.currentIdeaId (which idea new saves belong to). */
   activeIdeaId: string | null;
   discoveredProjects: DiscoveredProject[];
   compare: CompareResult | null;
@@ -39,7 +40,7 @@ type Store = {
   connect: () => Promise<void>;
   send: (cmd: WsCommand) => void;
   selectProject: (id: string | null) => void;
-  selectSave: (id: string | null) => void;
+  toggleSave: (id: string) => void;
   setActiveIdea: (id: string) => void;
   fetchCompare: (
     projectId: string,
@@ -155,7 +156,7 @@ export const useStore = create<Store>((set, get) => ({
       activeIdeaId: null,
       compare: null,
     }),
-  selectSave: (id) =>
+  toggleSave: (id) =>
     set((s) => ({ selectedSaveId: s.selectedSaveId === id ? null : id })),
   setActiveIdea: (id) => set({ activeIdeaId: id, selectedSaveId: null }),
 
