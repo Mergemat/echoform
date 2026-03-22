@@ -141,6 +141,11 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       const projects = await service.listProjects();
       return { type: 'projects', projects };
     }
+    case 'delete-project': {
+      watcher.unwatchProject(cmd.projectId);
+      const projects = await service.deleteProject(cmd.projectId);
+      return { type: 'projects', projects };
+    }
     case 'create-save': {
       const result = await service.createSave(cmd.projectId, {
         label: cmd.label,

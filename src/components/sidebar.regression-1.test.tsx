@@ -16,6 +16,8 @@ const makeIdea = (id: string): Idea => ({
   createdAt: '2024-01-01T00:00:00Z',
   baseSaveId: 'save-1',
   headSaveId: 'save-1',
+  parentIdeaId: null,
+  forkedFromSaveId: null,
 });
 
 const makeSave = (id: string, ideaId: string): Save => ({
@@ -50,6 +52,7 @@ const makeProject = (id: string, name: string): Project => {
     updatedAt: '2024-01-01T00:00:00Z',
     currentIdeaId: idea.id,
     lastRestoredSaveId: null,
+    detachedRestore: null,
     ideas: [idea],
     saves: [save],
     watching: false,

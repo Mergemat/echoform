@@ -97,24 +97,60 @@ export const useStore = create<Store>((set, get) => ({
       const event = JSON.parse(e.data) as WsEvent;
       switch (event.type) {
         case 'projects':
-          set((s) => ({
-            projects: event.projects,
-            selectedProjectId:
-              s.selectedProjectId ?? event.projects[0]?.id ?? null,
-          }));
+          set((s) => {
+            const selectedProjectId = event.projects.some(
+              (project) => project.id === s.selectedProjectId,
+            )
+              ? s.selectedProjectId
+              : event.projects[0]?.id ?? null;
+            const selectedProject =
+              event.projects.find((project) => project.id === selectedProjectId) ??
+              null;
+
+            return {
+              projects: event.projects,
+              selectedProjectId,
+              selectedSaveId:
+                selectedProject && s.selectedSaveId
+                  ? selectedProject.saves.some((save) => save.id === s.selectedSaveId)
+                    ? s.selectedSaveId
+                    : null
+                  : null,
+              activeIdeaId:
+                selectedProject && s.activeIdeaId
+                  ? selectedProject.ideas.some((idea) => idea.id === s.activeIdeaId)
+                    ? s.activeIdeaId
+                    : null
+                  : null,
+            };
+          });
           break;
         case 'project-updated':
-          set((s) => ({
-            projects: s.projects.map((p) =>
-              p.id === event.project.id ? event.project : p,
-            ),
-            selectedSaveId:
+          set((s) => {
+            const prevProject = s.projects.find(
+              (p) => p.id === event.project.id,
+            );
+            const followCurrentIdea =
               s.selectedProjectId === event.project.id &&
-              s.selectedSaveId &&
-              !event.project.saves.some((save) => save.id === s.selectedSaveId)
-                ? null
-                : s.selectedSaveId,
-          }));
+              (!s.activeIdeaId ||
+                s.activeIdeaId === prevProject?.currentIdeaId);
+            return {
+              projects: s.projects.map((p) =>
+                p.id === event.project.id ? event.project : p,
+              ),
+              selectedSaveId:
+                s.selectedProjectId === event.project.id &&
+                s.selectedSaveId &&
+                !event.project.saves.some(
+                  (save) => save.id === s.selectedSaveId,
+                )
+                  ? null
+                  : s.selectedSaveId,
+              activeIdeaId: followCurrentIdea
+                ? event.project.currentIdeaId
+                : s.activeIdeaId,
+            };
+          });
           break;
         case 'auto-saved':
           toast.success(`Auto-saved ${event.save.label}`);

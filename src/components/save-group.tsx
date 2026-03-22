@@ -6,11 +6,15 @@ import { formatSizeDelta } from './timeline-utils';
 export function GroupCard({
   saves,
   expanded,
+  depth = 0,
+  dimmed = false,
   onToggle,
 }: {
   saves: Save[];
   groupKey: string;
   expanded: boolean;
+  depth?: number;
+  dimmed?: boolean;
   onToggle: () => void;
 }) {
   const totalDelta = saves.reduce(
@@ -21,7 +25,11 @@ export function GroupCard({
     <button
       type="button"
       onClick={onToggle}
-      className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-white/[0.02] transition-colors border-l-2 border-transparent"
+      style={{ paddingLeft: `${16 + depth * 28}px` }}
+      className={cn(
+        'w-full text-left py-2 pr-4 flex items-center gap-2 hover:bg-white/[0.02] transition-colors border-l-2 border-transparent',
+        dimmed && 'opacity-55',
+      )}
     >
       {expanded ? (
         <CaretDown size={10} className="text-white/20 shrink-0" />

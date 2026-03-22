@@ -6,6 +6,8 @@ type WatcherEvents = {
   onError: (projectId: string, projectName: string, message: string) => void;
 };
 
+export const DEFAULT_WATCHER_DEBOUNCE_MS = 1000;
+
 function watchErrorMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'code' in err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -32,7 +34,7 @@ export class ProjectWatcher {
   private events: WatcherEvents;
   private debounceMs: number;
 
-  constructor(events: WatcherEvents, debounceMs = 3000) {
+  constructor(events: WatcherEvents, debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS) {
     this.events = events;
     this.debounceMs = debounceMs;
   }

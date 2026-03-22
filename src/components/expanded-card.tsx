@@ -30,12 +30,14 @@ export function ExpandedCard({
   idea,
   isHead,
   projectId,
+  depth = 0,
   onClose,
 }: {
   save: Save;
   idea: Idea | undefined;
   isHead: boolean;
   projectId: string;
+  depth?: number;
   onClose: () => void;
 }) {
   const send = useStore((s) => s.send);
@@ -94,7 +96,10 @@ export function ExpandedCard({
   const sd = save.setDiff;
 
   return (
-    <div className="px-4 pb-4 pt-1 space-y-3 border-l-2 border-white/50 bg-white/[0.03]">
+    <div
+      className="pb-4 pt-1 pr-4 space-y-3 border-l-2 border-white/50 bg-white/[0.03]"
+      style={{ paddingLeft: `${16 + depth * 28}px` }}
+    >
       <div className="flex items-start gap-2 pt-1">
         <div className="flex-1 min-w-0">
           <Input

@@ -82,7 +82,15 @@ export function ProjectItem({
       <div className="flex items-center gap-2 mt-0.5 text-[11px] text-white/30">
         <span>{project.saves.length} saves</span>
         <span className="text-white/15">|</span>
+        <span>{project.ideas.length} branches</span>
+        <span className="text-white/15">|</span>
         <span>{currentIdea?.name ?? 'Main'}</span>
+        {project.detachedRestore && (
+          <>
+            <span className="text-white/15">|</span>
+            <span className="text-amber-200/60">restored</span>
+          </>
+        )}
         {project.saves.length > 0 && (
           <>
             <span className="text-white/15">|</span>

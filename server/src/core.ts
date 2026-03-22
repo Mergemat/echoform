@@ -15,6 +15,7 @@ import type {
   AppState,
   ChangeSummary,
   CompareResult,
+  DetachedRestore,
   DiskUsage,
   Idea,
   Project,
@@ -82,6 +83,71 @@ function requireSave(project: Project, id: string): Save {
   const s = project.saves.find((x) => x.id === id);
   if (!s) throw new AppError('Save not found.', 404);
   return s;
+}
+
+function isIdeaNameTaken(project: Project, name: string): boolean {
+  return project.ideas.some((i) => i.name.toLowerCase() === name.toLowerCase());
+}
+
+function ensureUniqueIdeaName(project: Project, baseName: string): string {
+  const trimmed = baseName.trim() || 'Recovered version';
+  if (!isIdeaNameTaken(project, trimmed)) return trimmed;
+  let n = 2;
+  while (isIdeaNameTaken(project, `${trimmed} ${n}`)) n++;
+  return `${trimmed} ${n}`;
+}
+
+function buildRecoveredIdeaName(project: Project, fromSave: Save): string {
+  const source = fromSave.label.trim() || 'version';
+  return ensureUniqueIdeaName(project, `Recovered ${source}`);
+}
+
+function createDetachedRestore(save: Save): DetachedRestore {
+  return {
+    saveId: save.id,
+    ideaId: save.ideaId,
+    restoredAt: new Date().toISOString(),
+  };
+}
+
+function createBranchIdea(
+  project: Project,
+  fromSave: Save,
+  name: string,
+): Idea {
+  const now = new Date().toISOString();
+  return {
+    id: createId('idea'),
+    name: ensureUniqueIdeaName(project, name),
+    createdAt: now,
+    baseSaveId: fromSave.id,
+    headSaveId: fromSave.id,
+    parentIdeaId: fromSave.ideaId,
+    forkedFromSaveId: fromSave.id,
+  };
+}
+
+function migrateIdea(idea: Idea): Idea {
+  return {
+    ...idea,
+    parentIdeaId: idea.parentIdeaId ?? null,
+    forkedFromSaveId: idea.forkedFromSaveId ?? null,
+  };
+}
+
+function migrateProject(project: Project): Project {
+  const ideas = project.ideas.map(migrateIdea);
+  return {
+    ...project,
+    detachedRestore: project.detachedRestore ?? null,
+    ideas,
+  };
+}
+
+function migrateState(state: AppState): AppState {
+  return {
+    projects: state.projects.map(migrateProject),
+  };
 }
 
 // ── Filesystem helpers ──────────────────────────────────────────────
@@ -370,7 +436,7 @@ export class AblegitService {
     await mkdir(this.rootDir, { recursive: true });
     try {
       const content = await readFile(this.statePath, 'utf8');
-      return JSON.parse(content) as AppState;
+      return migrateState(JSON.parse(content) as AppState);
     } catch {
       return { projects: [] };
     }
@@ -448,6 +514,7 @@ export class AblegitService {
         updatedAt: now,
         currentIdeaId: firstIdeaId,
         lastRestoredSaveId: null,
+        detachedRestore: null,
         ideas: [
           {
             id: firstIdeaId,
@@ -455,6 +522,8 @@ export class AblegitService {
             createdAt: now,
             baseSaveId: '',
             headSaveId: '',
+            parentIdeaId: null,
+            forkedFromSaveId: null,
           },
         ],
         saves: [],
@@ -473,14 +542,32 @@ export class AblegitService {
     return this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
-      const idea = requireIdea(project, project.currentIdeaId);
+      const detachedRestore = project.detachedRestore;
+      let idea = requireIdea(project, project.currentIdeaId);
+      const detachedSave = detachedRestore
+        ? requireSave(project, detachedRestore.saveId)
+        : null;
       const currentFiles = await walkProject(project.projectPath);
       const projectHash = hashFiles(currentFiles);
 
-      // Skip if nothing changed since last save (prevents watcher loops)
-      const lastSave = project.saves.at(-1);
-      if (input?.auto && lastSave && lastSave.projectHash === projectHash) {
+      // Skip if nothing changed since the current baseline (prevents watcher loops)
+      const saveBaseline = detachedSave ?? project.saves.at(-1) ?? null;
+      if (
+        input?.auto &&
+        saveBaseline &&
+        saveBaseline.projectHash === projectHash
+      ) {
         return { project, save: null };
+      }
+
+      if (detachedSave) {
+        idea = createBranchIdea(
+          project,
+          detachedSave,
+          buildRecoveredIdeaName(project, detachedSave),
+        );
+        project.ideas.push(idea);
+        project.currentIdeaId = idea.id;
       }
 
       const metadata = metadataFromFiles(currentFiles, project.activeSetPath);
@@ -497,8 +584,10 @@ export class AblegitService {
       await createManifest(project.projectPath, saveId, entries, now);
 
       // Compute changes vs. previous save on the same idea
-      const prevIdeaSaves = project.saves.filter((s) => s.ideaId === idea.id);
-      const prevSave = prevIdeaSaves.at(-1);
+      const prevSave =
+        detachedSave ??
+        project.saves.filter((s) => s.ideaId === idea.id).at(-1) ??
+        null;
       let changes: ChangeSummary | undefined;
       let setDiff: SetDiff | undefined;
       let trackSummary: TrackSummaryItem[] | undefined;
@@ -566,10 +655,16 @@ export class AblegitService {
       if (!idea.baseSaveId) idea.baseSaveId = save.id;
       project.updatedAt = now;
       project.activeSetPath = metadata.activeSetPath;
+      project.detachedRestore = null;
       try {
         await this.saveState(state);
       } catch (err) {
         await deleteManifest(project.projectPath, saveId);
+        if (detachedSave) {
+          project.ideas = project.ideas.filter((i) => i.id !== idea.id);
+          project.currentIdeaId = detachedSave.ideaId;
+        }
+        project.detachedRestore = detachedRestore;
         throw err;
       }
       return { project, save };
@@ -586,19 +681,12 @@ export class AblegitService {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       const fromSave = requireSave(project, input.fromSaveId);
-      if (
-        project.ideas.some((i) => i.name.toLowerCase() === name.toLowerCase())
-      )
+      if (isIdeaNameTaken(project, name))
         throw new AppError('Idea name already exists.');
-      const idea: Idea = {
-        id: createId('idea'),
-        name,
-        createdAt: new Date().toISOString(),
-        baseSaveId: fromSave.id,
-        headSaveId: fromSave.id,
-      };
+      const idea = createBranchIdea(project, fromSave, name);
       project.ideas.push(idea);
       project.currentIdeaId = idea.id;
+      project.detachedRestore = null;
       project.updatedAt = idea.createdAt;
       await this.saveState(state);
       return project;
@@ -617,13 +705,17 @@ export class AblegitService {
         project.projectPath,
         save,
       );
+      const currentIdea = requireIdea(project, project.currentIdeaId);
       const currentHead = project.saves.find(
-        (s) => s.id === requireIdea(project, project.currentIdeaId).headSaveId,
+        (s) => s.id === currentIdea.headSaveId,
       );
-      if (!input.force && currentHead) {
+      const dirtyBaseline = project.detachedRestore
+        ? requireSave(project, project.detachedRestore.saveId)
+        : currentHead;
+      if (!input.force && dirtyBaseline) {
         const currentFiles = await walkProject(project.projectPath);
         const currentHash = hashFiles(currentFiles);
-        if (currentHash !== currentHead.projectHash) {
+        if (currentHash !== dirtyBaseline.projectHash) {
           throw new AppError(
             'Project has unsaved changes on disk. Save first or force restore.',
             409,
@@ -639,6 +731,7 @@ export class AblegitService {
         dirname(project.projectPath),
         `.ablegit-stage-${Date.now()}`,
       );
+      const stateDirName = '.ablegit-state';
       await rm(backupPath, { recursive: true, force: true });
       await rm(stagePath, { recursive: true, force: true });
       let renamedCurrent = false;
@@ -655,6 +748,10 @@ export class AblegitService {
         await rename(project.projectPath, backupPath);
         renamedCurrent = true;
         await rename(stagePath, project.projectPath);
+        const backupStatePath = join(backupPath, stateDirName);
+        const restoredStatePath = join(project.projectPath, stateDirName);
+        await rm(restoredStatePath, { recursive: true, force: true });
+        await rename(backupStatePath, restoredStatePath);
         await rm(backupPath, { recursive: true, force: true });
       } catch (err) {
         if (renamedCurrent) {
@@ -664,8 +761,13 @@ export class AblegitService {
         await rm(stagePath, { recursive: true, force: true });
         throw err;
       }
+      const targetIdea = requireIdea(project, save.ideaId);
+      const shouldDetach = targetIdea.headSaveId !== save.id;
       project.currentIdeaId = save.ideaId;
       project.lastRestoredSaveId = save.id;
+      project.detachedRestore = shouldDetach
+        ? createDetachedRestore(save)
+        : null;
       project.updatedAt = new Date().toISOString();
       await this.saveState(state);
       return project;
@@ -765,11 +867,35 @@ export class AblegitService {
     });
   }
 
+  async deleteProject(projectId: string): Promise<Project[]> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      requireProject(state, projectId);
+      state.projects = state.projects.filter((project) => project.id !== projectId);
+      await this.saveState(state);
+      return [...state.projects].sort((a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt),
+      );
+    });
+  }
+
   async deleteSave(projectId: string, saveId: string): Promise<Project> {
     return this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       requireSave(project, saveId);
+      if (project.detachedRestore?.saveId === saveId) {
+        throw new AppError(
+          'Cannot delete the save currently being used as a restore point.',
+          409,
+        );
+      }
+      if (project.ideas.some((idea) => idea.forkedFromSaveId === saveId)) {
+        throw new AppError(
+          'Cannot delete a save that other branches fork from.',
+          409,
+        );
+      }
       await deleteManifest(project.projectPath, saveId);
       project.saves = project.saves.filter((s) => s.id !== saveId);
       for (const idea of project.ideas) {
@@ -778,6 +904,9 @@ export class AblegitService {
           idea.headSaveId = ideaSaves.at(-1)?.id ?? '';
         }
         if (idea.baseSaveId === saveId) idea.baseSaveId = idea.headSaveId;
+      }
+      if (project.lastRestoredSaveId === saveId) {
+        project.lastRestoredSaveId = null;
       }
       project.updatedAt = new Date().toISOString();
       await this.saveState(state);
@@ -953,12 +1082,20 @@ export class AblegitService {
       // Find auto-saves older than cutoff, but never delete head saves
       const headSaveIds = new Set(project.ideas.map((i) => i.headSaveId));
       const baseSaveIds = new Set(project.ideas.map((i) => i.baseSaveId));
+      const forkSaveIds = new Set(
+        project.ideas
+          .map((i) => i.forkedFromSaveId)
+          .filter((id): id is string => Boolean(id)),
+      );
+      const detachedSaveId = project.detachedRestore?.saveId ?? null;
       const toDelete = project.saves.filter(
         (s) =>
           s.auto &&
           s.createdAt < cutoffIso &&
           !headSaveIds.has(s.id) &&
-          !baseSaveIds.has(s.id),
+          !baseSaveIds.has(s.id) &&
+          !forkSaveIds.has(s.id) &&
+          s.id !== detachedSaveId,
       );
 
       if (toDelete.length === 0) return { project, deletedCount: 0 };

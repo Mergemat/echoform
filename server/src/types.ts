@@ -14,9 +14,16 @@ export type Project = {
   updatedAt: string;
   currentIdeaId: string;
   lastRestoredSaveId: string | null;
+  detachedRestore: DetachedRestore | null;
   ideas: Idea[];
   saves: Save[];
   watching: boolean;
+};
+
+export type DetachedRestore = {
+  saveId: string;
+  ideaId: string;
+  restoredAt: string;
 };
 
 export type Idea = {
@@ -25,6 +32,8 @@ export type Idea = {
   createdAt: string;
   baseSaveId: string;
   headSaveId: string;
+  parentIdeaId: string | null;
+  forkedFromSaveId: string | null;
 };
 
 export type Save = {
@@ -114,6 +123,7 @@ export type WsEvent =
 
 export type WsCommand =
   | { type: 'track-project'; projectPath: string; name?: string }
+  | { type: 'delete-project'; projectId: string }
   | { type: 'create-save'; projectId: string; label?: string; note?: string }
   | { type: 'create-idea'; projectId: string; fromSaveId: string; name: string }
   | { type: 'go-back-to'; projectId: string; saveId: string; force?: boolean }

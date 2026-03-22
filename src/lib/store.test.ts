@@ -33,6 +33,8 @@ const makeIdea = (id: string): Idea => ({
   createdAt: '2024-01-01T00:00:00Z',
   baseSaveId: 'save-1',
   headSaveId: 'save-1',
+  parentIdeaId: null,
+  forkedFromSaveId: null,
 });
 
 const makeSave = (id: string, ideaId: string): Save => ({
@@ -68,6 +70,7 @@ const makeProject = (
   updatedAt: '2024-01-01T00:00:00Z',
   currentIdeaId: ideas[0]?.id ?? 'idea-1',
   lastRestoredSaveId: null,
+  detachedRestore: null,
   ideas,
   saves,
   watching: false,
@@ -75,9 +78,37 @@ const makeProject = (
 
 describe('useStore', () => {
   let store: (typeof import('@/lib/store'))['useStore'];
+  let wsInstance: {
+    readyState: number;
+    send: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+    onopen: (() => void) | null;
+    onclose: (() => void) | null;
+    onmessage: ((event: { data: string }) => void) | null;
+  };
 
   beforeEach(async () => {
     vi.resetModules();
+    wsInstance = {
+      readyState: 0,
+      send: vi.fn(),
+      close: vi.fn(),
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    global.WebSocket = vi
+      .fn(function WebSocketMock() {
+        return wsInstance;
+      }) as unknown as typeof WebSocket;
+    (global.WebSocket as unknown as { OPEN: number; CONNECTING: number }).OPEN = 1;
+    (
+      global.WebSocket as unknown as { OPEN: number; CONNECTING: number }
+    ).CONNECTING = 0;
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+    } as Response);
     const mod = await import('@/lib/store');
     store = mod.useStore;
     // Reset to initial state
@@ -197,6 +228,42 @@ describe('useStore', () => {
       const state = store.getState();
       expect(state.activeIdeaId).toBe('new-idea');
       expect(state.selectedSaveId).toBeNull();
+    });
+  });
+
+  describe('projects event handling', () => {
+    it('falls back to the first remaining project when the selected project is removed', async () => {
+      const idea1 = makeIdea('idea-1');
+      const save1 = makeSave('save-1', idea1.id);
+      const project1 = makeProject('proj-1', [save1], [idea1]);
+      const idea2 = makeIdea('idea-2');
+      const save2 = makeSave('save-2', idea2.id);
+      const project2 = makeProject('proj-2', [save2], [idea2]);
+
+      act(() =>
+        store.setState({
+          projects: [project1, project2],
+          selectedProjectId: 'proj-2',
+          selectedSaveId: 'save-2',
+          activeIdeaId: idea2.id,
+        }),
+      );
+
+      await store.getState().connect();
+
+      act(() => {
+        wsInstance.onmessage?.({
+          data: JSON.stringify({
+            type: 'projects',
+            projects: [project1],
+          }),
+        });
+      });
+
+      const state = store.getState();
+      expect(state.selectedProjectId).toBe('proj-1');
+      expect(state.selectedSaveId).toBeNull();
+      expect(state.activeIdeaId).toBeNull();
     });
   });
 });
