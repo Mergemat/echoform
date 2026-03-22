@@ -14,11 +14,15 @@ export function CollapsedCard({
   save,
   isSelected,
   isHead,
+  depth = 0,
+  dimmed = false,
   onClick,
 }: {
   save: Save;
   isSelected: boolean;
   isHead: boolean;
+  depth?: number;
+  dimmed?: boolean;
   onClick: () => void;
 }) {
   const chips = useMemo(() => buildChips(save), [save]);
@@ -48,8 +52,10 @@ export function CollapsedCard({
     <button
       type="button"
       onClick={onClick}
+      style={{ paddingLeft: `${16 + depth * 28}px` }}
       className={cn(
-        'w-full text-left px-4 py-2.5 flex flex-col gap-1 transition-colors',
+        'w-full text-left py-2.5 pr-4 flex flex-col gap-1 transition-colors',
+        dimmed && !isSelected && 'opacity-55',
         isSelected
           ? 'bg-white/[0.06] border-l-2 border-white/50'
           : 'border-l-2 border-transparent hover:bg-white/[0.03]',

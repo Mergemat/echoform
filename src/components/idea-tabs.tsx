@@ -15,6 +15,9 @@ export function IdeaTabs({
 
   return (
     <div className="px-2 py-1.5 border-b border-white/[0.06] overflow-x-auto scrollbar-none shrink-0">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-white/20 px-1 pb-1.5">
+        Branches
+      </div>
       <Tabs value={value ?? ''} onValueChange={onSelect}>
         <TabsList variant="line" className="h-auto gap-0.5 p-0">
           {project.ideas.map((idea) => {
@@ -32,7 +35,7 @@ export function IdeaTabs({
                   'after:hidden',
                 )}
               >
-                <span>{idea.name}</span>
+                <span>{idea.parentIdeaId ? `↳ ${idea.name}` : idea.name}</span>
                 <span
                   className={cn(
                     'text-[9px]',

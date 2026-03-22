@@ -1,11 +1,12 @@
 import { useStore } from '@/lib/store';
 import { useRef, useState, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { buildDisplayItems } from './timeline-utils';
+import { buildTimelineDisplayItems } from './timeline-utils';
 import { CollapsedCard } from './collapsed-card';
 import { ExpandedCard } from './expanded-card';
 import { GroupCard } from './save-group';
 import { IdeaTabs } from './idea-tabs';
+import { BranchCard } from './branch-card';
 
 export function Timeline() {
   const project = useStore((s) => s.selectedProject());
@@ -16,20 +17,10 @@ export function Timeline() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
-
-  const filteredSaves = useMemo(() => {
-    if (!project || !effectiveIdeaId) return [];
-    return project.saves
-      .filter((s) => s.ideaId === effectiveIdeaId)
-      .slice()
-      .reverse();
-  }, [project, effectiveIdeaId]);
-
-  const displayItems = useMemo(
-    () => buildDisplayItems(filteredSaves, expandedGroups),
-    [filteredSaves, expandedGroups],
-  );
+  const displayItems = useMemo(() => {
+    if (!project) return [];
+    return buildTimelineDisplayItems(project, activeIdeaId, expandedGroups);
+  }, [project, activeIdeaId, expandedGroups]);
 
   const virtualizer = useVirtualizer({
     count: displayItems.length,
@@ -79,78 +70,99 @@ export function Timeline() {
         onSelect={setActiveIdea}
       />
 
-      {/* Vertical timeline line + cards */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="relative">
-          {/* Vertical line */}
-          <div className="absolute left-[22px] top-0 bottom-0 w-px bg-white/[0.06]" />
-
-          <div
-            style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
-          >
-            {virtualizer.getVirtualItems().map((vItem) => {
-              const item = displayItems[vItem.index]!;
-              return (
-                <div
-                  key={vItem.key}
-                  data-index={vItem.index}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    transform: `translateY(${vItem.start}px)`,
-                  }}
-                >
-                  {item.type === 'group' ? (
-                    <GroupCard
-                      saves={item.saves}
-                      groupKey={item.key}
-                      expanded={expandedGroups.has(item.key)}
-                      onToggle={() => toggleGroup(item.key)}
-                    />
-                  ) : (
-                    (() => {
-                      const save = item.save;
-                      const idea = project.ideas.find(
-                        (i) => i.id === save.ideaId,
-                      );
-                      const isHead = idea?.headSaveId === save.id;
-                      const isSelected = save.id === selectedSaveId;
-                      if (isSelected) {
-                        return (
-                          <div>
-                            <CollapsedCard
-                              save={save}
-                              isSelected
-                              isHead={isHead}
-                              onClick={() => toggleSave(save.id)}
-                            />
-                            <ExpandedCard
-                              save={save}
-                              idea={idea}
-                              isHead={isHead}
-                              projectId={project.id}
-                              onClose={() => toggleSave(save.id)}
-                            />
-                          </div>
-                        );
-                      }
-                      return (
-                        <CollapsedCard
-                          save={save}
-                          isSelected={false}
-                          isHead={isHead}
-                          onClick={() => toggleSave(save.id)}
-                        />
-                      );
-                    })()
-                  )}
-                </div>
-              );
-            })}
+      {project.detachedRestore && (
+        <div className="px-3 py-2 border-b border-amber-300/10 bg-amber-300/[0.06]">
+          <div className="text-[11px] text-amber-100/80">
+            Restored{' '}
+            <span className="font-medium">
+              {project.saves.find(
+                (s) => s.id === project.detachedRestore?.saveId,
+              )?.label ?? 'old save'}
+            </span>
+            . Next save creates a new branch and keeps the old future intact.
           </div>
+        </div>
+      )}
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div
+          style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+        >
+          {virtualizer.getVirtualItems().map((vItem) => {
+            const item = displayItems[vItem.index]!;
+            return (
+              <div
+                key={vItem.key}
+                data-index={vItem.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  transform: `translateY(${vItem.start}px)`,
+                }}
+              >
+                {item.type === 'branch' ? (
+                  <BranchCard
+                    idea={item.idea}
+                    fromSave={item.fromSave}
+                    depth={item.depth}
+                    isCurrent={item.isCurrent}
+                    isFocused={item.isFocused}
+                  />
+                ) : item.type === 'group' ? (
+                  <GroupCard
+                    saves={item.saves}
+                    groupKey={item.key}
+                    expanded={expandedGroups.has(item.key)}
+                    depth={item.depth}
+                    dimmed={!item.isFocused}
+                    onToggle={() => toggleGroup(item.key)}
+                  />
+                ) : (
+                  (() => {
+                    const save = item.save;
+                    const idea = item.idea;
+                    const isHead = idea.headSaveId === save.id;
+                    const isSelected = save.id === selectedSaveId;
+                    if (isSelected) {
+                      return (
+                        <div>
+                          <CollapsedCard
+                            save={save}
+                            isSelected
+                            isHead={isHead}
+                            depth={item.depth}
+                            dimmed={!item.isFocused}
+                            onClick={() => toggleSave(save.id)}
+                          />
+                          <ExpandedCard
+                            save={save}
+                            idea={idea}
+                            isHead={isHead}
+                            projectId={project.id}
+                            depth={item.depth}
+                            onClose={() => toggleSave(save.id)}
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <CollapsedCard
+                        save={save}
+                        isSelected={false}
+                        isHead={isHead}
+                        depth={item.depth}
+                        dimmed={!item.isFocused}
+                        onClick={() => toggleSave(save.id)}
+                      />
+                    );
+                  })()
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
