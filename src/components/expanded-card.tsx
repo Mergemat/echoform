@@ -1,4 +1,6 @@
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
+import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
 import { basename } from '@/lib/path';
 import { Button } from '@/components/ui/button';
@@ -34,8 +36,7 @@ export function ExpandedCard({
   projectId: string;
   onClose: () => void;
 }) {
-  const send = useStore((s) => s.send);
-  const openPreviewPlayer = useStore((s) => s.openPreviewPlayer);
+  const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
   const [labelVal, setLabelVal] = useState(save.label);
   const [noteVal, setNoteVal] = useState(save.note);
   const [showIdeaForm, setShowIdeaForm] = useState(false);
@@ -46,7 +47,7 @@ export function ExpandedCard({
   const [computing, setComputing] = useState(false);
 
   const commitEdit = () =>
-    send({
+    sendDaemonCommand({
       type: 'update-save',
       projectId,
       saveId: save.id,
@@ -54,10 +55,10 @@ export function ExpandedCard({
       label: labelVal,
     });
   const handleDelete = () =>
-    send({ type: 'delete-save', projectId, saveId: save.id });
+    sendDaemonCommand({ type: 'delete-save', projectId, saveId: save.id });
   const handleCreateIdea = () => {
     if (!ideaName.trim()) return;
-    send({
+    sendDaemonCommand({
       type: 'branch-from-save',
       projectId,
       saveId: save.id,

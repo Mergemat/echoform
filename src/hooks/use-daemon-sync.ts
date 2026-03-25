@@ -1,0 +1,60 @@
+import { useEffect } from 'react';
+import { toast } from 'sonner';
+import {
+  startDaemonClient,
+  stopDaemonClient,
+  subscribeConnection,
+  subscribeDaemonEvents,
+} from '@/lib/daemon-client';
+import { useConnectionStore } from '@/lib/connection-store';
+import { usePreviewStore } from '@/lib/preview-store';
+import { useStore } from '@/lib/store';
+
+export function useDaemonSync() {
+  useEffect(() => {
+    const unsubscribeEvents = subscribeDaemonEvents((event) => {
+      const store = useStore.getState();
+
+      switch (event.type) {
+        case 'snapshot':
+          store.applySnapshot(event.projects, event.roots, event.activity);
+          break;
+        case 'project-updated':
+          store.applyProjectUpdate(event.project);
+          break;
+        case 'auto-saved':
+          toast.success(`Auto-saved ${event.save.label}`);
+          return;
+        case 'change-detected':
+          toast.info(`Changes detected in ${event.projectName}`);
+          return;
+        case 'discovered-projects':
+          store.setDiscoveredProjects(event.paths);
+          return;
+        case 'root-suggestions':
+          store.setRootSuggestions(event.suggestions);
+          return;
+        case 'error':
+          toast.error(event.message);
+          return;
+      }
+
+      const nextState = useStore.getState();
+      usePreviewStore
+        .getState()
+        .reconcilePreviewPlayer(nextState.projects, nextState.selectedProjectId);
+    });
+
+    const unsubscribeConnection = subscribeConnection((connected) => {
+      useConnectionStore.getState().setConnected(connected);
+    });
+
+    startDaemonClient();
+
+    return () => {
+      unsubscribeEvents();
+      unsubscribeConnection();
+      stopDaemonClient();
+    };
+  }, []);
+}

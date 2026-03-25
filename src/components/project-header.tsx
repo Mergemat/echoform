@@ -1,4 +1,6 @@
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
+import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/lib/types';
 import { Waveform, MusicNotes } from '@phosphor-icons/react';
@@ -36,9 +38,12 @@ function projectHealth(project: Project) {
 
 export function ProjectHeader() {
   const project = useStore((state) => state.selectedProject());
-  const send = useStore((state) => state.send);
-  const togglePreviewSidebar = useStore((state) => state.togglePreviewSidebar);
-  const previewSidebarOpen = useStore((state) => state.previewSidebarOpen);
+  const togglePreviewSidebar = usePreviewStore(
+    (state) => state.togglePreviewSidebar,
+  );
+  const previewSidebarOpen = usePreviewStore(
+    (state) => state.previewSidebarOpen,
+  );
 
   if (!project) return null;
 
@@ -80,7 +85,7 @@ export function ProjectHeader() {
           onClick={() => {
             const targetIdeaId = pendingIdea?.id ?? currentIdea?.id;
             if (!targetIdeaId) return;
-            send({
+            sendDaemonCommand({
               type: 'open-idea',
               projectId: project.id,
               ideaId: targetIdeaId,
@@ -98,7 +103,7 @@ export function ProjectHeader() {
           onClick={() => {
             const targetIdeaId = pendingIdea?.id ?? currentIdea?.id;
             if (!targetIdeaId) return;
-            send({
+            sendDaemonCommand({
               type: 'reveal-idea-file',
               projectId: project.id,
               ideaId: targetIdeaId,

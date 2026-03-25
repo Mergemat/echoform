@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore } from '@/lib/store';
+import { usePreviewStore } from '@/lib/preview-store';
 import { SpeakerHigh, X } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import type { Project, Save, Idea } from '@/lib/types';
@@ -76,9 +76,9 @@ function groupByIdea(project: Project) {
 }
 
 export function PreviewSidebar({ project }: { project: Project }) {
-  const openPreviewPlayer = useStore((s) => s.openPreviewPlayer);
-  const previewPlayerSaveId = useStore((s) => s.previewPlayerSaveId);
-  const togglePreviewSidebar = useStore((s) => s.togglePreviewSidebar);
+  const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
+  const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
+  const togglePreviewSidebar = usePreviewStore((s) => s.togglePreviewSidebar);
 
   const groups = useMemo(() => groupByIdea(project), [project]);
   const totalCount = groups.reduce((sum, g) => sum + g.saves.length, 0);

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { toast } from 'sonner';
 import type {
   ActivityItem,
   CompareResult,
@@ -8,17 +7,7 @@ import type {
   RootSuggestion,
   Save,
   TrackedRoot,
-  WsCommand,
-  WsEvent,
 } from '@/lib/types';
-
-const locationLike =
-  typeof window !== 'undefined'
-    ? window.location
-    : { protocol: 'http:', host: 'localhost' };
-const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-const WS_URL = `${wsProtocol}//${locationLike.host}/ws`;
-const API_URL = '';
 
 type Store = {
   projects: Project[];
@@ -31,28 +20,23 @@ type Store = {
   collapsedBranches: Set<string>;
   discoveredProjects: DiscoveredProject[];
   compare: CompareResult | null;
-  previewPlayerSaveId: string | null;
-  previewSidebarOpen: boolean;
-  connected: boolean;
-  ws: WebSocket | null;
 
   selectedProject: () => Project | null;
   selectedSave: () => Save | null;
 
-  connect: () => Promise<void>;
-  send: (cmd: WsCommand) => void;
+  applySnapshot: (
+    projects: Project[],
+    roots: TrackedRoot[],
+    activity: ActivityItem[],
+  ) => void;
+  applyProjectUpdate: (project: Project) => void;
+  setDiscoveredProjects: (projects: DiscoveredProject[]) => void;
+  setRootSuggestions: (suggestions: RootSuggestion[]) => void;
+  setCompare: (compare: CompareResult | null) => void;
   selectProject: (id: string | null) => void;
   toggleSave: (id: string) => void;
   setActiveIdea: (id: string) => void;
   toggleBranchCollapse: (ideaId: string) => void;
-  openPreviewPlayer: (saveId: string) => void;
-  closePreviewPlayer: () => void;
-  togglePreviewSidebar: () => void;
-  fetchCompare: (
-    projectId: string,
-    leftId: string,
-    rightId: string,
-  ) => Promise<void>;
 };
 
 function applySnapshotSelection(
@@ -97,10 +81,6 @@ export const useStore = create<Store>((set, get) => ({
   collapsedBranches: new Set(),
   discoveredProjects: [],
   compare: null,
-  previewPlayerSaveId: null,
-  previewSidebarOpen: false,
-  connected: false,
-  ws: null,
 
   selectedProject: () => {
     const { projects, selectedProjectId } = get();
@@ -114,119 +94,48 @@ export const useStore = create<Store>((set, get) => ({
     return project.saves.find((save) => save.id === selectedSaveId) ?? null;
   },
 
-  connect: async () => {
-    const currentWs = get().ws;
-    if (
-      currentWs &&
-      (currentWs.readyState === WebSocket.OPEN ||
-        currentWs.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
+  applySnapshot: (projects, roots, activity) =>
+    set((state) => ({
+      projects,
+      roots,
+      activity,
+      ...applySnapshotSelection(
+        projects,
+        state.selectedProjectId,
+        state.selectedSaveId,
+        state.activeIdeaId,
+      ),
+    })),
 
-    try {
-      const res = await fetch(`${API_URL}/api/session`);
-      if (!res.ok) throw new Error('Session bootstrap failed');
-    } catch {
-      set({ connected: false, ws: null });
-      setTimeout(() => void get().connect(), 2000);
-      return;
-    }
+  applyProjectUpdate: (nextProject) =>
+    set((state) => {
+      const prevProject = state.projects.find(
+        (project) => project.id === nextProject.id,
+      );
+      const followCurrentIdea =
+        state.selectedProjectId === nextProject.id &&
+        (!state.activeIdeaId ||
+          state.activeIdeaId === prevProject?.currentIdeaId);
 
-    const ws = new WebSocket(WS_URL);
+      return {
+        projects: state.projects.map((project) =>
+          project.id === nextProject.id ? nextProject : project,
+        ),
+        selectedSaveId:
+          state.selectedProjectId === nextProject.id &&
+          state.selectedSaveId &&
+          !nextProject.saves.some((save) => save.id === state.selectedSaveId)
+            ? null
+            : state.selectedSaveId,
+        activeIdeaId: followCurrentIdea
+          ? nextProject.currentIdeaId
+          : state.activeIdeaId,
+      };
+    }),
 
-    ws.onopen = () => set({ connected: true, ws });
-
-    ws.onclose = () => {
-      set({ connected: false, ws: null });
-      setTimeout(() => void get().connect(), 2000);
-    };
-
-    ws.onmessage = (e) => {
-      const event = JSON.parse(e.data) as WsEvent;
-      switch (event.type) {
-        case 'snapshot':
-          set((state) => ({
-            projects: event.projects,
-            roots: event.roots,
-            activity: event.activity,
-            previewPlayerSaveId:
-              state.selectedProjectId &&
-              state.previewPlayerSaveId &&
-              event.projects
-                .find((project) => project.id === state.selectedProjectId)
-                ?.saves.some((save) => save.id === state.previewPlayerSaveId)
-                ? state.previewPlayerSaveId
-                : null,
-            ...applySnapshotSelection(
-              event.projects,
-              state.selectedProjectId,
-              state.selectedSaveId,
-              state.activeIdeaId,
-            ),
-          }));
-          break;
-        case 'project-updated':
-          set((state) => {
-            const prevProject = state.projects.find(
-              (project) => project.id === event.project.id,
-            );
-            const followCurrentIdea =
-              state.selectedProjectId === event.project.id &&
-              (!state.activeIdeaId ||
-                state.activeIdeaId === prevProject?.currentIdeaId);
-
-            return {
-              projects: state.projects.map((project) =>
-                project.id === event.project.id ? event.project : project,
-              ),
-              previewPlayerSaveId:
-                state.selectedProjectId === event.project.id &&
-                state.previewPlayerSaveId &&
-                !event.project.saves.some(
-                  (save) => save.id === state.previewPlayerSaveId,
-                )
-                  ? null
-                  : state.previewPlayerSaveId,
-              selectedSaveId:
-                state.selectedProjectId === event.project.id &&
-                state.selectedSaveId &&
-                !event.project.saves.some(
-                  (save) => save.id === state.selectedSaveId,
-                )
-                  ? null
-                  : state.selectedSaveId,
-              activeIdeaId: followCurrentIdea
-                ? event.project.currentIdeaId
-                : state.activeIdeaId,
-            };
-          });
-          break;
-        case 'auto-saved':
-          toast.success(`Auto-saved ${event.save.label}`);
-          break;
-        case 'change-detected':
-          toast.info(`Changes detected in ${event.projectName}`);
-          break;
-        case 'discovered-projects':
-          set({ discoveredProjects: event.paths });
-          break;
-        case 'root-suggestions':
-          set({ rootSuggestions: event.suggestions });
-          break;
-        case 'error':
-          toast.error(event.message);
-          break;
-      }
-    };
-  },
-
-  send: (cmd) => {
-    const { ws } = get();
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(cmd));
-    }
-  },
+  setDiscoveredProjects: (projects) => set({ discoveredProjects: projects }),
+  setRootSuggestions: (suggestions) => set({ rootSuggestions: suggestions }),
+  setCompare: (compare) => set({ compare }),
 
   selectProject: (id) =>
     set({
@@ -234,12 +143,13 @@ export const useStore = create<Store>((set, get) => ({
       selectedSaveId: null,
       activeIdeaId: null,
       compare: null,
-      previewPlayerSaveId: null,
     }),
+
   toggleSave: (id) =>
     set((state) => ({
       selectedSaveId: state.selectedSaveId === id ? null : id,
     })),
+
   setActiveIdea: (id) =>
     set((state) => {
       const next = new Set(state.collapsedBranches);
@@ -250,6 +160,7 @@ export const useStore = create<Store>((set, get) => ({
         collapsedBranches: next,
       };
     }),
+
   toggleBranchCollapse: (ideaId) =>
     set((state) => {
       const next = new Set(state.collapsedBranches);
@@ -257,21 +168,4 @@ export const useStore = create<Store>((set, get) => ({
       else next.add(ideaId);
       return { collapsedBranches: next };
     }),
-  openPreviewPlayer: (saveId) => set({ previewPlayerSaveId: saveId }),
-  closePreviewPlayer: () => set({ previewPlayerSaveId: null }),
-  togglePreviewSidebar: () =>
-    set((state) => ({ previewSidebarOpen: !state.previewSidebarOpen })),
-
-  fetchCompare: async (projectId, leftId, rightId) => {
-    try {
-      const res = await fetch(
-        `${API_URL}/api/projects/${projectId}/compare?left=${leftId}&right=${rightId}`,
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      set({ compare: data.compare });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Compare failed');
-    }
-  },
 }));

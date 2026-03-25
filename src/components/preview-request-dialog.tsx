@@ -15,7 +15,7 @@ import {
   CloudArrowUp,
 } from '@phosphor-icons/react';
 import type { Idea, PreviewRequestResult, Save } from '@/lib/types';
-import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
 
 const ACCEPTED_EXTENSIONS = ['.wav', '.aif', '.aiff', '.mp3', '.m4a'];
 const ACCEPT_STRING = ACCEPTED_EXTENSIONS.map((e) => `audio/*,${e}`).join(',');
@@ -38,7 +38,6 @@ export function PreviewRequestDialog({
   idea: Idea | undefined;
   onClose: () => void;
 }) {
-  const send = useStore((state) => state.send);
   const [preview, setPreview] = useState<PreviewRequestResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [revealing, setRevealing] = useState(false);
@@ -295,7 +294,11 @@ export function PreviewRequestDialog({
               className="rounded-lg text-[11px] text-white/40 hover:text-white/70"
               onClick={() => {
                 if (!idea) return;
-                send({ type: 'open-idea', projectId, ideaId: idea.id });
+                sendDaemonCommand({
+                  type: 'open-idea',
+                  projectId,
+                  ideaId: idea.id,
+                });
               }}
               disabled={!idea}
             >
