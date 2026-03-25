@@ -17,7 +17,7 @@ import { ExpandedCard } from './expanded-card';
 import { GroupCard } from './save-group';
 import { BranchSelector } from './branch-selector';
 import { BranchCard } from './branch-card';
-import type { Idea, Project } from '@/lib/types';
+import type { Project } from '@/lib/types';
 
 export function Timeline() {
   const project = useStore((s) => s.selectedProject());
