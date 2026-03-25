@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import type { Save, Idea } from '@/lib/types';
 import { useState } from 'react';
 import {
-  ArrowCounterClockwise,
   TrashSimple,
   GitFork,
   X,
@@ -30,14 +29,12 @@ export function ExpandedCard({
   idea,
   isHead,
   projectId,
-  depth = 0,
   onClose,
 }: {
   save: Save;
   idea: Idea | undefined;
   isHead: boolean;
   projectId: string;
-  depth?: number;
   onClose: () => void;
 }) {
   const send = useStore((s) => s.send);
@@ -46,6 +43,7 @@ export function ExpandedCard({
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [showSmartRestore, setShowSmartRestore] = useState(false);
   const [ideaName, setIdeaName] = useState('');
+  const [fileName, setFileName] = useState('');
   const [computing, setComputing] = useState(false);
 
   const commitEdit = () =>
@@ -56,20 +54,31 @@ export function ExpandedCard({
       note: noteVal,
       label: labelVal,
     });
-  const handleGoBack = () =>
-    send({ type: 'go-back-to', projectId, saveId: save.id });
   const handleDelete = () =>
     send({ type: 'delete-save', projectId, saveId: save.id });
   const handleCreateIdea = () => {
     if (!ideaName.trim()) return;
     send({
-      type: 'create-idea',
+      type: 'branch-from-save',
       projectId,
-      fromSaveId: save.id,
+      saveId: save.id,
       name: ideaName.trim(),
+      fileName: fileName.trim() || `${ideaName.trim()}.als`,
     });
     setIdeaName('');
+    setFileName('');
     setShowIdeaForm(false);
+  };
+  const toggleBranchForm = () => {
+    setShowIdeaForm((prev) => {
+      const next = !prev;
+      if (next) {
+        const defaultBranchName = ideaName.trim() || `Recovered ${save.label}`;
+        setIdeaName(defaultBranchName);
+        setFileName(fileName.trim() || `${defaultBranchName}.als`);
+      }
+      return next;
+    });
   };
   const handleCompute = async () => {
     setComputing(true);
@@ -96,10 +105,7 @@ export function ExpandedCard({
   const sd = save.setDiff;
 
   return (
-    <div
-      className="pb-4 pt-1 pr-4 space-y-3 border-l-2 border-white/50 bg-white/[0.03]"
-      style={{ paddingLeft: `${16 + depth * 28}px` }}
-    >
+    <div className="pb-4 pt-1 pr-4 pl-3 space-y-3 border-l-2 border-white/50 bg-white/[0.03]">
       <div className="flex items-start gap-2 pt-1">
         <div className="flex-1 min-w-0">
           <Input
@@ -366,24 +372,19 @@ export function ExpandedCard({
       )}
 
       <div className="flex flex-wrap gap-1.5 pt-0.5">
-        <Button variant="ghost" size="sm" onClick={handleGoBack}>
-          <ArrowCounterClockwise size={13} data-icon="inline-start" /> Full
-          restore
-        </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={() => setShowSmartRestore(true)}
         >
-          <ArrowCounterClockwise size={13} data-icon="inline-start" /> Smart
-          restore
+          Smart restore
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowIdeaForm(!showIdeaForm)}
+          onClick={toggleBranchForm}
         >
-          <GitFork size={13} data-icon="inline-start" /> Branch
+          <GitFork size={13} data-icon="inline-start" /> Branch from save
         </Button>
         <Button variant="destructive" size="sm" onClick={handleDelete}>
           <TrashSimple size={13} data-icon="inline-start" /> Delete
@@ -395,7 +396,16 @@ export function ExpandedCard({
           <Input
             value={ideaName}
             onChange={(e) => setIdeaName(e.target.value)}
-            placeholder="New idea name..."
+            placeholder="Branch name..."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateIdea();
+            }}
+            className="bg-white/[0.04] border border-white/[0.08] rounded px-2 py-1.5 text-[11px] text-white/70 w-full focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 h-auto"
+          />
+          <Input
+            value={fileName}
+            onChange={(e) => setFileName(e.target.value)}
+            placeholder="Branch file name (.als)..."
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleCreateIdea();
             }}
@@ -405,9 +415,9 @@ export function ExpandedCard({
             variant="outline"
             size="sm"
             onClick={handleCreateIdea}
-            disabled={!ideaName.trim()}
+            disabled={!ideaName.trim() || !fileName.trim()}
           >
-            Create idea
+            Create branch file
           </Button>
         </div>
       )}

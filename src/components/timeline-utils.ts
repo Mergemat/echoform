@@ -1,10 +1,87 @@
-import { extname } from '@/lib/path';
+import { basename, extname } from '@/lib/path';
 import type { Idea, Project, Save } from '@/lib/types';
+
+// ── Idea tree helpers ────────────────────────────────────────────────
+
+/** Root ideas = no parent or parent doesn't exist in the project */
+export function getRootIdeas(project: Project): Idea[] {
+  const ids = new Set(project.ideas.map((i) => i.id));
+  return project.ideas.filter(
+    (i) => !i.parentIdeaId || !ids.has(i.parentIdeaId),
+  );
+}
+
+/** Walk up parentIdeaId to find the root ancestor of a given idea */
+export function getRootIdeaFor(project: Project, ideaId: string): Idea | null {
+  const byId = new Map(project.ideas.map((i) => [i.id, i]));
+  let current = byId.get(ideaId) ?? null;
+  while (current?.parentIdeaId && byId.has(current.parentIdeaId)) {
+    current = byId.get(current.parentIdeaId)!;
+  }
+  return current;
+}
+
+/** Get all idea IDs that descend from a root idea (including the root itself) */
+export function getIdeaSubtreeIds(
+  project: Project,
+  rootIdeaId: string,
+): Set<string> {
+  const result = new Set<string>([rootIdeaId]);
+  const childrenByParent = new Map<string, Idea[]>();
+  for (const idea of project.ideas) {
+    if (!idea.parentIdeaId) continue;
+    const existing = childrenByParent.get(idea.parentIdeaId) ?? [];
+    existing.push(idea);
+    childrenByParent.set(idea.parentIdeaId, existing);
+  }
+  const visit = (id: string) => {
+    for (const child of childrenByParent.get(id) ?? []) {
+      result.add(child.id);
+      visit(child.id);
+    }
+  };
+  visit(rootIdeaId);
+  return result;
+}
+
+export type RootFileGroup = {
+  setPath: string;
+  rootIdeas: Idea[];
+  representativeIdea: Idea;
+};
+
+export function getRootFileGroups(project: Project): RootFileGroup[] {
+  const groups = new Map<string, RootFileGroup>();
+  for (const idea of getRootIdeas(project)) {
+    const existing = groups.get(idea.setPath);
+    if (existing) {
+      existing.rootIdeas.push(idea);
+    } else {
+      groups.set(idea.setPath, {
+        setPath: idea.setPath,
+        rootIdeas: [idea],
+        representativeIdea: idea,
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
+/** Display name for a root idea's .als file (filename without extension) */
+export function fileTabName(idea: Idea): string {
+  const name = basename(idea.setPath);
+  const ext = extname(name);
+  return ext ? name.slice(0, -ext.length) : name;
+}
 
 // ── Formatters ───────────────────────────────────────────────────────
 export function formatTime(iso: string): string {
   const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m}${ampm}`;
 }
 
 export function formatSizeDelta(bytes: number): string {
@@ -24,12 +101,25 @@ export function formatSize(bytes: number): string {
 }
 
 export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+
+  const time = formatTime(iso);
+
+  if (diffDays === 0) return `Today ${time}`;
+  if (diffDays === 1) return `Yesterday ${time}`;
+  if (diffDays < 7) {
+    const day = d.toLocaleDateString(undefined, { weekday: 'long' });
+    return `${day} ${time}`;
+  }
+  return (
+    d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    }) + ` ${time}`
+  );
 }
 
 // ── File-type helpers ────────────────────────────────────────────────
@@ -200,6 +290,8 @@ export type TimelineDisplayItem =
       fromSave: Save | null;
       isCurrent: boolean;
       isFocused: boolean;
+      isCollapsed: boolean;
+      saveCount: number;
     }
   | {
       type: 'save';
@@ -232,6 +324,7 @@ export function buildTimelineDisplayItems(
   project: Project,
   focusedIdeaId: string | null,
   expandedGroups: Set<string>,
+  collapsedBranches: Set<string> = new Set(),
 ): TimelineDisplayItem[] {
   const savesByIdea = new Map<string, Save[]>();
   for (const idea of project.ideas) {
@@ -274,6 +367,8 @@ export function buildTimelineDisplayItems(
       ? (savesById.get(idea.forkedFromSaveId) ?? null)
       : null;
     const isFocused = idea.id === effectiveFocusId;
+    const ideaSaves = savesByIdea.get(idea.id) ?? [];
+    const isCollapsed = collapsedBranches.has(idea.id) && !isFocused;
 
     items.push({
       type: 'branch',
@@ -282,10 +377,14 @@ export function buildTimelineDisplayItems(
       fromSave,
       isCurrent: idea.id === project.currentIdeaId,
       isFocused,
+      isCollapsed,
+      saveCount: ideaSaves.length,
     });
 
+    if (isCollapsed) return;
+
     const branchItems = buildDisplayItems(
-      savesByIdea.get(idea.id) ?? [],
+      ideaSaves,
       expandedGroups,
       forkSaveIds,
     );

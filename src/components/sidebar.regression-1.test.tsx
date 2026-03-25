@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
+import { JSDOM } from 'jsdom';
 import type { Project, Idea, Save } from '@/lib/types';
 
 vi.mock('sonner', () => ({
@@ -10,10 +11,20 @@ import { ProjectItem } from '@/components/sidebar';
 import { useStore } from '@/lib/store';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
+const dom = new JSDOM('<!doctype html><html><body></body></html>');
+Object.assign(globalThis, {
+  window: dom.window,
+  document: dom.window.document,
+  HTMLElement: dom.window.HTMLElement,
+  Node: dom.window.Node,
+  navigator: dom.window.navigator,
+});
+
 const makeIdea = (id: string): Idea => ({
   id,
   name: 'Main',
   createdAt: '2024-01-01T00:00:00Z',
+  setPath: 'project.als',
   baseSaveId: 'save-1',
   headSaveId: 'save-1',
   parentIdeaId: null,
@@ -47,12 +58,15 @@ const makeProject = (id: string, name: string): Project => {
     name,
     adapter: 'ableton',
     projectPath: `/projects/${id}`,
-    activeSetPath: `/projects/${id}/project.als`,
+    rootIds: [],
+    presence: 'active',
+    watchError: null,
+    lastSeenAt: '2024-01-01T00:00:00Z',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
     currentIdeaId: idea.id,
-    lastRestoredSaveId: null,
-    detachedRestore: null,
+    pendingOpen: null,
+    driftStatus: null,
     ideas: [idea],
     saves: [save],
     watching: false,
@@ -66,6 +80,9 @@ describe('ProjectItem keyboard support', () => {
       selectedProjectId: 'proj-1',
       selectedSaveId: null,
       activeIdeaId: null,
+      roots: [],
+      activity: [],
+      rootSuggestions: [],
       compare: null,
       connected: false,
       ws: null,
@@ -79,13 +96,13 @@ describe('ProjectItem keyboard support', () => {
     // Report: .gstack/qa-reports/qa-report-localhost-5173-2026-03-21.md
     const project = makeProject('proj-2', 'Keyboard Project');
 
-    render(
+    const view = render(
       <TooltipProvider>
         <ProjectItem project={project} selected={false} />
       </TooltipProvider>,
     );
 
-    const row = screen.getByRole('button', { name: /Keyboard Project/i });
+    const row = view.getByRole('button', { name: /Keyboard Project/i });
     row.focus();
     fireEvent.keyDown(row, { key: ' ' });
 

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Idea, Project, Save } from '@/lib/types';
-import { buildTimelineDisplayItems } from './timeline-utils';
+import { buildTimelineDisplayItems, getRootFileGroups } from './timeline-utils';
 
 function makeIdea(id: string, fields: Partial<Idea> = {}): Idea {
   return {
     id,
     name: id,
     createdAt: '2024-01-01T00:00:00Z',
+    setPath: 'song.als',
     baseSaveId: '',
     headSaveId: '',
     parentIdeaId: null,
@@ -60,12 +61,15 @@ describe('buildTimelineDisplayItems', () => {
       name: 'Demo',
       adapter: 'ableton',
       projectPath: '/tmp/demo',
-      activeSetPath: 'song.als',
+      rootIds: [],
+      presence: 'active',
+      watchError: null,
+      lastSeenAt: '2024-01-03T00:00:00Z',
       createdAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-03T00:00:00Z',
       currentIdeaId: 'idea-child',
-      lastRestoredSaveId: 'save-1',
-      detachedRestore: null,
+      pendingOpen: null,
+      driftStatus: null,
       ideas: [mainIdea, childIdea],
       saves,
       watching: true,
@@ -94,5 +98,41 @@ describe('buildTimelineDisplayItems', () => {
     );
     expect(childBranch.type === 'branch' && childBranch.depth).toBe(1);
     expect(childSave.type === 'save' && childSave.save.id).toBe('save-3');
+  });
+});
+
+describe('getRootFileGroups', () => {
+  it('dedupes duplicate root ideas that point at the same set file', () => {
+    const project: Project = {
+      id: 'proj-1',
+      name: 'Demo',
+      adapter: 'ableton',
+      projectPath: '/tmp/demo',
+      rootIds: [],
+      presence: 'active',
+      watchError: null,
+      lastSeenAt: '2024-01-03T00:00:00Z',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-03T00:00:00Z',
+      currentIdeaId: 'idea-main',
+      pendingOpen: null,
+      driftStatus: null,
+      ideas: [
+        makeIdea('idea-main', { name: 'quick night', setPath: 'quick-night-vocal.als' }),
+        makeIdea('idea-dup-1', { name: 'quick night 2', setPath: 'quick-night-vocal.als' }),
+        makeIdea('idea-dup-2', { name: 'quick night 3', setPath: 'quick-night-vocal.als' }),
+        makeIdea('idea-other', { name: 'quick night 4', setPath: 'quick night.als' }),
+      ],
+      saves: [],
+      watching: true,
+    };
+
+    const groups = getRootFileGroups(project);
+
+    expect(groups).toHaveLength(2);
+    expect(groups.find((group) => group.setPath === 'quick-night-vocal.als')?.rootIdeas)
+      .toHaveLength(3);
+    expect(groups.find((group) => group.setPath === 'quick night.als')?.rootIdeas)
+      .toHaveLength(1);
   });
 });

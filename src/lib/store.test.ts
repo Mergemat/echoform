@@ -7,22 +7,24 @@ import { act } from '@testing-library/react';
 import type { Project, Save, Idea } from '@/lib/types';
 
 // Mock window.location and WebSocket since jsdom doesn't provide them
-Object.defineProperty(window, 'location', {
-  value: { protocol: 'http:', host: 'localhost' },
+Object.defineProperty(globalThis, 'window', {
+  value: { location: { protocol: 'http:', host: 'localhost' } },
   writable: true,
 });
-global.WebSocket = vi.fn().mockImplementation(() => ({
+globalThis.WebSocket = vi.fn().mockImplementation(() => ({
   readyState: 3, // CLOSED
   send: vi.fn(),
   close: vi.fn(),
 })) as unknown as typeof WebSocket;
-(global.WebSocket as unknown as { OPEN: number; CONNECTING: number }).OPEN = 1;
 (
-  global.WebSocket as unknown as { OPEN: number; CONNECTING: number }
+  globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
+).OPEN = 1;
+(
+  globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
 ).CONNECTING = 0;
 
 // Mock fetch and sonner before importing the store
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
@@ -31,6 +33,7 @@ const makeIdea = (id: string): Idea => ({
   id,
   name: `Idea ${id}`,
   createdAt: '2024-01-01T00:00:00Z',
+  setPath: 'project.als',
   baseSaveId: 'save-1',
   headSaveId: 'save-1',
   parentIdeaId: null,
@@ -65,12 +68,15 @@ const makeProject = (
   name: `Project ${id}`,
   adapter: 'ableton',
   projectPath: `/projects/${id}`,
-  activeSetPath: `/projects/${id}/project.als`,
+  rootIds: [],
+  presence: 'active',
+  watchError: null,
+  lastSeenAt: '2024-01-01T00:00:00Z',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
   currentIdeaId: ideas[0]?.id ?? 'idea-1',
-  lastRestoredSaveId: null,
-  detachedRestore: null,
+  pendingOpen: null,
+  driftStatus: null,
   ideas,
   saves,
   watching: false,
@@ -88,7 +94,6 @@ describe('useStore', () => {
   };
 
   beforeEach(async () => {
-    vi.resetModules();
     wsInstance = {
       readyState: 0,
       send: vi.fn(),
@@ -97,16 +102,19 @@ describe('useStore', () => {
       onclose: null,
       onmessage: null,
     };
-    global.WebSocket = vi
+    globalThis.WebSocket = vi
       .fn(function WebSocketMock() {
         return wsInstance;
       }) as unknown as typeof WebSocket;
-    (global.WebSocket as unknown as { OPEN: number; CONNECTING: number }).OPEN = 1;
     (
-      global.WebSocket as unknown as { OPEN: number; CONNECTING: number }
+      globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
+    ).OPEN = 1;
+    (
+      globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
     ).CONNECTING = 0;
-    vi.mocked(global.fetch).mockReset();
-    vi.mocked(global.fetch).mockResolvedValue({
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({
       ok: true,
     } as Response);
     const mod = await import('@/lib/store');
@@ -118,6 +126,9 @@ describe('useStore', () => {
         selectedProjectId: null,
         selectedSaveId: null,
         activeIdeaId: null,
+        roots: [],
+        activity: [],
+        rootSuggestions: [],
         compare: null,
         connected: false,
         ws: null,
@@ -231,7 +242,7 @@ describe('useStore', () => {
     });
   });
 
-  describe('projects event handling', () => {
+  describe('snapshot event handling', () => {
     it('falls back to the first remaining project when the selected project is removed', async () => {
       const idea1 = makeIdea('idea-1');
       const save1 = makeSave('save-1', idea1.id);
@@ -254,8 +265,10 @@ describe('useStore', () => {
       act(() => {
         wsInstance.onmessage?.({
           data: JSON.stringify({
-            type: 'projects',
+            type: 'snapshot',
             projects: [project1],
+            roots: [],
+            activity: [],
           }),
         });
       });

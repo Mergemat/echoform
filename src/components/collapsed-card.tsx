@@ -14,15 +14,11 @@ export function CollapsedCard({
   save,
   isSelected,
   isHead,
-  depth = 0,
-  dimmed = false,
   onClick,
 }: {
   save: Save;
   isSelected: boolean;
   isHead: boolean;
-  depth?: number;
-  dimmed?: boolean;
   onClick: () => void;
 }) {
   const chips = useMemo(() => buildChips(save), [save]);
@@ -47,15 +43,12 @@ export function CollapsedCard({
       return 'text-amber-400/70 bg-amber-400/10 border-amber-400/20';
     return 'text-white/40 bg-white/[0.04] border-white/10';
   };
-  const sizeDelta = save.changes?.sizeDelta;
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{ paddingLeft: `${16 + depth * 28}px` }}
       className={cn(
-        'w-full text-left py-2.5 pr-4 flex flex-col gap-1 transition-colors',
-        dimmed && !isSelected && 'opacity-55',
+        'w-full text-left py-2.5 pr-4 pl-3 flex flex-col gap-1 transition-colors',
         isSelected
           ? 'bg-white/[0.06] border-l-2 border-white/50'
           : 'border-l-2 border-transparent hover:bg-white/[0.03]',
@@ -85,27 +78,14 @@ export function CollapsedCard({
         >
           {save.label}
         </span>
-        {sizeDelta !== undefined && sizeDelta !== 0 && (
-          <span
-            className={cn(
-              'text-[10px] font-mono tabular-nums shrink-0',
-              sizeDelta > 0 ? 'text-emerald-400/50' : 'text-red-400/50',
-            )}
+        {!save.auto && (
+          <Badge
+            variant="secondary"
+            className="text-[9px] uppercase tracking-wider px-1 py-px rounded-sm shrink-0 h-auto border-transparent text-white/30 bg-white/[0.06]"
           >
-            {formatSizeDelta(sizeDelta)}
-          </span>
+            saved
+          </Badge>
         )}
-        <Badge
-          variant="secondary"
-          className={cn(
-            'text-[9px] uppercase tracking-wider px-1 py-px rounded-sm shrink-0 h-auto border-transparent',
-            save.auto
-              ? 'text-white/20 bg-white/[0.04]'
-              : 'text-white/30 bg-white/[0.06]',
-          )}
-        >
-          {save.auto ? 'auto' : 'manual'}
-        </Badge>
       </div>
       {hasRow2 && (
         <div className="pl-4 flex flex-wrap items-center gap-1">
