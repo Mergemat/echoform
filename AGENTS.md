@@ -1,2 +1,1 @@
-"git" for musicians.
-musicians are not technical.
+do not run subagents
