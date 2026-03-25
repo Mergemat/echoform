@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
-import { useConnectionStore } from '@/lib/connection-store';
 import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
-import type { ActivityItem, Project } from '@/lib/types';
+import type { Project } from '@/lib/types';
 import {
   FolderSimplePlus,
   Eye,
@@ -21,17 +29,6 @@ import {
 } from '@/components/ui/tooltip';
 import { RootManagerDialog } from '@/components/root-manager-dialog';
 import { ProjectSearchCommand } from '@/components/project-search-command';
-
-function formatRelative(iso: string) {
-  const ms = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 function projectHealth(project: Project): {
   label: string;
@@ -66,29 +63,7 @@ function projectHealth(project: Project): {
   };
 }
 
-function ActivityFeedItem({ item }: { item: ActivityItem }) {
-  const toneClass =
-    item.severity === 'error'
-      ? 'text-red-300/80'
-      : item.severity === 'warning'
-        ? 'text-amber-300/80'
-        : item.severity === 'success'
-          ? 'text-emerald-300/80'
-          : 'text-white/45';
-
-  return (
-    <div className="flex items-baseline justify-between gap-2 py-1">
-      <div className={cn('text-[11px] leading-4 truncate', toneClass)}>
-        {item.message}
-      </div>
-      <div className="text-[10px] text-white/15 shrink-0 tabular-nums">
-        {formatRelative(item.createdAt)}
-      </div>
-    </div>
-  );
-}
-
-export function ProjectItem({
+export const ProjectItem = memo(function ProjectItem({
   project,
   selected,
 }: {
@@ -96,7 +71,9 @@ export function ProjectItem({
   selected: boolean;
 }) {
   const selectProject = useStore((state) => state.selectProject);
-  const closePreviewPlayer = usePreviewStore((state) => state.closePreviewPlayer);
+  const closePreviewPlayer = usePreviewStore(
+    (state) => state.closePreviewPlayer,
+  );
   const health = projectHealth(project);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
@@ -183,15 +160,139 @@ export function ProjectItem({
       )}
     </button>
   );
+});
+
+function FolderManagerButton() {
+  const [managerOpen, setManagerOpen] = useState(false);
+  const openedFromPointerRef = useRef(false);
+
+  const openManager = () => setManagerOpen(true);
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    openedFromPointerRef.current = true;
+    openManager();
+  };
+
+  const handleClick = () => {
+    if (openedFromPointerRef.current) {
+      openedFromPointerRef.current = false;
+      return;
+    }
+    openManager();
+  };
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onPointerDown={handlePointerDown}
+            onClick={handleClick}
+            className="text-white/25 hover:text-white/60"
+          >
+            <FolderSimplePlus size={16} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Watch my folders</TooltipContent>
+      </Tooltip>
+
+      <RootManagerDialog open={managerOpen} onOpenChange={setManagerOpen} />
+    </>
+  );
 }
+
+const GAP = 2; // matches the previous space-y-0.5 (0.125rem = 2px)
+
+const VirtualizedProjectList = memo(function VirtualizedProjectList({
+  projects,
+  selectedProjectId,
+  isEmpty,
+}: {
+  projects: Project[];
+  selectedProjectId: string | null;
+  isEmpty: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: projects.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 56,
+    gap: GAP,
+    overscan: 5,
+  });
+
+  if (isEmpty) {
+    return (
+      <div className="flex-1 min-h-0 px-2 py-1">
+        <div className="px-3 py-10 text-center">
+          <div className="text-[13px] text-white/25 font-medium">
+            No watched projects
+          </div>
+          <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
+            Point Ablegit at your music folders to start protecting your
+            sessions automatically.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={scrollRef}
+      className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-2 py-1"
+    >
+      <div
+        className="relative w-full"
+        style={{ height: virtualizer.getTotalSize() }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const project = projects[virtualItem.index];
+          return (
+            <div
+              key={project.id}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
+              className="absolute left-0 w-full"
+              style={{ top: virtualItem.start }}
+            >
+              <ProjectItem
+                project={project}
+                selected={project.id === selectedProjectId}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 export function AppSidebar() {
   const projects = useStore((state) => state.projects);
-  const activity = useStore((state) => state.activity);
   const selectedProjectId = useStore((state) => state.selectedProjectId);
-  const connected = useConnectionStore((state) => state.connected);
-  const [managerOpen, setManagerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchOpenedFromPointerRef = useRef(false);
+  const openSearch = () => setSearchOpen(true);
+
+  const handleSearchPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    searchOpenedFromPointerRef.current = true;
+    openSearch();
+  };
+
+  const handleSearchClick = () => {
+    if (searchOpenedFromPointerRef.current) {
+      searchOpenedFromPointerRef.current = false;
+      return;
+    }
+    openSearch();
+  };
 
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
@@ -227,25 +328,13 @@ export function AppSidebar() {
                 protecting your sessions
               </p>
             </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setManagerOpen(true)}
-                  className="text-white/25 hover:text-white/60"
-                >
-                  <FolderSimplePlus size={16} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Watch my folders</TooltipContent>
-            </Tooltip>
+            <FolderManagerButton />
           </div>
 
           <button
             type="button"
-            onClick={() => setSearchOpen(true)}
+            onPointerDown={handleSearchPointerDown}
+            onClick={handleSearchClick}
             className="mt-3 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] text-white/25 hover:bg-white/[0.05] hover:text-white/40 hover:border-white/[0.1] transition-all duration-150"
           >
             <MagnifyingGlass size={13} className="shrink-0 text-white/20" />
@@ -257,57 +346,13 @@ export function AppSidebar() {
         </div>
 
         {/* Project list */}
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-2 py-1 space-y-0.5">
-          {sorted.map((project) => (
-            <ProjectItem
-              key={project.id}
-              project={project}
-              selected={project.id === selectedProjectId}
-            />
-          ))}
-
-          {projects.length === 0 && (
-            <div className="px-3 py-10 text-center">
-              <div className="text-[13px] text-white/25 font-medium">
-                No watched projects
-              </div>
-              <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
-                Point Ablegit at your music folders to start protecting your
-                sessions automatically.
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Activity feed */}
-        <div className="shrink-0 border-t border-border px-4 py-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider text-white/20 font-medium">
-              Activity
-            </span>
-            <div
-              className={cn(
-                'size-1.5 rounded-full',
-                connected ? 'bg-emerald-400/80' : 'bg-red-400/80',
-              )}
-            />
-          </div>
-
-          <div>
-            {activity.length === 0 ? (
-              <div className="py-1 text-[11px] text-white/15">
-                No activity yet
-              </div>
-            ) : (
-              activity
-                .slice(0, 3)
-                .map((item) => <ActivityFeedItem key={item.id} item={item} />)
-            )}
-          </div>
-        </div>
+        <VirtualizedProjectList
+          projects={sorted}
+          selectedProjectId={selectedProjectId}
+          isEmpty={projects.length === 0}
+        />
       </div>
 
-      <RootManagerDialog open={managerOpen} onOpenChange={setManagerOpen} />
       <ProjectSearchCommand open={searchOpen} onOpenChange={setSearchOpen} />
     </TooltipProvider>
   );

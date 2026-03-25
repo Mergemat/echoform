@@ -1,4 +1,3 @@
-import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
 import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
