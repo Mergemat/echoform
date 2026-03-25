@@ -1,3 +1,5 @@
+import { access } from 'node:fs/promises';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 import { AblegitService, AppError } from './core';
 import { discoverProjects } from './discovery';
 import { ProjectWatcher, RootWatcher } from './watcher';
@@ -8,6 +10,7 @@ const service = new AblegitService();
 const clients = new Set<{ send: (data: string) => void }>();
 const SESSION_COOKIE_NAME = 'ablegit_session';
 const SESSION_TOKEN = crypto.randomUUID();
+const STATIC_DIR = resolve(process.env.ABLEGIT_STATIC_DIR ?? join(process.cwd(), 'dist'));
 const DEFAULT_ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
@@ -44,6 +47,20 @@ async function buildSnapshotEvent(): Promise<WsEvent> {
 
 async function broadcastSnapshot(): Promise<void> {
   broadcast(await buildSnapshotEvent());
+}
+
+async function backfillSaveAnalysis(
+  projectId: string,
+  saveId: string,
+): Promise<void> {
+  try {
+    const { project } = await service.computeChanges(projectId, saveId);
+    broadcast({ type: 'project-updated', project });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Background save analysis failed';
+    broadcast({ type: 'error', message });
+  }
 }
 
 function isAllowedOrigin(origin: string | null): origin is string {
@@ -120,6 +137,7 @@ const watcher = new ProjectWatcher({
       );
       if (save) {
         broadcast({ type: 'auto-saved', projectId, save });
+        void backfillSaveAnalysis(projectId, save.id);
       }
       if (save || stateChanged) {
         broadcast({ type: 'project-updated', project });
@@ -309,6 +327,44 @@ function jsonResponse(
       'Content-Type': 'application/json',
       ...extraHeaders,
     }),
+  });
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveStaticPath(pathname: string): string | null {
+  const trimmed = pathname.replace(/^\/+/, '');
+  const normalized = normalize(trimmed || 'index.html');
+  if (normalized.startsWith('..') || normalized.includes(`..${sep}`)) {
+    return null;
+  }
+  return join(STATIC_DIR, normalized);
+}
+
+async function serveStatic(req: Request, pathname: string): Promise<Response | null> {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return null;
+
+  const filePath = resolveStaticPath(pathname);
+  if (filePath && (await fileExists(filePath))) {
+    return new Response(Bun.file(filePath), {
+      headers: responseHeaders(req),
+    });
+  }
+
+  if (extname(pathname)) return null;
+
+  const indexPath = join(STATIC_DIR, 'index.html');
+  if (!(await fileExists(indexPath))) return null;
+
+  return new Response(Bun.file(indexPath), {
+    headers: responseHeaders(req),
   });
 }
 
@@ -522,6 +578,9 @@ Bun.serve({
         return jsonResponse(req, { error: message }, status);
       }
     }
+
+    const staticResponse = await serveStatic(req, url.pathname);
+    if (staticResponse) return staticResponse;
 
     return new Response('Not found', {
       status: 404,

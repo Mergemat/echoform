@@ -103,6 +103,8 @@ export function ExpandedCard({
   const modifiedOther =
     changes?.modifiedFiles.filter((f) => !isAls(f) && !isAudio(f)) ?? [];
   const sd = save.setDiff;
+  const needsAnalysis =
+    changes === undefined || sd === undefined || !save.trackSummary;
 
   return (
     <div className="pb-4 pt-1 pr-4 pl-3 space-y-3 border-l-2 border-white/50 bg-white/[0.03]">
@@ -283,16 +285,20 @@ export function ExpandedCard({
         </div>
       )}
 
-      {changes === undefined ? (
+      {needsAnalysis ? (
         <div>
-          <div className="text-[11px] text-white/20 mb-1.5">No change data</div>
+          <div className="text-[11px] text-white/20 mb-1.5">
+            {changes === undefined
+              ? 'No change data'
+              : 'Detailed set analysis pending'}
+          </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={handleCompute}
             disabled={computing}
           >
-            {computing ? 'Computing...' : 'Compute changes'}
+            {computing ? 'Computing...' : 'Analyze save'}
           </Button>
         </div>
       ) : addedAudio.length +

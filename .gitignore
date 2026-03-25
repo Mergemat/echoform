@@ -2,3 +2,6 @@ node_modules
 .ablegit-state
 dist
 .gstack/
+release
+electron/bin
+*.bun-build

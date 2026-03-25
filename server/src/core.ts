@@ -71,6 +71,7 @@ const AUDIO_EXTENSIONS = new Set([
 type FileRecord = { relativePath: string; size: number; mtimeMs: number };
 type ProjectSnapshot = { files: FileRecord[]; emptyDirs: string[] };
 const MAX_ACTIVITY_ITEMS = 80;
+const WALK_CONCURRENCY = 32;
 const SAVE_SETTLE_RETRY_MS = 200;
 const SAVE_SETTLE_MAX_ATTEMPTS = 8;
 
@@ -246,6 +247,29 @@ function migrateState(state: AppState): AppState {
 
 // ── Filesystem helpers ──────────────────────────────────────────────
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker(): Promise<void> {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]!);
+    }
+  }
+
+  const concurrency = Math.min(limit, items.length);
+  await Promise.all(
+    Array.from({ length: concurrency }, () => runWorker()),
+  );
+  return results;
+}
+
 async function walkProject(
   rootPath: string,
   currentPath = rootPath,
@@ -253,25 +277,42 @@ async function walkProject(
   const entries = await readdir(currentPath, { withFileTypes: true });
   const files: FileRecord[] = [];
   const emptyDirs: string[] = [];
-  for (const entry of entries) {
-    const abs = join(currentPath, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === '.ablegit-state') continue;
-      const child = await walkProject(rootPath, abs);
-      if (child.files.length === 0 && child.emptyDirs.length === 0) {
-        emptyDirs.push(relative(rootPath, abs));
-      } else {
-        files.push(...child.files);
-        emptyDirs.push(...child.emptyDirs);
+  const snapshots = await mapWithConcurrency(
+    entries,
+    WALK_CONCURRENCY,
+    async (entry): Promise<ProjectSnapshot> => {
+      const abs = join(currentPath, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === '.ablegit-state') {
+          return { files: [], emptyDirs: [] };
+        }
+        const child = await walkProject(rootPath, abs);
+        if (child.files.length === 0 && child.emptyDirs.length === 0) {
+          return {
+            files: [],
+            emptyDirs: [relative(rootPath, abs)],
+          };
+        }
+        return child;
       }
-      continue;
-    }
-    const s = await stat(abs);
-    files.push({
-      relativePath: relative(rootPath, abs),
-      size: s.size,
-      mtimeMs: s.mtimeMs,
-    });
+
+      const s = await stat(abs);
+      return {
+        files: [
+          {
+            relativePath: relative(rootPath, abs),
+            size: s.size,
+            mtimeMs: s.mtimeMs,
+          },
+        ],
+        emptyDirs: [],
+      };
+    },
+  );
+
+  for (const snapshot of snapshots) {
+    files.push(...snapshot.files);
+    emptyDirs.push(...snapshot.emptyDirs);
   }
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
@@ -522,6 +563,83 @@ async function findPrevAlsHash(
   } catch {
     return null;
   }
+}
+
+async function findAlsHashForSave(
+  projectPath: string,
+  saveId: string,
+  activeSetPath: string,
+): Promise<string | null> {
+  try {
+    const manifest = await readManifest(projectPath, saveId);
+    return findAlsHashInEntries(manifest.files, activeSetPath);
+  } catch {
+    return null;
+  }
+}
+
+async function computeManifestChangeSummary(
+  projectPath: string,
+  prevSave: Save,
+  currSaveId: string,
+  currMetadata: ProjectMetadata,
+): Promise<ChangeSummary | undefined> {
+  try {
+    const [prevManifest, currManifest] = await Promise.all([
+      readManifest(projectPath, prevSave.id),
+      readManifest(projectPath, currSaveId),
+    ]);
+    const diff = diffManifestEntries(prevManifest.files, currManifest.files);
+    return {
+      ...diff,
+      sizeDelta: currMetadata.sizeBytes - prevSave.metadata.sizeBytes,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function computeSemanticSaveData(
+  projectPath: string,
+  prevSave: Save | null,
+  save: Pick<Save, 'id' | 'metadata'>,
+): Promise<{
+  setDiff: SetDiff | undefined;
+  trackSummary: TrackSummaryItem[] | undefined;
+}> {
+  const currAlsHash = await findAlsHashForSave(
+    projectPath,
+    save.id,
+    save.metadata.activeSetPath,
+  );
+
+  if (prevSave) {
+    const prevAlsHash = await findPrevAlsHash(projectPath, prevSave);
+    if (prevAlsHash && currAlsHash) {
+      const result = await tryComputeSetDiff(
+        getBlobPath(projectPath, prevAlsHash),
+        getBlobPath(projectPath, currAlsHash),
+      );
+      return {
+        setDiff: result.diff,
+        trackSummary: result.currSnapshot
+          ? extractTrackSummary(result.currSnapshot)
+          : undefined,
+      };
+    }
+  }
+
+  if (currAlsHash) {
+    const parsed = await tryParseSnapshot(getBlobPath(projectPath, currAlsHash));
+    if (parsed) {
+      return {
+        setDiff: undefined,
+        trackSummary: extractTrackSummary(parsed),
+      };
+    }
+  }
+
+  return { setDiff: undefined, trackSummary: undefined };
 }
 
 type LegacySave = Save & { snapshotPath?: string };
@@ -1150,47 +1268,27 @@ export class AblegitService {
     const now = new Date().toISOString();
     await createManifest(project.projectPath, saveId, entries, now);
 
-    let changes: ChangeSummary | undefined;
+    const changes = saveBaseline
+      ? await computeManifestChangeSummary(
+          project.projectPath,
+          saveBaseline,
+          saveId,
+          metadata,
+        )
+      : undefined;
     let setDiff: SetDiff | undefined;
     let trackSummary: TrackSummaryItem[] | undefined;
-    const currAlsHash = findAlsHashInEntries(entries, metadata.activeSetPath);
-
-    if (saveBaseline) {
-      try {
-        const prevManifest = await readManifest(
-          project.projectPath,
-          saveBaseline.id,
-        );
-        const diff = diffManifestEntries(prevManifest.files, entries);
-        changes = {
-          ...diff,
-          sizeDelta: metadata.sizeBytes - saveBaseline.metadata.sizeBytes,
-        };
-      } catch {
-        // manifest missing — skip changes
-      }
-
-      const prevAlsHash = await findPrevAlsHash(
+    if (!input?.auto) {
+      const semanticData = await computeSemanticSaveData(
         project.projectPath,
         saveBaseline,
+        {
+          id: saveId,
+          metadata,
+        },
       );
-      if (prevAlsHash && currAlsHash) {
-        const result = await tryComputeSetDiff(
-          getBlobPath(project.projectPath, prevAlsHash),
-          getBlobPath(project.projectPath, currAlsHash),
-        );
-        setDiff = result.diff;
-        if (result.currSnapshot) {
-          trackSummary = extractTrackSummary(result.currSnapshot);
-        }
-      }
-    }
-
-    if (!trackSummary && currAlsHash) {
-      const parsed = await tryParseSnapshot(
-        getBlobPath(project.projectPath, currAlsHash),
-      );
-      if (parsed) trackSummary = extractTrackSummary(parsed);
+      setDiff = semanticData.setDiff;
+      trackSummary = semanticData.trackSummary;
     }
 
     const save: Save = {
@@ -1703,62 +1801,82 @@ export class AblegitService {
     projectId: string,
     saveId: string,
   ): Promise<{ project: Project; changes: ChangeSummary | null }> {
-    return this.withLock(async () => {
+    const analysisTarget = await this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       const save = requireSave(project, saveId);
 
-      if (save.changes && save.setDiff !== undefined)
-        return { project, changes: save.changes };
+      if (save.changes && save.setDiff !== undefined && save.trackSummary) {
+        return {
+          project,
+          save,
+          prevSave: null,
+          missingChanges: false,
+          missingSemantic: false,
+        };
+      }
 
       const ideaSaves = project.saves.filter((s) => s.ideaId === save.ideaId);
       const idx = ideaSaves.findIndex((s) => s.id === saveId);
       const prevSave = idx > 0 ? ideaSaves[idx - 1] : null;
 
-      if (!prevSave) return { project, changes: null };
+      return {
+        project,
+        save,
+        prevSave,
+        missingChanges: !save.changes && Boolean(prevSave),
+        missingSemantic: save.setDiff === undefined || !save.trackSummary,
+      };
+    });
 
+    if (
+      !analysisTarget.missingChanges &&
+      !analysisTarget.missingSemantic
+    ) {
+      return {
+        project: analysisTarget.project,
+        changes: analysisTarget.save.changes ?? null,
+      };
+    }
+
+    const computedChanges =
+      analysisTarget.missingChanges && analysisTarget.prevSave
+        ? await computeManifestChangeSummary(
+            analysisTarget.project.projectPath,
+            analysisTarget.prevSave,
+            analysisTarget.save.id,
+            analysisTarget.save.metadata,
+          )
+        : analysisTarget.save.changes;
+
+    const semanticData = analysisTarget.missingSemantic
+      ? await computeSemanticSaveData(
+          analysisTarget.project.projectPath,
+          analysisTarget.prevSave,
+          analysisTarget.save,
+        )
+      : {
+          setDiff: analysisTarget.save.setDiff,
+          trackSummary: analysisTarget.save.trackSummary,
+        };
+
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const save = requireSave(project, saveId);
       let dirty = false;
 
-      if (!save.changes) {
-        try {
-          const [prevManifest, currManifest] = await Promise.all([
-            readManifest(project.projectPath, prevSave.id),
-            readManifest(project.projectPath, save.id),
-          ]);
-          const diff = diffManifestEntries(
-            prevManifest.files,
-            currManifest.files,
-          );
-          save.changes = {
-            ...diff,
-            sizeDelta: save.metadata.sizeBytes - prevSave.metadata.sizeBytes,
-          };
-          dirty = true;
-        } catch {
-          return { project, changes: null };
-        }
+      if (!save.changes && computedChanges) {
+        save.changes = computedChanges;
+        dirty = true;
       }
-
-      if (save.setDiff === undefined) {
-        const prevAlsHash = await findPrevAlsHash(
-          project.projectPath,
-          prevSave,
-        );
-        const currAlsHash = await findPrevAlsHash(project.projectPath, save);
-        if (prevAlsHash && currAlsHash) {
-          const result = await tryComputeSetDiff(
-            getBlobPath(project.projectPath, prevAlsHash),
-            getBlobPath(project.projectPath, currAlsHash),
-          );
-          if (result.diff) {
-            save.setDiff = result.diff;
-            dirty = true;
-          }
-          if (!save.trackSummary && result.currSnapshot) {
-            save.trackSummary = extractTrackSummary(result.currSnapshot);
-            dirty = true;
-          }
-        }
+      if (save.setDiff === undefined && semanticData.setDiff !== undefined) {
+        save.setDiff = semanticData.setDiff;
+        dirty = true;
+      }
+      if (!save.trackSummary && semanticData.trackSummary) {
+        save.trackSummary = semanticData.trackSummary;
+        dirty = true;
       }
 
       if (dirty) await this.saveState(state);
