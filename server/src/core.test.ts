@@ -10,7 +10,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AppState } from './types';
+import type { AppState, Idea, Project, Save } from './types';
 import type { AbletonLauncher } from './branch-files';
 import { AblegitService } from './core';
 
@@ -74,6 +74,10 @@ describe('AblegitService file-bound branches', () => {
               createdAt: '2024-01-01T00:00:00Z',
               ideaId: 'idea-1',
               previewRefs: [],
+              previewStatus: 'none',
+              previewMime: null,
+              previewRequestedAt: null,
+              previewUpdatedAt: null,
               projectHash: 'abc',
               auto: false,
               metadata: {
@@ -102,6 +106,54 @@ describe('AblegitService file-bound branches', () => {
     expect(state.projects[0]?.presence).toBe('active');
     expect(state.roots).toEqual([]);
     expect(state.activity).toEqual([]);
+  });
+
+  test('migrates legacy default state into an explicit state directory', async () => {
+    const previousCwd = process.cwd();
+    const previousStateDir = process.env.ABLEGIT_STATE_DIR;
+    process.chdir(tmpRoot);
+    try {
+      process.env.ABLEGIT_STATE_DIR = stateDir;
+      const legacyStateDir = join(tmpRoot, '.ablegit-state');
+      await mkdir(legacyStateDir, { recursive: true });
+
+      const legacyState: AppState = {
+        roots: [],
+        projects: [],
+        activity: [
+          {
+            id: 'activity-1',
+            kind: 'save-created',
+            message: 'Migrated',
+            severity: 'info',
+            createdAt: '2024-01-01T00:00:00Z',
+            projectId: undefined,
+            rootId: undefined,
+          },
+        ],
+      };
+
+      await Bun.write(
+        join(legacyStateDir, 'state.json'),
+        JSON.stringify(legacyState),
+      );
+
+      const migratedService = new AblegitService(stateDir, launcher);
+      const state = await migratedService.loadState();
+
+      expect(state.activity).toHaveLength(1);
+      expect(state.activity[0]?.message).toBe('Migrated');
+      expect(await readFile(join(stateDir, 'state.json'), 'utf8')).toContain(
+        'Migrated',
+      );
+    } finally {
+      if (typeof previousStateDir === 'string') {
+        process.env.ABLEGIT_STATE_DIR = previousStateDir;
+      } else {
+        delete process.env.ABLEGIT_STATE_DIR;
+      }
+      process.chdir(previousCwd);
+    }
   });
 
   test('syncRoots discovers nested projects under watched roots and marks missing projects', async () => {
@@ -238,16 +290,24 @@ describe('AblegitService file-bound branches', () => {
     await writeFile(join(projectDir, 'song-test.als'), 'test-v2');
 
     const state = await svc.loadState();
-    const project = state.projects.find((candidate) => candidate.id === tracked.id)!;
-    const idea = project.ideas.find((candidate) => candidate.id === songIdea.id)!;
+    const project = state.projects.find(
+      (candidate) => candidate.id === tracked.id,
+    )!;
+    const idea = project.ideas.find(
+      (candidate) => candidate.id === songIdea.id,
+    )!;
 
-    const result = await (svc as any).createSaveInState(
-      state,
-      project,
-      idea,
-      { auto: true },
-      'missing.als',
-    );
+    const result = await (
+      svc as unknown as {
+        createSaveInState: (
+          state: AppState,
+          project: Project,
+          idea: Idea,
+          input?: { label?: string; note?: string; auto?: boolean },
+          preferredSetPath?: string,
+        ) => Promise<{ project: Project; save: Save | null }>;
+      }
+    ).createSaveInState(state, project, idea, { auto: true }, 'missing.als');
 
     expect(result.save).not.toBeNull();
     expect(idea.setPath).toBe('song.als');
@@ -290,6 +350,107 @@ describe('AblegitService file-bound branches', () => {
     );
     expect(sampleEntry?.blobHash).toBeTruthy();
     expect(typeof sampleEntry?.mtimeMs).toBe('number');
+  });
+
+  test('requestPreview creates deterministic pending preview state', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    const created = await svc.createSave(tracked.id, { label: 'Original' });
+    const save = created.save!;
+
+    const preview = await svc.requestPreview(tracked.id, save.id);
+    const state = await svc.loadState();
+    const updatedSave = state.projects[0]!.saves[0]!;
+
+    expect(preview.saveId).toBe(save.id);
+    expect(preview.expectedBaseName).toBe('preview');
+    expect(preview.acceptedExtensions).toEqual([
+      '.wav',
+      '.aif',
+      '.aiff',
+      '.mp3',
+      '.m4a',
+    ]);
+    expect(preview.folderPath.endsWith(join('project', save.id))).toBe(true);
+    expect(updatedSave.previewStatus).toBe('pending');
+    expect(updatedSave.previewRequestedAt).toBeTruthy();
+    await access(preview.folderPath);
+  });
+
+  test('ingestPendingPreviews ignores non-audio files and stays pending', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    const created = await svc.createSave(tracked.id, { label: 'Original' });
+    const preview = await svc.requestPreview(tracked.id, created.save!.id);
+
+    await writeFile(join(preview.folderPath, 'preview.txt'), 'not-a-preview');
+    const changed = await svc.ingestPendingPreviews();
+    const state = await svc.loadState();
+    const updatedSave = state.projects[0]!.saves[0]!;
+
+    expect(changed).toBe(false);
+    expect(updatedSave.previewStatus).toBe('pending');
+  });
+
+  test('ingestPendingPreviews accepts any audio filename', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    const created = await svc.createSave(tracked.id, { label: 'Original' });
+    const preview = await svc.requestPreview(tracked.id, created.save!.id);
+
+    await writeFile(join(preview.folderPath, 'my-bounce.wav'), 'audio-data');
+    expect(await svc.ingestPendingPreviews()).toBe(true);
+
+    const state = await svc.loadState();
+    const updatedSave = state.projects[0]!.saves[0]!;
+    expect(updatedSave.previewStatus).toBe('ready');
+    expect(updatedSave.previewMime).toBe('audio/wav');
+  });
+
+  test('ingestPendingPreviews copies previews, replaces older ones, and missing files downgrade status', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    const created = await svc.createSave(tracked.id, { label: 'Original' });
+    const save = created.save!;
+
+    const firstRequest = await svc.requestPreview(tracked.id, save.id);
+    await writeFile(join(firstRequest.folderPath, 'preview.wav'), 'preview-v1');
+
+    expect(await svc.ingestPendingPreviews()).toBe(true);
+
+    let state = await svc.loadState();
+    let updatedSave = state.projects[0]!.saves[0]!;
+    const firstManagedPath = updatedSave.previewRefs[0]!;
+
+    expect(updatedSave.previewStatus).toBe('ready');
+    expect(updatedSave.previewMime).toBe('audio/wav');
+    expect(await readFile(firstManagedPath, 'utf8')).toBe('preview-v1');
+    expect(await svc.resolvePreviewPath(firstManagedPath)).toBe(
+      firstManagedPath,
+    );
+
+    const secondRequest = await svc.requestPreview(tracked.id, save.id);
+    await expect(access(firstManagedPath)).rejects.toThrow();
+    await writeFile(
+      join(secondRequest.folderPath, 'preview.mp3'),
+      'preview-v2',
+    );
+
+    expect(await svc.ingestPendingPreviews()).toBe(true);
+
+    state = await svc.loadState();
+    updatedSave = state.projects[0]!.saves[0]!;
+    const secondManagedPath = updatedSave.previewRefs[0]!;
+
+    expect(secondManagedPath).not.toBe(firstManagedPath);
+    expect(updatedSave.previewMime).toBe('audio/mpeg');
+    expect(await readFile(secondManagedPath, 'utf8')).toBe('preview-v2');
+
+    await rm(secondManagedPath, { force: true });
+    await expect(svc.resolvePreviewPath(secondManagedPath)).rejects.toThrow(
+      'File not found',
+    );
+
+    state = await svc.loadState();
+    updatedSave = state.projects[0]!.saves[0]!;
+    expect(updatedSave.previewStatus).toBe('missing');
+    expect(updatedSave.previewRefs).toEqual([]);
   });
 
   test('tracking a project with multiple .als files creates one idea per file', async () => {

@@ -70,6 +70,7 @@ async function startServer() {
 
   const resourcesRoot = resolveResourcesRoot();
   const server = resolveServerProcess();
+  const stateRoot = app.getPath('userData');
 
   serverProcess = spawn(server.command, server.args, {
     cwd: server.cwd,
@@ -77,6 +78,7 @@ async function startServer() {
       ...process.env,
       PORT: String(port),
       ABLEGIT_STATIC_DIR: join(resourcesRoot, 'dist'),
+      ABLEGIT_STATE_DIR: stateRoot,
     },
     stdio: 'inherit',
   });

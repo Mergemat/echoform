@@ -31,6 +31,8 @@ type Store = {
   collapsedBranches: Set<string>;
   discoveredProjects: DiscoveredProject[];
   compare: CompareResult | null;
+  previewPlayerSaveId: string | null;
+  previewSidebarOpen: boolean;
   connected: boolean;
   ws: WebSocket | null;
 
@@ -43,6 +45,9 @@ type Store = {
   toggleSave: (id: string) => void;
   setActiveIdea: (id: string) => void;
   toggleBranchCollapse: (ideaId: string) => void;
+  openPreviewPlayer: (saveId: string) => void;
+  closePreviewPlayer: () => void;
+  togglePreviewSidebar: () => void;
   fetchCompare: (
     projectId: string,
     leftId: string,
@@ -92,6 +97,8 @@ export const useStore = create<Store>((set, get) => ({
   collapsedBranches: new Set(),
   discoveredProjects: [],
   compare: null,
+  previewPlayerSaveId: null,
+  previewSidebarOpen: false,
   connected: false,
   ws: null,
 
@@ -143,6 +150,14 @@ export const useStore = create<Store>((set, get) => ({
             projects: event.projects,
             roots: event.roots,
             activity: event.activity,
+            previewPlayerSaveId:
+              state.selectedProjectId &&
+              state.previewPlayerSaveId &&
+              event.projects
+                .find((project) => project.id === state.selectedProjectId)
+                ?.saves.some((save) => save.id === state.previewPlayerSaveId)
+                ? state.previewPlayerSaveId
+                : null,
             ...applySnapshotSelection(
               event.projects,
               state.selectedProjectId,
@@ -165,6 +180,14 @@ export const useStore = create<Store>((set, get) => ({
               projects: state.projects.map((project) =>
                 project.id === event.project.id ? event.project : project,
               ),
+              previewPlayerSaveId:
+                state.selectedProjectId === event.project.id &&
+                state.previewPlayerSaveId &&
+                !event.project.saves.some(
+                  (save) => save.id === state.previewPlayerSaveId,
+                )
+                  ? null
+                  : state.previewPlayerSaveId,
               selectedSaveId:
                 state.selectedProjectId === event.project.id &&
                 state.selectedSaveId &&
@@ -211,6 +234,7 @@ export const useStore = create<Store>((set, get) => ({
       selectedSaveId: null,
       activeIdeaId: null,
       compare: null,
+      previewPlayerSaveId: null,
     }),
   toggleSave: (id) =>
     set((state) => ({
@@ -233,6 +257,10 @@ export const useStore = create<Store>((set, get) => ({
       else next.add(ideaId);
       return { collapsedBranches: next };
     }),
+  openPreviewPlayer: (saveId) => set({ previewPlayerSaveId: saveId }),
+  closePreviewPlayer: () => set({ previewPlayerSaveId: null }),
+  togglePreviewSidebar: () =>
+    set((state) => ({ previewSidebarOpen: !state.previewSidebarOpen })),
 
   fetchCompare: async (projectId, leftId, rightId) => {
     try {

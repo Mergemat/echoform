@@ -2,15 +2,18 @@ import { access } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { AblegitService, AppError } from './core';
 import { discoverProjects } from './discovery';
+import { resolveStateDir } from './paths';
 import { ProjectWatcher, RootWatcher } from './watcher';
 import type { WsCommand, WsEvent } from './types';
 
 const PORT = Number(process.env.PORT || 3001);
-const service = new AblegitService();
+const service = new AblegitService(resolveStateDir());
 const clients = new Set<{ send: (data: string) => void }>();
 const SESSION_COOKIE_NAME = 'ablegit_session';
 const SESSION_TOKEN = crypto.randomUUID();
-const STATIC_DIR = resolve(process.env.ABLEGIT_STATIC_DIR ?? join(process.cwd(), 'dist'));
+const STATIC_DIR = resolve(
+  process.env.ABLEGIT_STATIC_DIR ?? join(process.cwd(), 'dist'),
+);
 const DEFAULT_ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
@@ -23,6 +26,7 @@ const allowedOrigins = new Set([
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
 ]);
+const PREVIEW_POLL_MS = 1500;
 
 function broadcast(event: WsEvent) {
   const data = JSON.stringify(event);
@@ -131,10 +135,8 @@ const watcher = new ProjectWatcher({
     // suppress watcher while saving to prevent infinite loop
     watcher.suppress(projectId);
     try {
-      const { project, save, stateChanged } = await service.handleWatchedAlsChange(
-        projectId,
-        changedPaths,
-      );
+      const { project, save, stateChanged } =
+        await service.handleWatchedAlsChange(projectId, changedPaths);
       if (save) {
         broadcast({ type: 'auto-saved', projectId, save });
         void backfillSaveAnalysis(projectId, save.id);
@@ -193,6 +195,20 @@ async function reconcileWatchers(): Promise<void> {
   await service.syncRoots();
   await reconcileWatchers();
 })();
+
+setInterval(() => {
+  void service
+    .ingestPendingPreviews()
+    .then(async (changed) => {
+      if (!changed) return;
+      await broadcastSnapshot();
+    })
+    .catch((err) => {
+      const message =
+        err instanceof Error ? err.message : 'Preview ingest failed';
+      broadcast({ type: 'error', message });
+    });
+}, PREVIEW_POLL_MS);
 
 // ── WebSocket command handler ───────────────────────────────────────
 
@@ -348,7 +364,10 @@ function resolveStaticPath(pathname: string): string | null {
   return join(STATIC_DIR, normalized);
 }
 
-async function serveStatic(req: Request, pathname: string): Promise<Response | null> {
+async function serveStatic(
+  req: Request,
+  pathname: string,
+): Promise<Response | null> {
   if (req.method !== 'GET' && req.method !== 'HEAD') return null;
 
   const filePath = resolveStaticPath(pathname);
@@ -450,6 +469,100 @@ Bun.serve({
         const { changes } = await service.computeChanges(projectId, saveId);
         await broadcastSnapshot();
         return jsonResponse(req, { changes });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
+    if (
+      url.pathname.match(
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/request$/,
+      ) &&
+      req.method === 'POST'
+    ) {
+      const parts = url.pathname.split('/');
+      const projectId = parts[3]!;
+      const saveId = parts[5]!;
+      try {
+        const preview = await service.requestPreview(projectId, saveId);
+        await broadcastSnapshot();
+        return jsonResponse(req, { preview });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
+    if (
+      url.pathname.match(
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/reveal-folder$/,
+      ) &&
+      req.method === 'POST'
+    ) {
+      const parts = url.pathname.split('/');
+      const projectId = parts[3]!;
+      const saveId = parts[5]!;
+      try {
+        const preview = await service.revealPreviewFolder(projectId, saveId);
+        return jsonResponse(req, { preview });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
+    // REST: upload preview audio file
+    // POST /api/projects/:id/saves/:saveId/preview/upload (multipart)
+    if (
+      url.pathname.match(
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/upload$/,
+      ) &&
+      req.method === 'POST'
+    ) {
+      const parts = url.pathname.split('/');
+      const projectId = parts[3]!;
+      const saveId = parts[5]!;
+      try {
+        const formData = await req.formData();
+        const file = formData.get('file');
+        if (!file || !(file instanceof File)) {
+          return jsonResponse(req, { error: 'file field required' }, 400);
+        }
+        const fileData = await file.arrayBuffer();
+        const preview = await service.uploadPreview(
+          projectId,
+          saveId,
+          fileData,
+          file.name,
+        );
+        await broadcastSnapshot();
+        return jsonResponse(req, { preview });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
+    // REST: cancel pending preview request
+    // POST /api/projects/:id/saves/:saveId/preview/cancel
+    if (
+      url.pathname.match(
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/cancel$/,
+      ) &&
+      req.method === 'POST'
+    ) {
+      const parts = url.pathname.split('/');
+      const projectId = parts[3]!;
+      const saveId = parts[5]!;
+      try {
+        await service.cancelPreview(projectId, saveId);
+        await broadcastSnapshot();
+        return jsonResponse(req, { ok: true });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
         const message = err instanceof Error ? err.message : 'Unknown error';

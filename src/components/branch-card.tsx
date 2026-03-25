@@ -28,13 +28,13 @@ export function BranchCard({
       type="button"
       onClick={onToggleCollapse}
       className={cn(
-        'w-full text-left transition-colors group',
+        'w-full text-left transition-all duration-150 group',
         isFocused ? 'bg-white/[0.04]' : 'bg-transparent hover:bg-white/[0.02]',
       )}
     >
       {/* Main row */}
       <div
-        className="flex items-center gap-2 py-2.5 pr-4"
+        className="flex items-center gap-2 py-3 pr-4"
         style={{ paddingLeft: `${lineLeft}px` }}
       >
         {/* Branch dot + connector */}
@@ -44,12 +44,12 @@ export function BranchCard({
           )}
           <div
             className={cn(
-              'size-2.5 rounded-full border',
+              'size-2.5 rounded-full border transition-colors',
               isCurrent
-                ? 'bg-emerald-400/80 border-emerald-400/40'
+                ? 'bg-emerald-400/80 border-emerald-400/30'
                 : isFocused
-                  ? 'bg-white/30 border-white/20'
-                  : 'bg-white/10 border-white/10',
+                  ? 'bg-white/30 border-white/15'
+                  : 'bg-white/10 border-white/[0.06]',
             )}
           />
         </div>
@@ -59,13 +59,13 @@ export function BranchCard({
           <span
             className={cn(
               'text-[12px] font-medium truncate',
-              isFocused ? 'text-white/80' : 'text-white/40',
+              isFocused ? 'text-white/85' : 'text-white/40',
             )}
           >
             {idea.name}
           </span>
           {isCurrent && (
-            <span className="text-[9px] uppercase tracking-[0.12em] text-emerald-400/60 shrink-0">
+            <span className="text-[9px] uppercase tracking-[0.12em] text-emerald-400/60 shrink-0 font-medium">
               current
             </span>
           )}
@@ -84,12 +84,12 @@ export function BranchCard({
           {isCollapsed ? (
             <CaretRight
               size={11}
-              className="text-white/20 group-hover:text-white/40 transition-colors"
+              className="text-white/15 group-hover:text-white/35 transition-colors"
             />
           ) : (
             <CaretDown
               size={11}
-              className="text-white/20 group-hover:text-white/40 transition-colors"
+              className="text-white/15 group-hover:text-white/35 transition-colors"
             />
           )}
         </div>
@@ -99,8 +99,8 @@ export function BranchCard({
       {fromSave && (
         <div
           className={cn(
-            'text-[10px] pb-2 -mt-1',
-            isFocused ? 'text-white/25' : 'text-white/15',
+            'text-[10px] pb-2.5 -mt-1',
+            isFocused ? 'text-white/25' : 'text-white/12',
           )}
           style={{ paddingLeft: `${lineLeft + 22}px` }}
         >

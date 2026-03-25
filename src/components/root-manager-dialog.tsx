@@ -61,20 +61,22 @@ export function RootManagerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Watch my folders</DialogTitle>
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 bg-[#111215] border-white/[0.08]">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-white/[0.06]">
+          <DialogTitle className="text-[14px] font-semibold text-white/90">
+            Watch my folders
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] p-5">
           <div className="space-y-5">
-            <section className="rounded-xl border border-white/10 bg-black/20 p-4">
+            <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium text-white/85">
+                  <div className="text-[13px] font-medium text-white/85">
                     Add a folder
                   </div>
-                  <div className="text-xs text-white/45">
+                  <div className="text-[11px] text-white/40 mt-0.5">
                     Ablegit watches all projects inside your folders.
                   </div>
                 </div>
@@ -82,6 +84,7 @@ export function RootManagerDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="rounded-lg text-[11px]"
                   onClick={() => send({ type: 'sync-roots' })}
                 >
                   <ArrowsClockwise size={14} />
@@ -94,9 +97,11 @@ export function RootManagerDialog({
                   value={path}
                   onChange={(event) => setPath(event.target.value)}
                   placeholder="/Users/you/Music/Ableton/projects"
+                  className="rounded-lg text-[12px]"
                 />
                 <Button
                   type="button"
+                  className="rounded-lg"
                   onClick={() => {
                     const nextPath = path.trim();
                     if (!nextPath) return;
@@ -110,31 +115,31 @@ export function RootManagerDialog({
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-black/20 p-4">
-              <div className="text-sm font-medium text-white/85">
+            <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+              <div className="text-[13px] font-medium text-white/85">
                 Suggested folders
               </div>
-              <div className="mt-1 text-xs text-white/45">
+              <div className="mt-1 text-[11px] text-white/40">
                 Based on common Ableton and iCloud locations. Nothing is watched
                 until you say so.
               </div>
 
               <div className="mt-3 space-y-2">
                 {rootSuggestions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-xs text-white/35">
+                  <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-[11px] text-white/30 text-center">
                     No obvious folders found right now.
                   </div>
                 ) : (
                   rootSuggestions.map((suggestion) => (
                     <div
                       key={suggestion.path}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 transition-colors hover:bg-white/[0.04]"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-sm text-white/80">
+                        <div className="truncate text-[12px] text-white/75 font-medium">
                           {shortenPath(suggestion.path)}
                         </div>
-                        <div className="mt-1 text-xs text-white/40">
+                        <div className="mt-1 text-[11px] text-white/35">
                           {suggestion.projectCount} project
                           {suggestion.projectCount === 1 ? '' : 's'}
                         </div>
@@ -143,6 +148,7 @@ export function RootManagerDialog({
                         type="button"
                         size="sm"
                         variant="secondary"
+                        className="rounded-lg text-[11px]"
                         onClick={() =>
                           send({ type: 'add-root', path: suggestion.path })
                         }
@@ -157,13 +163,13 @@ export function RootManagerDialog({
             </section>
           </div>
 
-          <section className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-white/85">
+                <div className="text-[13px] font-medium text-white/85">
                   Watched folders
                 </div>
-                <div className="text-xs text-white/45">
+                <div className="text-[11px] text-white/40 mt-0.5">
                   {roots.length} folder{roots.length === 1 ? '' : 's'},{' '}
                   {
                     projects.filter((project) => project.rootIds.length > 0)
@@ -172,26 +178,28 @@ export function RootManagerDialog({
                   projects found
                 </div>
               </div>
-              <Badge variant="secondary">{roots.length} watching</Badge>
+              <Badge variant="secondary" className="text-[10px] rounded-md">
+                {roots.length} watching
+              </Badge>
             </div>
 
             <div className="mt-3 space-y-2">
               {roots.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-xs text-white/35">
+                <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-[11px] text-white/30 text-center">
                   Add a folder to start protecting your projects automatically.
                 </div>
               ) : (
                 roots.map((root) => (
                   <div
                     key={root.id}
-                    className="rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2.5"
+                    className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 transition-colors hover:bg-white/[0.04]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-sm text-white/80">
+                        <div className="truncate text-[12px] text-white/75 font-medium">
                           {shortenPath(root.path)}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/40">
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/35">
                           <span>
                             Scanned {formatRelative(root.lastScannedAt)}
                           </span>
@@ -206,6 +214,7 @@ export function RootManagerDialog({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        className="rounded-md"
                         onClick={() =>
                           send({ type: 'remove-root', rootId: root.id })
                         }

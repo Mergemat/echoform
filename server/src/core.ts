@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   access,
+  cp,
   mkdir,
   copyFile,
   readFile,
@@ -10,7 +11,8 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { basename, extname, join, relative, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import type {
   ActivityItem,
   AppState,
@@ -20,6 +22,8 @@ import type {
   DiskUsage,
   Idea,
   PendingOpen,
+  PreviewRequestResult,
+  PreviewStatus,
   Project,
   ProjectMetadata,
   RootSuggestion,
@@ -74,6 +78,16 @@ const MAX_ACTIVITY_ITEMS = 80;
 const WALK_CONCURRENCY = 32;
 const SAVE_SETTLE_RETRY_MS = 200;
 const SAVE_SETTLE_MAX_ATTEMPTS = 8;
+const PREVIEW_FILE_BASENAME = 'preview';
+const PREVIEW_EXTENSIONS = ['.wav', '.aif', '.aiff', '.mp3', '.m4a'] as const;
+const PREVIEW_EXTENSION_SET = new Set<string>(PREVIEW_EXTENSIONS);
+const PREVIEW_MIME_BY_EXTENSION: Record<string, string> = {
+  '.wav': 'audio/wav',
+  '.aif': 'audio/aiff',
+  '.aiff': 'audio/aiff',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+};
 
 export class AppError extends Error {
   status: number;
@@ -195,8 +209,45 @@ function migrateIdea(project: Project, idea: Idea): Idea {
   };
 }
 
+function migrateSave(save: Save): Save {
+  const previewRefs = Array.isArray(save.previewRefs)
+    ? save.previewRefs.filter((ref): ref is string => Boolean(ref))
+    : [];
+  const previewMime =
+    'previewMime' in save && typeof save.previewMime === 'string'
+      ? save.previewMime
+      : inferPreviewMime(previewRefs[0] ?? '');
+  const requestedAt =
+    'previewRequestedAt' in save ? (save.previewRequestedAt ?? null) : null;
+  const updatedAt =
+    'previewUpdatedAt' in save ? (save.previewUpdatedAt ?? null) : null;
+  const previewStatus = derivePreviewStatus({
+    previewRefs,
+    previewStatus:
+      'previewStatus' in save &&
+      typeof save.previewStatus === 'string' &&
+      ['none', 'pending', 'ready', 'missing', 'error'].includes(
+        save.previewStatus,
+      )
+        ? save.previewStatus
+        : previewRefs.length > 0
+          ? 'ready'
+          : 'none',
+  });
+
+  return {
+    ...save,
+    previewRefs,
+    previewStatus,
+    previewMime,
+    previewRequestedAt: requestedAt,
+    previewUpdatedAt: updatedAt,
+  };
+}
+
 function migrateProject(project: Project): Project {
   const ideas = project.ideas.map((idea) => migrateIdea(project, idea));
+  const saves = project.saves.map((save) => migrateSave(save));
   const lastSeenAt =
     'lastSeenAt' in project && typeof project.lastSeenAt !== 'undefined'
       ? project.lastSeenAt
@@ -218,6 +269,7 @@ function migrateProject(project: Project): Project {
     driftStatus:
       ('driftStatus' in project ? project.driftStatus : null) ?? null,
     ideas,
+    saves,
   };
 }
 
@@ -264,9 +316,7 @@ async function mapWithConcurrency<T, R>(
   }
 
   const concurrency = Math.min(limit, items.length);
-  await Promise.all(
-    Array.from({ length: concurrency }, () => runWorker()),
-  );
+  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
   return results;
 }
 
@@ -397,8 +447,7 @@ function manifestFileEntries(
       blobHash: string;
       size: number;
       mtimeMs?: number;
-    } =>
-      entry.type !== 'dir',
+    } => entry.type !== 'dir',
   );
 }
 
@@ -454,6 +503,31 @@ function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+function slugifyProjectName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'project';
+}
+
+function inferPreviewMime(previewPath: string): string | null {
+  return PREVIEW_MIME_BY_EXTENSION[extname(previewPath).toLowerCase()] ?? null;
+}
+
+function derivePreviewStatus(
+  save: Pick<Save, 'previewRefs' | 'previewStatus'>,
+): PreviewStatus {
+  if (
+    save.previewStatus === 'pending' ||
+    save.previewStatus === 'error' ||
+    save.previewStatus === 'missing'
+  ) {
+    return save.previewStatus;
+  }
+  return save.previewRefs.length > 0 ? 'ready' : 'none';
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -476,14 +550,9 @@ async function captureSettledSnapshot(
   projectPath: string,
   expectedSetPaths: string[],
 ): Promise<{ snapshot: ProjectSnapshot; metadata: ProjectMetadata }> {
-  let lastSnapshot: ProjectSnapshot | null = null;
-  let lastMetadata: ProjectMetadata | null = null;
-
   for (let attempt = 0; attempt < SAVE_SETTLE_MAX_ATTEMPTS; attempt++) {
     const snapshot = await walkProject(projectPath);
     const metadata = metadataFromFiles(snapshot.files, expectedSetPaths[0]);
-    lastSnapshot = snapshot;
-    lastMetadata = metadata;
 
     if (
       expectedSetPaths.length === 0 ||
@@ -630,7 +699,9 @@ async function computeSemanticSaveData(
   }
 
   if (currAlsHash) {
-    const parsed = await tryParseSnapshot(getBlobPath(projectPath, currAlsHash));
+    const parsed = await tryParseSnapshot(
+      getBlobPath(projectPath, currAlsHash),
+    );
     if (parsed) {
       return {
         setDiff: undefined,
@@ -750,17 +821,56 @@ class AsyncMutex {
 export class AblegitService {
   private readonly rootDir: string;
   private readonly statePath: string;
+  private readonly allowLegacyMigration: boolean;
   private readonly mutex = new AsyncMutex();
   private readonly launcher: AbletonLauncher;
   private readonly ideaPathIndex = new Map<string, Map<string, string>>();
+  private readonly previewPathIndex = new Map<
+    string,
+    { projectId: string; saveId: string }
+  >();
 
   constructor(
     rootDir = resolve(process.cwd(), '.ablegit-state'),
     launcher: AbletonLauncher = createAbletonLauncher(),
+    allowLegacyMigration = Boolean(process.env.ABLEGIT_STATE_DIR),
   ) {
     this.rootDir = rootDir;
     this.statePath = join(rootDir, 'state.json');
+    this.allowLegacyMigration = allowLegacyMigration;
     this.launcher = launcher;
+  }
+
+  private async maybeMigrateLegacyState(): Promise<void> {
+    if (!this.allowLegacyMigration) return;
+    const legacyRootDir = resolve(process.cwd(), '.ablegit-state');
+    if (legacyRootDir === this.rootDir) return;
+
+    const legacyStatePath = join(legacyRootDir, 'state.json');
+    const targetExists = await access(this.statePath)
+      .then(() => true)
+      .catch(() => false);
+    if (targetExists) return;
+
+    const legacyExists = await access(legacyStatePath)
+      .then(() => true)
+      .catch(() => false);
+    if (!legacyExists) return;
+
+    await mkdir(dirname(this.rootDir), { recursive: true });
+    try {
+      await cp(legacyRootDir, this.rootDir, {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+      });
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'EEXIST') return;
+      }
+      throw err;
+    }
   }
 
   private refreshProjectPathIndex(project: Project): void {
@@ -776,11 +886,26 @@ export class AblegitService {
     );
   }
 
+  private refreshPreviewPathIndex(state: AppState): void {
+    this.previewPathIndex.clear();
+    for (const project of state.projects) {
+      for (const save of project.saves) {
+        for (const previewRef of save.previewRefs) {
+          this.previewPathIndex.set(resolve(previewRef), {
+            projectId: project.id,
+            saveId: save.id,
+          });
+        }
+      }
+    }
+  }
+
   private refreshPathIndexes(state: AppState): void {
     this.ideaPathIndex.clear();
     for (const project of state.projects) {
       this.refreshProjectPathIndex(project);
     }
+    this.refreshPreviewPathIndex(state);
   }
 
   private sortProjects(projects: Project[]): Project[] {
@@ -833,6 +958,7 @@ export class AblegitService {
   }
 
   async loadState(): Promise<AppState> {
+    await this.maybeMigrateLegacyState();
     await mkdir(this.rootDir, { recursive: true });
     try {
       const content = await readFile(this.statePath, 'utf8');
@@ -841,6 +967,7 @@ export class AblegitService {
       return state;
     } catch {
       this.ideaPathIndex.clear();
+      this.previewPathIndex.clear();
       return { roots: [], projects: [], activity: [] };
     }
   }
@@ -876,6 +1003,85 @@ export class AblegitService {
     } finally {
       this.mutex.release();
     }
+  }
+
+  private previewExportDir(project: Project, save: Save): string {
+    return join(
+      homedir(),
+      'Music',
+      'Ablegit Previews',
+      slugifyProjectName(project.name),
+      save.id,
+    );
+  }
+
+  private managedPreviewRoot(): string {
+    return join(this.rootDir, 'previews');
+  }
+
+  private managedPreviewDir(projectId: string, saveId: string): string {
+    return join(this.managedPreviewRoot(), projectId, saveId);
+  }
+
+  private managedPreviewPath(
+    projectId: string,
+    saveId: string,
+    extension: string,
+  ): string {
+    return join(
+      this.managedPreviewDir(projectId, saveId),
+      `${PREVIEW_FILE_BASENAME}${extension}`,
+    );
+  }
+
+  private buildPreviewRequestResult(
+    project: Project,
+    save: Save,
+  ): PreviewRequestResult {
+    return {
+      projectId: project.id,
+      saveId: save.id,
+      status: save.previewStatus,
+      folderPath: this.previewExportDir(project, save),
+      expectedBaseName: PREVIEW_FILE_BASENAME,
+      acceptedExtensions: [...PREVIEW_EXTENSIONS],
+    };
+  }
+
+  private async clearManagedPreviewFiles(previewRefs: string[]): Promise<void> {
+    const managedRoot = resolve(this.managedPreviewRoot());
+    await Promise.all(
+      previewRefs.map(async (previewRef) => {
+        const resolved = resolve(previewRef);
+        if (!resolved.startsWith(managedRoot)) return;
+        await rm(resolved, { force: true }).catch(() => {});
+      }),
+    );
+  }
+
+  private async clearExportPreviewCandidates(
+    folderPath: string,
+  ): Promise<void> {
+    const files = await readdir(folderPath).catch(() => []);
+    await Promise.all(
+      files.map(async (file) => {
+        const extension = extname(file).toLowerCase();
+        const stem = basename(file, extension);
+        if (stem !== PREVIEW_FILE_BASENAME) return;
+        await rm(join(folderPath, file), { force: true }).catch(() => {});
+      }),
+    );
+  }
+
+  private resetSavePreviewState(
+    save: Save,
+    status: PreviewStatus,
+    now: string,
+  ): void {
+    save.previewRefs = [];
+    save.previewMime = null;
+    save.previewStatus = status;
+    save.previewUpdatedAt = now;
   }
 
   private async assertDir(p: string): Promise<void> {
@@ -1155,6 +1361,173 @@ export class AblegitService {
     });
   }
 
+  async requestPreview(
+    projectId: string,
+    saveId: string,
+  ): Promise<PreviewRequestResult> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const save = requireSave(project, saveId);
+      const folderPath = this.previewExportDir(project, save);
+      await mkdir(folderPath, { recursive: true });
+
+      const now = new Date().toISOString();
+      if (save.previewStatus !== 'pending') {
+        await this.clearExportPreviewCandidates(folderPath);
+        await this.clearManagedPreviewFiles(save.previewRefs);
+        this.resetSavePreviewState(save, 'pending', now);
+        save.previewRequestedAt = now;
+        project.updatedAt = now;
+        await this.saveState(state);
+      }
+
+      return this.buildPreviewRequestResult(project, save);
+    });
+  }
+
+  async cancelPreview(projectId: string, saveId: string): Promise<void> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const save = requireSave(project, saveId);
+      if (save.previewStatus !== 'pending') return;
+      const now = new Date().toISOString();
+      this.resetSavePreviewState(save, 'none', now);
+      save.previewRequestedAt = null;
+      project.updatedAt = now;
+      await this.saveState(state);
+    });
+  }
+
+  async revealPreviewFolder(
+    projectId: string,
+    saveId: string,
+  ): Promise<PreviewRequestResult> {
+    const state = await this.loadState();
+    const project = requireProject(state, projectId);
+    const save = requireSave(project, saveId);
+    const preview = this.buildPreviewRequestResult(project, save);
+    await mkdir(preview.folderPath, { recursive: true });
+    try {
+      await this.launcher.openFile(preview.folderPath);
+    } catch (err) {
+      throw new AppError(
+        err instanceof Error ? err.message : 'Failed to reveal preview folder.',
+        500,
+      );
+    }
+    return preview;
+  }
+
+  async uploadPreview(
+    projectId: string,
+    saveId: string,
+    fileData: ArrayBuffer,
+    fileName: string,
+  ): Promise<PreviewRequestResult> {
+    const extension = extname(fileName).toLowerCase();
+    if (!PREVIEW_EXTENSION_SET.has(extension)) {
+      throw new AppError(
+        `Unsupported format. Accepted: ${PREVIEW_EXTENSIONS.join(', ')}`,
+        400,
+      );
+    }
+
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const save = requireSave(project, saveId);
+
+      await this.clearManagedPreviewFiles(save.previewRefs);
+
+      const destinationPath = this.managedPreviewPath(
+        project.id,
+        save.id,
+        extension,
+      );
+      await mkdir(dirname(destinationPath), { recursive: true });
+      await writeFile(destinationPath, Buffer.from(fileData));
+
+      const now = new Date().toISOString();
+      save.previewRefs = [destinationPath];
+      save.previewMime = inferPreviewMime(destinationPath);
+      save.previewStatus = 'ready';
+      save.previewUpdatedAt = now;
+      save.previewRequestedAt = save.previewRequestedAt ?? now;
+      project.updatedAt = now;
+
+      await this.saveState(state);
+      return this.buildPreviewRequestResult(project, save);
+    });
+  }
+
+  async ingestPendingPreviews(): Promise<boolean> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      let dirty = false;
+
+      for (const project of state.projects) {
+        for (const save of project.saves) {
+          if (save.previewStatus !== 'pending') continue;
+
+          const folderPath = this.previewExportDir(project, save);
+          const files = await readdir(folderPath).catch(() => null);
+          if (!files) continue;
+
+          // Accept any audio file with a valid extension (not just "preview.*")
+          const matchingFiles = files.filter((file) => {
+            const extension = extname(file).toLowerCase();
+            return PREVIEW_EXTENSION_SET.has(extension);
+          });
+
+          if (matchingFiles.length === 0) continue;
+
+          // If multiple audio files exist, pick the most recently modified one
+          let matchedFile: string;
+          if (matchingFiles.length === 1) {
+            matchedFile = matchingFiles[0]!;
+          } else {
+            const withMtime = await Promise.all(
+              matchingFiles.map(async (file) => {
+                const s = await stat(join(folderPath, file)).catch(() => null);
+                return { file, mtimeMs: s?.mtimeMs ?? 0 };
+              }),
+            );
+            withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+            matchedFile = withMtime[0]!.file;
+          }
+
+          const extension = extname(matchedFile).toLowerCase();
+          const sourcePath = join(folderPath, matchedFile);
+          const destinationPath = this.managedPreviewPath(
+            project.id,
+            save.id,
+            extension,
+          );
+
+          await this.clearManagedPreviewFiles(save.previewRefs);
+          await mkdir(dirname(destinationPath), { recursive: true });
+          await copyFile(sourcePath, destinationPath);
+
+          const now = new Date().toISOString();
+          save.previewRefs = [destinationPath];
+          save.previewMime = inferPreviewMime(destinationPath);
+          save.previewStatus = 'ready';
+          save.previewUpdatedAt = now;
+          project.updatedAt = now;
+          dirty = true;
+        }
+      }
+
+      if (dirty) {
+        await this.saveState(state);
+      }
+
+      return dirty;
+    });
+  }
+
   private baselineSaveForIdea(project: Project, idea: Idea): Save | null {
     const ideaSaves = project.saves.filter((save) => save.ideaId === idea.id);
     if (ideaSaves.length > 0) return ideaSaves.at(-1) ?? null;
@@ -1197,14 +1570,12 @@ export class AblegitService {
     preferredSetPath?: string,
   ): Promise<{ project: Project; save: Save | null }> {
     const expectedSetPaths = uniqueStrings(
-      [preferredSetPath, idea.setPath].filter(
-        (value): value is string => Boolean(value && value.trim()),
+      [preferredSetPath, idea.setPath].filter((value): value is string =>
+        Boolean(value && value.trim()),
       ),
     );
-    const { snapshot, metadata: detectedMetadata } = await captureSettledSnapshot(
-      project.projectPath,
-      expectedSetPaths,
-    );
+    const { snapshot, metadata: detectedMetadata } =
+      await captureSettledSnapshot(project.projectPath, expectedSetPaths);
     const projectHash = hashProject(snapshot);
     const saveBaseline = this.baselineSaveForIdea(project, idea);
 
@@ -1231,7 +1602,9 @@ export class AblegitService {
     const saveId = createId('save');
     const entries: ManifestEntry[] = [];
     const baselineManifest = saveBaseline
-      ? await readManifest(project.projectPath, saveBaseline.id).catch(() => null)
+      ? await readManifest(project.projectPath, saveBaseline.id).catch(
+          () => null,
+        )
       : null;
     const baselineEntries = baselineManifest
       ? buildManifestFileIndex(baselineManifest.files)
@@ -1300,6 +1673,10 @@ export class AblegitService {
       createdAt: now,
       ideaId: idea.id,
       previewRefs: [],
+      previewStatus: 'none',
+      previewMime: null,
+      previewRequestedAt: null,
+      previewUpdatedAt: null,
       projectHash,
       metadata,
       auto: input?.auto ?? false,
@@ -1754,13 +2131,14 @@ export class AblegitService {
     return this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
-      requireSave(project, saveId);
+      const save = requireSave(project, saveId);
       if (project.ideas.some((idea) => idea.forkedFromSaveId === saveId)) {
         throw new AppError(
           'Cannot delete a save that other branches fork from.',
           409,
         );
       }
+      await this.clearManagedPreviewFiles(save.previewRefs);
       await deleteManifest(project.projectPath, saveId);
       project.saves = project.saves.filter((s) => s.id !== saveId);
       for (const idea of project.ideas) {
@@ -1779,20 +2157,48 @@ export class AblegitService {
     });
   }
 
+  private async markPreviewMissing(
+    projectId: string,
+    saveId: string,
+    previewPath: string,
+  ): Promise<void> {
+    await this.withLock(async () => {
+      const state = await this.loadState();
+      const project = state.projects.find(
+        (candidate) => candidate.id === projectId,
+      );
+      const save = project?.saves.find((candidate) => candidate.id === saveId);
+      if (!project || !save) return;
+      if (
+        !save.previewRefs.some(
+          (previewRef) => resolve(previewRef) === previewPath,
+        )
+      ) {
+        return;
+      }
+      const now = new Date().toISOString();
+      this.resetSavePreviewState(save, 'missing', now);
+      project.updatedAt = now;
+      await this.saveState(state);
+    });
+  }
+
   async resolvePreviewPath(p: string): Promise<string> {
     const resolved = resolve(p);
-    const state = await this.loadState();
-    const allowedPreviewPaths = new Set(
-      state.projects.flatMap((project) =>
-        project.saves.flatMap((save) =>
-          save.previewRefs.map((previewRef) => resolve(previewRef)),
-        ),
-      ),
-    );
-    if (!allowedPreviewPaths.has(resolved)) {
+    const previewOwner = this.previewPathIndex.get(resolved);
+    if (!previewOwner) {
       throw new AppError('File not found', 404);
     }
-    await access(resolved);
+    try {
+      await access(resolved);
+    } catch {
+      await this.markPreviewMissing(
+        previewOwner.projectId,
+        previewOwner.saveId,
+        resolved,
+      );
+      throw new AppError('File not found', 404);
+    }
     return resolved;
   }
 
@@ -1829,10 +2235,7 @@ export class AblegitService {
       };
     });
 
-    if (
-      !analysisTarget.missingChanges &&
-      !analysisTarget.missingSemantic
-    ) {
+    if (!analysisTarget.missingChanges && !analysisTarget.missingSemantic) {
       return {
         project: analysisTarget.project,
         changes: analysisTarget.save.changes ?? null,

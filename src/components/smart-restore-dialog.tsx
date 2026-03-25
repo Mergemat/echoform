@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -109,16 +110,18 @@ export function SmartRestoreDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-[640px] p-0 gap-0">
-        <DialogHeader className="px-4 pt-4 pb-3 border-b border-border/50">
-          <DialogTitle className="text-[12px]">Smart Restore</DialogTitle>
-          <DialogDescription className="text-[10px]">
+      <DialogContent className="sm:max-w-[640px] p-0 gap-0 bg-[#111215] border-white/[0.08] rounded-xl">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
+          <DialogTitle className="text-[13px] font-semibold text-white/90">
+            Smart Restore
+          </DialogTitle>
+          <DialogDescription className="text-[11px] text-white/40 mt-1">
             Restore selected tracks from this save into the current active set.
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[60vh]">
-          <div className="px-4 py-3 space-y-2">
+          <div className="px-5 py-3 space-y-2">
             {loading && (
               <div className="space-y-2">
                 <Skeleton className="h-12 w-full" />
@@ -128,7 +131,7 @@ export function SmartRestoreDialog({
             )}
 
             {!loading && tracks.length === 0 && !error && (
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-[11px] text-white/35 text-center py-6">
                 No tracks found in this save.
               </div>
             )}
@@ -140,7 +143,12 @@ export function SmartRestoreDialog({
                   key={track.id}
                   type="button"
                   onClick={() => toggle(track.id)}
-                  className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors w-full text-left"
+                  className={cn(
+                    'flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors w-full text-left',
+                    checked
+                      ? 'border-white/[0.12] bg-white/[0.06]'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]',
+                  )}
                 >
                   <Checkbox
                     checked={checked}
@@ -151,15 +159,15 @@ export function SmartRestoreDialog({
                     <div className="flex items-center gap-2 min-w-0">
                       <Badge
                         variant="secondary"
-                        className="text-[9px] uppercase px-1 py-px h-auto rounded shrink-0"
+                        className="text-[9px] uppercase px-1.5 py-px h-auto rounded-md shrink-0"
                       >
                         {trackTypeLabel(track.type)}
                       </Badge>
-                      <span className="text-[12px] text-foreground/75 truncate">
+                      <span className="text-[12px] text-white/75 truncate font-medium">
                         {track.name}
                       </span>
                     </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                    <div className="mt-1 text-[10px] text-white/35 flex flex-wrap gap-x-3 gap-y-1">
                       {track.dependencyTrackIds.length > 0 && (
                         <span>
                           +{track.dependencyTrackIds.length} linked track
@@ -180,21 +188,29 @@ export function SmartRestoreDialog({
             })}
 
             {error && (
-              <div className="text-[11px] text-destructive">{error}</div>
+              <div className="rounded-md bg-red-400/10 border border-red-400/15 px-2.5 py-1.5 text-[11px] text-red-300/80">
+                {error}
+              </div>
             )}
           </div>
         </ScrollArea>
 
-        <DialogFooter className="px-4 py-3 flex-row items-center">
-          <p className="flex-1 text-[10px] text-muted-foreground">
+        <DialogFooter className="px-5 py-3 border-t border-white/[0.06] bg-white/[0.02] flex-row items-center">
+          <p className="flex-1 text-[10px] text-white/30">
             Ablegit expands group and return dependencies automatically.
           </p>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="rounded-lg text-[11px]"
+          >
             Cancel
           </Button>
           <Button
             variant="outline"
             size="sm"
+            className="rounded-lg text-[11px]"
             onClick={handleSubmit}
             disabled={selectedIds.length === 0 || submitting}
           >

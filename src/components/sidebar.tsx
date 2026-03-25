@@ -39,46 +39,46 @@ function projectHealth(project: Project): {
     return {
       label: 'Missing',
       dotClass: 'bg-amber-400',
-      textClass: 'text-amber-300/70',
+      textClass: 'text-amber-400/80',
     };
   }
   if (project.watchError) {
     return {
       label: 'Error',
       dotClass: 'bg-red-400',
-      textClass: 'text-red-300/70',
+      textClass: 'text-red-400/80',
     };
   }
   if (!project.watching) {
     return {
       label: 'Paused',
-      dotClass: 'bg-white/25',
-      textClass: 'text-white/35',
+      dotClass: 'bg-white/20',
+      textClass: 'text-white/30',
     };
   }
   return {
     label: 'Watching',
     dotClass: 'bg-emerald-400 animate-pulse',
-    textClass: 'text-emerald-300/70',
+    textClass: 'text-emerald-400/70',
   };
 }
 
 function ActivityFeedItem({ item }: { item: ActivityItem }) {
   const toneClass =
     item.severity === 'error'
-      ? 'text-red-200/75'
+      ? 'text-red-300/80'
       : item.severity === 'warning'
-        ? 'text-amber-200/75'
+        ? 'text-amber-300/80'
         : item.severity === 'success'
-          ? 'text-emerald-200/75'
-          : 'text-white/55';
+          ? 'text-emerald-300/80'
+          : 'text-white/45';
 
   return (
-    <div className="flex items-baseline justify-between gap-2 py-0.5">
-      <div className={cn('text-[10px] leading-4 truncate', toneClass)}>
+    <div className="flex items-baseline justify-between gap-2 py-1">
+      <div className={cn('text-[11px] leading-4 truncate', toneClass)}>
         {item.message}
       </div>
-      <div className="text-[9px] text-white/20 shrink-0">
+      <div className="text-[10px] text-white/15 shrink-0 tabular-nums">
         {formatRelative(item.createdAt)}
       </div>
     </div>
@@ -96,33 +96,42 @@ export function ProjectItem({
   const send = useStore((state) => state.send);
   const health = projectHealth(project);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     selectProject(project.id);
   };
 
   return (
-    <div
-      role="button"
+    <button
+      type="button"
       tabIndex={0}
       onClick={() => selectProject(project.id)}
       onKeyDown={handleKeyDown}
       className={cn(
-        'group w-full cursor-pointer select-none rounded-md px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/15',
+        'group w-full cursor-pointer select-none rounded-lg px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20',
         selected
-          ? 'bg-white/[0.08] text-white'
+          ? 'bg-white/[0.08] text-white shadow-sm shadow-white/[0.02]'
           : 'text-white/50 hover:bg-white/[0.04] hover:text-white/70',
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <span className="truncate text-[13px] font-medium">
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-medium leading-tight">
             {project.name}
           </span>
-          <div className="mt-1 flex items-center gap-1.5 text-[10px]">
-            <div className={cn('size-1.5 rounded-full', health.dotClass)} />
-            <span className={health.textClass}>{health.label}</span>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <div
+              className={cn('size-1.5 rounded-full shrink-0', health.dotClass)}
+            />
+            <span className={cn('text-[10px] leading-none', health.textClass)}>
+              {health.label}
+            </span>
+            <span className="text-[10px] text-white/20 ml-auto tabular-nums">
+              {project.saves.length > 0
+                ? `${project.saves.length} save${project.saves.length === 1 ? '' : 's'}`
+                : 'No saves'}
+            </span>
           </div>
         </div>
 
@@ -159,23 +168,13 @@ export function ProjectItem({
         </Tooltip>
       </div>
 
-      <div className="mt-1.5 text-[11px] text-white/30">
-        {project.saves.length > 0 ? (
-          <span>
-            {project.saves.length} save{project.saves.length === 1 ? '' : 's'}
-          </span>
-        ) : (
-          <span>No saves yet</span>
-        )}
-      </div>
-
       {project.watchError && (
-        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-200/70">
-          <WarningCircle size={12} />
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-300/70">
+          <WarningCircle size={12} className="shrink-0" />
           <span className="truncate">{project.watchError}</span>
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -209,15 +208,16 @@ export function AppSidebar() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full w-full flex-col overflow-hidden border-r border-white/[0.06] bg-white/[0.02]">
-        <div className="shrink-0 border-b border-white/[0.06] px-3 pt-4 pb-3">
+      <div className="flex h-full w-full flex-col overflow-hidden border-r border-border bg-white/[0.015]">
+        {/* Header */}
+        <div className="shrink-0 px-4 pt-5 pb-3">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-[15px] font-semibold tracking-tight text-white/90">
                 Ablegit
               </h1>
-              <p className="mt-1 text-[11px] text-white/25">
-                watch my folders, keep my work safe
+              <p className="mt-0.5 text-[11px] text-white/25 leading-tight">
+                protecting your sessions
               </p>
             </div>
             <Tooltip>
@@ -227,9 +227,9 @@ export function AppSidebar() {
                   variant="ghost"
                   size="icon-sm"
                   onClick={() => setManagerOpen(true)}
-                  className="text-white/30 hover:text-white/60"
+                  className="text-white/25 hover:text-white/60"
                 >
-                  <FolderSimplePlus size={14} />
+                  <FolderSimplePlus size={16} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Watch my folders</TooltipContent>
@@ -239,17 +239,18 @@ export function AppSidebar() {
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="mt-3 flex w-full items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-white/25 hover:bg-white/[0.05] hover:text-white/40 transition-colors"
+            className="mt-3 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] text-white/25 hover:bg-white/[0.05] hover:text-white/40 hover:border-white/[0.1] transition-all duration-150"
           >
-            <MagnifyingGlass size={12} />
+            <MagnifyingGlass size={13} className="shrink-0 text-white/20" />
             <span className="flex-1 text-left">Search projects...</span>
-            <kbd className="text-[9px] text-white/15 border border-white/[0.08] rounded px-1 py-px">
-              {navigator.platform?.includes('Mac') ? '\u2318' : 'Ctrl+'}K
+            <kbd className="text-[10px] text-white/15 border border-white/[0.06] rounded px-1.5 py-0.5 font-mono">
+              {navigator.platform?.includes('Mac') ? '\u2318K' : 'Ctrl+K'}
             </kbd>
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-1.5 space-y-0.5">
+        {/* Project list */}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-2 py-1 space-y-0.5">
           {sorted.map((project) => (
             <ProjectItem
               key={project.id}
@@ -259,30 +260,35 @@ export function AppSidebar() {
           ))}
 
           {projects.length === 0 && (
-            <div className="px-3 py-8 text-center text-[12px] text-white/20">
-              No watched projects yet.
-              <br />
-              Point Ablegit at one or more music folders.
+            <div className="px-3 py-10 text-center">
+              <div className="text-[13px] text-white/25 font-medium">
+                No watched projects
+              </div>
+              <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
+                Point Ablegit at your music folders to start protecting your
+                sessions automatically.
+              </div>
             </div>
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/[0.06] px-3 py-2">
-          <div className="mb-1">
-            <div className="flex items-center gap-1.5 text-[10px] text-white/20">
-              Recent activity
-              <div
-                className={cn(
-                  'size-1.5 rounded-full',
-                  connected ? 'bg-emerald-400/80' : 'bg-red-300/80',
-                )}
-              />
-            </div>
+        {/* Activity feed */}
+        <div className="shrink-0 border-t border-border px-4 py-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-white/20 font-medium">
+              Activity
+            </span>
+            <div
+              className={cn(
+                'size-1.5 rounded-full',
+                connected ? 'bg-emerald-400/80' : 'bg-red-400/80',
+              )}
+            />
           </div>
 
           <div>
             {activity.length === 0 ? (
-              <div className="py-1 text-[10px] text-white/20">
+              <div className="py-1 text-[11px] text-white/15">
                 No activity yet
               </div>
             ) : (

@@ -47,6 +47,10 @@ const makeSave = (id: string, ideaId: string): Save => ({
   createdAt: '2024-01-01T00:00:00Z',
   ideaId,
   previewRefs: [],
+  previewStatus: 'none',
+  previewMime: null,
+  previewRequestedAt: null,
+  previewUpdatedAt: null,
   projectHash: 'abc123',
   auto: false,
   metadata: {
@@ -130,6 +134,7 @@ describe('useStore', () => {
         activity: [],
         rootSuggestions: [],
         compare: null,
+        previewPlayerSaveId: null,
         connected: false,
         ws: null,
         discoveredProjects: [],
@@ -224,6 +229,16 @@ describe('useStore', () => {
       act(() => store.setState({ selectedSaveId: 'save-1' }));
       act(() => store.getState().toggleSave('save-2'));
       expect(store.getState().selectedSaveId).toBe('save-2');
+    });
+  });
+
+  describe('preview player state', () => {
+    it('opens and closes the preview player', () => {
+      act(() => store.getState().openPreviewPlayer('save-1'));
+      expect(store.getState().previewPlayerSaveId).toBe('save-1');
+
+      act(() => store.getState().closePreviewPlayer());
+      expect(store.getState().previewPlayerSaveId).toBeNull();
     });
   });
 
