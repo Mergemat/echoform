@@ -14,6 +14,7 @@ type Store = {
   roots: TrackedRoot[];
   activity: ActivityItem[];
   rootSuggestions: RootSuggestion[];
+  rootSuggestionsLoaded: boolean;
   selectedProjectId: string | null;
   selectedSaveId: string | null;
   activeIdeaId: string | null;
@@ -75,6 +76,7 @@ export const useStore = create<Store>((set, get) => ({
   roots: [],
   activity: [],
   rootSuggestions: [],
+  rootSuggestionsLoaded: false,
   selectedProjectId: null,
   selectedSaveId: null,
   activeIdeaId: null,
@@ -134,7 +136,8 @@ export const useStore = create<Store>((set, get) => ({
     }),
 
   setDiscoveredProjects: (projects) => set({ discoveredProjects: projects }),
-  setRootSuggestions: (suggestions) => set({ rootSuggestions: suggestions }),
+  setRootSuggestions: (suggestions) =>
+    set({ rootSuggestions: suggestions, rootSuggestionsLoaded: true }),
   setCompare: (compare) => set({ compare }),
 
   selectProject: (id) =>
