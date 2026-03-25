@@ -50,7 +50,9 @@ export function Timeline() {
     if (rootFileGroups.length === 0) return null;
     if (!activeRootIdea) return rootFileGroups[0] ?? null;
     return (
-      rootFileGroups.find((group) => group.setPath === activeRootIdea.setPath) ??
+      rootFileGroups.find(
+        (group) => group.setPath === activeRootIdea.setPath,
+      ) ??
       rootFileGroups[0] ??
       null
     );
@@ -111,18 +113,27 @@ export function Timeline() {
 
   if (!project) {
     return (
-      <div className="h-full flex items-center justify-center text-white/15 text-[13px]">
-        Select a project to see its timeline
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center px-6">
+          <div className="text-[14px] text-white/20 font-medium">
+            No project selected
+          </div>
+          <div className="mt-1 text-[12px] text-white/10">
+            Select a project from the sidebar to see its timeline
+          </div>
+        </div>
       </div>
     );
   }
 
   if (project.saves.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-white/20 text-[13px]">
-        <div className="text-center">
-          <div className="text-white/30 mb-1">No saves yet</div>
-          <div className="text-[11px] text-white/15">
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center px-6">
+          <div className="text-[14px] text-white/25 font-medium">
+            No saves yet
+          </div>
+          <div className="mt-1 text-[12px] text-white/15 leading-relaxed">
             {project.presence === 'missing'
               ? 'Project folder is missing from watched roots'
               : project.watching
@@ -140,7 +151,9 @@ export function Timeline() {
         <FileTabs
           rootFileGroups={rootFileGroups}
           activeSetPath={activeRootGroup?.setPath ?? null}
-          currentSetPath={getRootIdeaFor(project, project.currentIdeaId)?.setPath ?? null}
+          currentSetPath={
+            getRootIdeaFor(project, project.currentIdeaId)?.setPath ?? null
+          }
           project={project}
           onSelect={(ideaId) => {
             setActiveIdea(ideaId);
@@ -157,11 +170,13 @@ export function Timeline() {
       )}
 
       {project.pendingOpen && (
-        <div className="px-3 py-2 border-b border-amber-300/10 bg-amber-300/[0.06]">
+        <div className="px-4 py-2.5 border-b border-amber-400/10 bg-amber-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] text-amber-100/80">
+            <div className="text-[11px] text-amber-200/80 leading-relaxed">
               Could not open{' '}
-              <span className="font-medium">{project.pendingOpen.setPath}</span>
+              <span className="font-medium text-amber-200">
+                {project.pendingOpen.setPath}
+              </span>
               .
               {project.pendingOpen.error
                 ? ` ${project.pendingOpen.error}`
@@ -200,9 +215,9 @@ export function Timeline() {
       )}
 
       {project.driftStatus && (
-        <div className="px-3 py-2 border-b border-red-300/10 bg-red-300/[0.06]">
+        <div className="px-4 py-2.5 border-b border-red-400/10 bg-red-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] text-red-100/80">
+            <div className="text-[11px] text-red-200/80 leading-relaxed">
               {project.driftStatus.kind === 'unknown-file'
                 ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
                 : `Branch file ${project.driftStatus.setPath} is missing.`}
@@ -238,8 +253,8 @@ export function Timeline() {
       )}
 
       {project.presence === 'missing' && (
-        <div className="border-b border-amber-300/10 bg-amber-300/[0.06] px-3 py-2">
-          <div className="text-[11px] text-amber-100/80">
+        <div className="border-b border-amber-400/10 bg-amber-400/[0.04] px-4 py-2.5">
+          <div className="text-[11px] text-amber-200/80 leading-relaxed">
             This project is missing from your watched folders. History stays
             safe here, but file actions are disabled until the folder comes back
             or the root is re-added.
@@ -247,7 +262,7 @@ export function Timeline() {
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         <div
           style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
         >
@@ -367,7 +382,7 @@ function FileTabs({
   }, [rootFileGroups, project]);
 
   return (
-    <div className="flex items-center gap-0.5 border-b border-white/[0.06] px-2 overflow-x-auto shrink-0">
+    <div className="flex items-center gap-0 border-b border-border px-3 overflow-x-auto shrink-0 scrollbar-none">
       {rootFileGroups.map((group) => {
         const idea = group.representativeIdea;
         const isActive = group.setPath === activeSetPath;
@@ -383,8 +398,8 @@ function FileTabs({
             type="button"
             onClick={() => onSelect(idea.id)}
             className={cn(
-              'relative flex items-center gap-1.5 px-3 py-2 text-[12px] whitespace-nowrap transition-colors',
-              isActive ? 'text-white/80' : 'text-white/30 hover:text-white/50',
+              'relative flex items-center gap-1.5 px-3 py-2.5 text-[12px] whitespace-nowrap transition-colors duration-150',
+              isActive ? 'text-white/85' : 'text-white/30 hover:text-white/50',
             )}
           >
             {isCurrent && (
@@ -397,7 +412,7 @@ function FileTabs({
               </span>
             )}
             {isActive && (
-              <span className="absolute bottom-0 left-3 right-3 h-px bg-white/40" />
+              <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-white/40" />
             )}
           </button>
         );
@@ -422,12 +437,12 @@ function BranchLine({
     <div className="relative">
       {/* Vertical branch line */}
       <div
-        className="absolute top-0 bottom-0 w-px"
+        className="absolute top-0 bottom-0 w-px transition-colors duration-150"
         style={{
           left: `${lineLeft + 5}px`,
           backgroundColor: isFocused
-            ? 'rgba(52, 211, 153, 0.25)'
-            : 'rgba(255, 255, 255, 0.06)',
+            ? 'rgba(52, 211, 153, 0.2)'
+            : 'rgba(255, 255, 255, 0.05)',
         }}
       />
       <div style={{ paddingLeft: `${lineLeft + 18}px` }}>{children}</div>

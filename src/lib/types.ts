@@ -17,6 +17,8 @@ export type {
   SmartRestoreTrack,
   SmartRestoreResult,
   CompareResult,
+  PreviewRequestResult,
+  PreviewStatus,
   WsEvent,
   WsCommand,
   DiscoveredProject,

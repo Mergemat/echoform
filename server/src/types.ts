@@ -66,6 +66,10 @@ export type Save = {
   createdAt: string;
   ideaId: string;
   previewRefs: string[];
+  previewStatus: PreviewStatus;
+  previewMime: string | null;
+  previewRequestedAt: string | null;
+  previewUpdatedAt: string | null;
   projectHash: string;
   metadata: ProjectMetadata;
   auto: boolean; // true if created by the watcher automatically
@@ -74,11 +78,24 @@ export type Save = {
   trackSummary?: TrackSummaryItem[]; // lightweight track list for visual thumbnails
 };
 
+export type PreviewStatus = 'none' | 'pending' | 'ready' | 'missing' | 'error';
+
+export type PreviewRequestResult = {
+  projectId: string;
+  saveId: string;
+  status: PreviewStatus;
+  folderPath: string;
+  expectedBaseName: string;
+  acceptedExtensions: string[];
+};
+
 export type TrackSummaryItem = {
   name: string;
   type: 'audio' | 'midi' | 'return' | 'group';
   color: number; // Ableton color palette index
   clipCount: number;
+  trackCount?: number; // legacy summaries may omit this; groups include nested descendants
+  children?: TrackSummaryItem[];
 };
 
 export type ProjectMetadata = {

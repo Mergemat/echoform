@@ -38,6 +38,10 @@ const makeSave = (id: string, ideaId: string): Save => ({
   createdAt: '2024-01-01T00:00:00Z',
   ideaId,
   previewRefs: [],
+  previewStatus: 'none',
+  previewMime: null,
+  previewRequestedAt: null,
+  previewUpdatedAt: null,
   projectHash: 'abc123',
   auto: false,
   metadata: {
@@ -84,6 +88,7 @@ describe('ProjectItem keyboard support', () => {
       activity: [],
       rootSuggestions: [],
       compare: null,
+      previewPlayerSaveId: null,
       connected: false,
       ws: null,
       discoveredProjects: [],

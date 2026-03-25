@@ -38,11 +38,11 @@ async function pruneSaves(
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-white/[0.03] rounded px-2.5 py-1.5 border border-white/[0.05] min-w-0">
-      <div className="text-[9px] uppercase tracking-wider text-white/20 mb-0.5">
+    <div className="bg-white/[0.03] rounded-lg px-2.5 py-2 border border-white/[0.06] min-w-0">
+      <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium mb-0.5">
         {label}
       </div>
-      <div className="text-[12px] font-medium text-white/70 tabular-nums truncate">
+      <div className="text-[13px] font-medium text-white/75 tabular-nums truncate">
         {value}
       </div>
     </div>
@@ -61,7 +61,7 @@ function SaveSizeBar({ saves }: { saves: DiskUsageSave[] }) {
         return (
           <div
             key={s.id}
-            className="flex items-center gap-2 group"
+            className="flex items-center gap-2 group py-0.5"
             title={`${s.label} — ${formatSize(s.snapshotBytes)} @ ${formatDateTime(s.createdAt)}`}
           >
             <div className="w-[6px] shrink-0">
@@ -72,7 +72,7 @@ function SaveSizeBar({ saves }: { saves: DiskUsageSave[] }) {
                 )}
               />
             </div>
-            <div className="flex-1 h-[3px] bg-white/[0.04] rounded-full overflow-hidden">
+            <div className="flex-1 h-[4px] bg-white/[0.04] rounded-full overflow-hidden">
               <div
                 className={cn(
                   'h-full rounded-full transition-all',
@@ -81,7 +81,7 @@ function SaveSizeBar({ saves }: { saves: DiskUsageSave[] }) {
                 style={{ width: `${Math.max(pct, 1)}%` }}
               />
             </div>
-            <div className="text-[9px] font-mono text-white/25 w-[42px] text-right shrink-0 tabular-nums">
+            <div className="text-[9px] font-mono text-white/25 w-[42px] text-right shrink-0 tabular-nums group-hover:text-white/40 transition-colors">
               {formatSize(s.snapshotBytes)}
             </div>
           </div>
@@ -160,16 +160,16 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
 
       <PopoverContent
         align="end"
-        className="w-[340px] p-0 bg-[#111114] border-white/[0.08]"
+        className="w-[340px] p-0 bg-[#111114] border-white/[0.08] rounded-xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-          <span className="text-[12px] font-medium text-white/70">Storage</span>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+          <span className="text-[12px] font-medium text-white/75">Storage</span>
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={() => setOpen(false)}
-            className="text-white/20 hover:text-white/50 size-5"
+            className="text-white/25 hover:text-white/50 size-5 rounded-full"
           >
             ✕
           </Button>
@@ -207,7 +207,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               {/* Per-save bar chart */}
               {usage.saves.length > 0 && (
                 <div>
-                  <div className="text-[9px] uppercase tracking-wider text-white/20 mb-2">
+                  <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium mb-2">
                     Per-save snapshot size
                   </div>
                   <SaveSizeBar saves={usage.saves} />
@@ -215,9 +215,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               )}
 
               {/* Prune section */}
-              <Separator className="bg-white/[0.05]" />
-              <div className="space-y-2">
-                <div className="text-[9px] uppercase tracking-wider text-white/20">
+              <Separator className="bg-white/[0.06]" />
+              <div className="space-y-2.5">
+                <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium">
                   Prune auto-saves older than
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -228,15 +228,16 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                       size="sm"
                       disabled={pruning || usage.autoSaveCount === 0}
                       onClick={() => handlePrune(opt.days)}
+                      className="rounded-lg text-[11px]"
                     >
                       {opt.label}
                     </Button>
                   ))}
                 </div>
                 {pruneMsg && (
-                  <div className="text-[10px] text-white/40">{pruneMsg}</div>
+                  <div className="text-[10px] text-white/45">{pruneMsg}</div>
                 )}
-                <div className="text-[9px] text-white/20 leading-relaxed">
+                <div className="text-[9px] text-white/25 leading-relaxed">
                   Head saves and idea base saves are never pruned.
                 </div>
               </div>
@@ -245,7 +246,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                 variant="ghost"
                 size="sm"
                 onClick={load}
-                className="text-[10px] text-white/20 hover:text-white/40 px-0 h-auto"
+                className="text-[10px] text-white/25 hover:text-white/45 px-0 h-auto"
               >
                 Refresh
               </Button>

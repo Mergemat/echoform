@@ -70,6 +70,12 @@ const parser = new XMLParser({
   },
 });
 
+const orderedParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  preserveOrder: true,
+});
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** Safely get a property that may be an object or missing entirely. */
@@ -296,6 +302,8 @@ const TRACK_TYPE_MAP: Record<string, TrackSnapshot['type']> = {
   GroupTrack: 'group',
 };
 
+const TRACK_TAGS = new Set(Object.keys(TRACK_TYPE_MAP));
+
 function extractTrack(
   trackNode: any,
   trackType: TrackSnapshot['type'],
@@ -344,72 +352,64 @@ function extractTrack(
 /**
  * Extract a lightweight track summary from a SetSnapshot for visual thumbnails.
  *
- * Groups are represented as a single block whose width = sum of children's
- * clip counts and whose color = the group track's color. Child tracks with a
- * color *different* from their parent group are emitted as additional blocks
- * immediately after the group block so their distinct color is visible.
- *
- * Top-level leaf tracks (not inside any group) are emitted as-is.
+ * Each top-level track becomes one thumbnail row. Groups retain their nested
+ * child structure so the UI can render a miniature version of Ableton's track
+ * list instead of flattening everything into one misleading bar.
  */
 export function extractTrackSummary(snapshot: SetSnapshot): TrackSummaryItem[] {
-  // Gather children per group (preserve original track order)
+  const tracksById = new Map(snapshot.tracks.map((track) => [track.id, track]));
   const childrenByGroup = new Map<string, TrackSnapshot[]>();
   for (const t of snapshot.tracks) {
-    if (t.groupId !== null) {
+    if (t.groupId !== null && tracksById.has(t.groupId)) {
       if (!childrenByGroup.has(t.groupId)) childrenByGroup.set(t.groupId, []);
       childrenByGroup.get(t.groupId)!.push(t);
     }
   }
 
+  function buildSummary(track: TrackSnapshot): TrackSummaryItem {
+    const children = childrenByGroup.get(track.id) ?? [];
+    const childSummaries = children.map(buildSummary);
+
+    return {
+      name: track.name,
+      type: track.type,
+      color: track.color,
+      clipCount:
+        track.clipCount +
+        childSummaries.reduce((sum, child) => sum + child.clipCount, 0),
+      trackCount:
+        1 +
+        childSummaries.reduce((sum, child) => sum + (child.trackCount ?? 1), 0),
+      children: childSummaries.length > 0 ? childSummaries : undefined,
+    };
+  }
+
   const result: TrackSummaryItem[] = [];
 
-  // Walk tracks in their natural order, emitting in document order.
-  // Use a Set to skip children we already accounted for under their group.
-  const emitted = new Set<string>();
-
   for (const t of snapshot.tracks) {
-    if (emitted.has(t.id)) continue;
-
-    if (t.type === 'group') {
-      const children = childrenByGroup.get(t.id) ?? [];
-      const totalClips = children.reduce((s, c) => s + c.clipCount, 0);
-
-      // Emit one block for the whole group
-      result.push({
-        name: t.name,
-        type: 'group',
-        color: t.color,
-        clipCount: Math.max(1, totalClips),
-      });
-      emitted.add(t.id);
-
-      // Emit child blocks only when their color differs from the group's color
-      for (const child of children) {
-        if (child.color !== t.color) {
-          result.push({
-            name: child.name,
-            type: child.type,
-            color: child.color,
-            clipCount: Math.max(1, child.clipCount),
-          });
-        }
-        emitted.add(child.id);
-      }
-    } else if (t.groupId === null) {
-      // Top-level leaf track not inside any group
-      result.push({
-        name: t.name,
-        type: t.type,
-        color: t.color,
-        clipCount: t.clipCount,
-      });
-      emitted.add(t.id);
-    }
-    // Tracks with groupId that aren't emitted yet are handled when their group is processed;
-    // if their group wasn't found (shouldn't happen) they'll be skipped.
+    if (t.groupId !== null && tracksById.has(t.groupId)) continue;
+    result.push(buildSummary(t));
   }
 
   return result;
+}
+
+function extractTrackTagOrder(xml: string): string[] {
+  const tracksMatch = xml.match(/<Tracks>[\s\S]*?<\/Tracks>/);
+  if (!tracksMatch) return [];
+
+  try {
+    const ordered = orderedParser.parse(tracksMatch[0]);
+    const tracks = ordered?.[0]?.Tracks;
+    if (!Array.isArray(tracks)) return [];
+
+    return tracks.flatMap((node: Record<string, unknown>) => {
+      const tag = Object.keys(node).find((key) => key !== ':@');
+      return tag && TRACK_TAGS.has(tag) ? [tag] : [];
+    });
+  } catch {
+    return [];
+  }
 }
 
 // ── Main parser ─────────────────────────────────────────────────────
@@ -435,8 +435,18 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
   const tracks: TrackSnapshot[] = [];
 
   if (tracksNode) {
+    const tracksByTag = Object.fromEntries(
+      Object.keys(TRACK_TYPE_MAP).map((tag) => [tag, asArray(tracksNode[tag])]),
+    ) as Record<string, any[]>;
+
+    for (const tag of extractTrackTagOrder(xml)) {
+      const trackNode = tracksByTag[tag]?.shift();
+      if (!trackNode) continue;
+      tracks.push(extractTrack(trackNode, TRACK_TYPE_MAP[tag]!));
+    }
+
     for (const [tag, type] of Object.entries(TRACK_TYPE_MAP)) {
-      for (const trackNode of asArray(tracksNode[tag])) {
+      for (const trackNode of tracksByTag[tag] ?? []) {
         tracks.push(extractTrack(trackNode, type));
       }
     }

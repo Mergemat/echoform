@@ -24,6 +24,10 @@ function makeSave(id: string, ideaId: string, createdAt: string): Save {
     createdAt,
     ideaId,
     previewRefs: [],
+    previewStatus: 'none',
+    previewMime: null,
+    previewRequestedAt: null,
+    previewUpdatedAt: null,
     projectHash: id,
     auto: false,
     metadata: {

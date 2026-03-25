@@ -91,46 +91,139 @@ function trackColor(track: TrackSummaryItem): string {
   return TYPE_FALLBACK[track.type] ?? '#707070';
 }
 
+function flattenTracks(
+  tracks: TrackSummaryItem[],
+  depth = 0,
+): Array<{ track: TrackSummaryItem; depth: number }> {
+  return tracks.flatMap((track) => [
+    { track, depth },
+    ...flattenTracks(track.children ?? [], depth + 1),
+  ]);
+}
+
+function trackTitle(track: TrackSummaryItem): string {
+  if (track.type !== 'group') {
+    return `${track.name} (${track.type}, ${track.clipCount} clips)`;
+  }
+
+  const nestedTracks = Math.max(0, (track.trackCount ?? 1) - 1);
+  return `${track.name} (${nestedTracks} nested tracks, ${track.clipCount} clips)`;
+}
+
+/**
+ * Flatten tracks to at most `maxDepth` levels deep.
+ * Keeps group structure visible without exploding height for deeply nested sets.
+ */
+function flattenTracksShallow(
+  tracks: TrackSummaryItem[],
+  maxDepth: number,
+  depth = 0,
+): Array<{ track: TrackSummaryItem; depth: number }> {
+  return tracks.flatMap((track) => [
+    { track, depth },
+    ...(depth < maxDepth
+      ? flattenTracksShallow(track.children ?? [], maxDepth, depth + 1)
+      : []),
+  ]);
+}
+
 /**
  * Compact visual thumbnail showing track layout of a save.
- * Each track is a colored rectangle; width proportional to clip count (min 1).
- * Renders as a single row of thin blocks — like a miniature arrangement view.
+ * Multi-line with indentation so groups are visible, but kept tight:
+ * - compact: 2px rows, max 1 nesting level, capped row count
+ * - detail: 3px rows, full nesting, higher cap
  */
 export function TrackThumbnail({
   tracks,
   className,
+  variant = 'compact',
 }: {
   tracks: TrackSummaryItem[];
   className?: string;
+  /** "compact" = tight rows for collapsed cards, "detail" = fuller view for expanded cards */
+  variant?: 'compact' | 'detail';
 }) {
   if (tracks.length === 0) return null;
 
-  // Compute proportional widths: each track gets at least 1 unit
-  const weights = tracks.map((t) => Math.max(1, t.clipCount));
-  const total = weights.reduce((a, b) => a + b, 0);
+  const isCompact = variant === 'compact';
+  const maxDepth = isCompact ? 1 : 4;
+  const maxRows = isCompact ? 8 : 20;
+  const indentPx = isCompact ? 4 : 6;
+
+  const rows = isCompact
+    ? flattenTracksShallow(tracks, maxDepth)
+    : flattenTracks(tracks);
+  const visible = rows.slice(0, maxRows);
+  const overflow = rows.length - maxRows;
+
+  if (isCompact) {
+    return (
+      <div
+        className={className}
+        role="img"
+        aria-label={`${rows.length} tracks`}
+      >
+        <div className="flex flex-col gap-[1px] w-[72px]">
+          {visible.map(({ track, depth }, i) => {
+            const indent = Math.min(depth, 4) * 4;
+            return (
+              <div
+                key={`${track.type}-${track.name}-${i}`}
+                className="rounded-full"
+                title={trackTitle(track)}
+                style={{
+                  height: '2px',
+                  marginLeft: `${indent}px`,
+                  backgroundColor: trackColor(track),
+                  opacity: track.type === 'group' ? 0.45 : 0.35,
+                }}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={className}
-      role="img"
-      aria-label={`${tracks.length} tracks`}
-    >
-      <div className="flex h-[6px] rounded-[2px] overflow-hidden gap-px">
-        {tracks.map((track, i) => {
-          const pct = (weights[i]! / total) * 100;
+    <div className={className} role="img" aria-label={`${rows.length} tracks`}>
+      <div className="space-y-px rounded-md bg-white/[0.03] p-1 border border-white/[0.04]">
+        {visible.map(({ track, depth }, i) => {
+          const indent = Math.min(depth, 4) * indentPx;
+          const guideOffset = Math.max(indent - 3, 0);
           return (
             <div
               key={`${track.type}-${track.name}-${i}`}
-              className="h-full min-w-[2px]"
-              style={{
-                width: `${Math.max(pct, 1.5)}%`,
-                backgroundColor: trackColor(track),
-                opacity: 0.7,
-              }}
-              title={`${track.name} (${track.type}, ${track.clipCount} clips)`}
-            />
+              className="relative h-[3px] overflow-hidden rounded-[1.5px] bg-white/[0.05]"
+              title={trackTitle(track)}
+            >
+              {depth > 0 && (
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-white/10"
+                  style={{ left: `${guideOffset}px` }}
+                />
+              )}
+              <div
+                className="absolute top-0 bottom-0 rounded-[1.5px]"
+                style={{
+                  left: `${indent}px`,
+                  right: '0px',
+                  backgroundColor: trackColor(track),
+                  opacity: track.type === 'group' ? 0.55 : 0.4,
+                  boxShadow:
+                    track.type === 'group'
+                      ? 'inset 0 0 0 0.5px rgba(255,255,255,0.08)'
+                      : undefined,
+                }}
+              />
+            </div>
           );
         })}
+        {overflow > 0 && (
+          <div className="text-[9px] text-white/15 text-center pt-0.5">
+            +{overflow} more
+          </div>
+        )}
       </div>
     </div>
   );
