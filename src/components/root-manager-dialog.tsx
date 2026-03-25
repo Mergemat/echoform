@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
 import { Button } from '@/components/ui/button';
@@ -50,14 +50,70 @@ export function RootManagerDialog({
 }) {
   const roots = useStore((state) => state.roots);
   const rootSuggestions = useStore((state) => state.rootSuggestions);
+  const rootSuggestionsLoaded = useStore(
+    (state) => state.rootSuggestionsLoaded,
+  );
   const projects = useStore((state) => state.projects);
   const [path, setPath] = useState('');
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [bodyReady, setBodyReady] = useState(false);
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyFrameRef = useRef<ReturnType<typeof setTimeout> | number | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setBodyReady(false);
+      return;
+    }
+    const schedule =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (callback: FrameRequestCallback) =>
+            setTimeout(() => callback(Date.now()), 0);
+    bodyFrameRef.current = schedule(() => {
+      setBodyReady(true);
+      bodyFrameRef.current = null;
+    });
+
+    return () => {
+      if (bodyFrameRef.current !== null) {
+        if (typeof cancelAnimationFrame === 'function') {
+          cancelAnimationFrame(bodyFrameRef.current as number);
+        } else {
+          clearTimeout(bodyFrameRef.current as ReturnType<typeof setTimeout>);
+        }
+        bodyFrameRef.current = null;
+      }
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    sendDaemonCommand({ type: 'sync-roots' });
-    sendDaemonCommand({ type: 'discover-root-suggestions' });
-  }, [open]);
+    if (rootSuggestionsLoaded) return;
+    setSuggestionsLoading(true);
+    fetchTimerRef.current = setTimeout(() => {
+      sendDaemonCommand({ type: 'discover-root-suggestions' });
+    }, 150);
+
+    return () => {
+      if (fetchTimerRef.current) {
+        clearTimeout(fetchTimerRef.current);
+        fetchTimerRef.current = null;
+      }
+    };
+  }, [open, rootSuggestionsLoaded]);
+
+  useEffect(() => {
+    if (!open) {
+      setSuggestionsLoading(false);
+      return;
+    }
+    if (rootSuggestionsLoaded) {
+      setSuggestionsLoading(false);
+    }
+  }, [open, rootSuggestionsLoaded]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,6 +125,13 @@ export function RootManagerDialog({
         </DialogHeader>
 
         <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] p-5">
+          {!bodyReady ? (
+            <div className="md:col-span-2 grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
+              <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 h-44 animate-pulse" />
+              <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 h-44 animate-pulse" />
+            </div>
+          ) : (
+            <>
           <div className="space-y-5">
             <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
               <div className="flex items-center justify-between gap-3">
@@ -106,6 +169,8 @@ export function RootManagerDialog({
                     const nextPath = path.trim();
                     if (!nextPath) return;
                     sendDaemonCommand({ type: 'add-root', path: nextPath });
+                    sendDaemonCommand({ type: 'discover-root-suggestions' });
+                    setSuggestionsLoading(true);
                     setPath('');
                   }}
                 >
@@ -126,9 +191,15 @@ export function RootManagerDialog({
 
               <div className="mt-3 space-y-2">
                 {rootSuggestions.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-[11px] text-white/30 text-center">
-                    No obvious folders found right now.
-                  </div>
+                  suggestionsLoading ? (
+                    <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-[11px] text-white/30 text-center">
+                      Looking for likely music folders...
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-white/[0.08] px-3 py-4 text-[11px] text-white/30 text-center">
+                      No obvious folders found right now.
+                    </div>
+                  )
                 ) : (
                   rootSuggestions.map((suggestion) => (
                     <div
@@ -149,12 +220,16 @@ export function RootManagerDialog({
                         size="sm"
                         variant="secondary"
                         className="rounded-lg text-[11px]"
-                        onClick={() =>
+                        onClick={() => {
                           sendDaemonCommand({
                             type: 'add-root',
                             path: suggestion.path,
-                          })
-                        }
+                          });
+                          sendDaemonCommand({
+                            type: 'discover-root-suggestions',
+                          });
+                          setSuggestionsLoading(true);
+                        }}
                       >
                         <FolderSimple size={14} />
                         Watch
@@ -218,12 +293,16 @@ export function RootManagerDialog({
                         variant="ghost"
                         size="icon-sm"
                         className="rounded-md"
-                        onClick={() =>
+                        onClick={() => {
                           sendDaemonCommand({
                             type: 'remove-root',
                             rootId: root.id,
-                          })
-                        }
+                          });
+                          sendDaemonCommand({
+                            type: 'discover-root-suggestions',
+                          });
+                          setSuggestionsLoading(true);
+                        }}
                         aria-label={`Remove ${root.name}`}
                       >
                         <Trash size={14} />
@@ -234,6 +313,8 @@ export function RootManagerDialog({
               )}
             </div>
           </section>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
