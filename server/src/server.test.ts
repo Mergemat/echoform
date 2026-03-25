@@ -226,7 +226,10 @@ describe('WebSocket auth', () => {
       setTimeout(() => reject(new Error('No message received')), 3000);
     });
     const parsed = JSON.parse(firstMessage);
-    expect(parsed.type).toBe('projects');
+    expect(parsed.type).toBe('snapshot');
+    expect(Array.isArray(parsed.projects)).toBe(true);
+    expect(Array.isArray(parsed.roots)).toBe(true);
+    expect(Array.isArray(parsed.activity)).toBe(true);
 
     ws.close();
   });

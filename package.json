@@ -4,9 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "bun run dev:server & bun run dev:client",
+    "dev": "bun run dev:daemon & bun run dev:client",
     "dev:client": "vite",
-    "dev:server": "bun --watch server/src/server.ts",
+    "dev:daemon": "bun --watch server/src/server.ts",
+    "daemon": "bun server/src/server.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",

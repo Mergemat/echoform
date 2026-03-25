@@ -1,31 +1,92 @@
 import { useStore } from '@/lib/store';
 import { useRef, useState, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { buildTimelineDisplayItems } from './timeline-utils';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import {
+  buildTimelineDisplayItems,
+  getRootFileGroups,
+  getRootIdeas,
+  getRootIdeaFor,
+  getIdeaSubtreeIds,
+  fileTabName,
+  type RootFileGroup,
+} from './timeline-utils';
 import { CollapsedCard } from './collapsed-card';
 import { ExpandedCard } from './expanded-card';
 import { GroupCard } from './save-group';
-import { IdeaTabs } from './idea-tabs';
+import { BranchSelector } from './branch-selector';
 import { BranchCard } from './branch-card';
+import type { Idea, Project } from '@/lib/types';
 
 export function Timeline() {
   const project = useStore((s) => s.selectedProject());
   const selectedSaveId = useStore((s) => s.selectedSaveId);
   const activeIdeaId = useStore((s) => s.activeIdeaId);
+  const collapsedBranches = useStore((s) => s.collapsedBranches);
+  const send = useStore((s) => s.send);
   const toggleSave = useStore((s) => s.toggleSave);
   const setActiveIdea = useStore((s) => s.setActiveIdea);
+  const toggleBranchCollapse = useStore((s) => s.toggleBranchCollapse);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Derive file tabs and active tab from project data
+  const rootIdeas = useMemo(
+    () => (project ? getRootIdeas(project) : []),
+    [project],
+  );
+  const rootFileGroups = useMemo<RootFileGroup[]>(() => {
+    return project ? getRootFileGroups(project) : [];
+  }, [project]);
+  const hasMultipleFiles = rootFileGroups.length > 1;
+
+  const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
+  const activeRootIdea = useMemo(() => {
+    if (!project || !effectiveIdeaId) return rootIdeas[0] ?? null;
+    return getRootIdeaFor(project, effectiveIdeaId) ?? rootIdeas[0] ?? null;
+  }, [project, effectiveIdeaId, rootIdeas]);
+  const activeRootGroup = useMemo(() => {
+    if (rootFileGroups.length === 0) return null;
+    if (!activeRootIdea) return rootFileGroups[0] ?? null;
+    return (
+      rootFileGroups.find((group) => group.setPath === activeRootIdea.setPath) ??
+      rootFileGroups[0] ??
+      null
+    );
+  }, [activeRootIdea, rootFileGroups]);
+
+  // Filter project to only ideas/saves under the active file tab
+  const filteredProject = useMemo(() => {
+    if (!project || !activeRootGroup) return project;
+    if (!hasMultipleFiles) return project;
+    const subtreeIds = new Set<string>();
+    for (const rootIdea of activeRootGroup.rootIdeas) {
+      for (const ideaId of getIdeaSubtreeIds(project, rootIdea.id)) {
+        subtreeIds.add(ideaId);
+      }
+    }
+    return {
+      ...project,
+      ideas: project.ideas.filter((i) => subtreeIds.has(i.id)),
+      saves: project.saves.filter((s) => subtreeIds.has(s.ideaId)),
+    };
+  }, [project, activeRootGroup, hasMultipleFiles]);
+
   const displayItems = useMemo(() => {
-    if (!project) return [];
-    return buildTimelineDisplayItems(project, activeIdeaId, expandedGroups);
-  }, [project, activeIdeaId, expandedGroups]);
+    if (!filteredProject) return [];
+    return buildTimelineDisplayItems(
+      filteredProject,
+      activeIdeaId,
+      expandedGroups,
+      collapsedBranches,
+    );
+  }, [filteredProject, activeIdeaId, expandedGroups, collapsedBranches]);
 
   const virtualizer = useVirtualizer({
     count: displayItems.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: useCallback(() => 60, []),
+    estimateSize: useCallback(() => 56, []),
     overscan: 8,
     measureElement: (el) => el.getBoundingClientRect().height,
   });
@@ -38,6 +99,15 @@ export function Timeline() {
       return next;
     });
   }, []);
+
+  const handleSelectIdea = useCallback(
+    (ideaId: string) => {
+      setActiveIdea(ideaId);
+      if (!project) return;
+      send({ type: 'open-idea', projectId: project.id, ideaId });
+    },
+    [project, send, setActiveIdea],
+  );
 
   if (!project) {
     return (
@@ -53,9 +123,11 @@ export function Timeline() {
         <div className="text-center">
           <div className="text-white/30 mb-1">No saves yet</div>
           <div className="text-[11px] text-white/15">
-            {project.watching
-              ? 'Watching for changes...'
-              : 'Enable watching to auto-save'}
+            {project.presence === 'missing'
+              ? 'Project folder is missing from watched roots'
+              : project.watching
+                ? 'Watching for changes...'
+                : 'Enable watching to auto-save'}
           </div>
         </div>
       </div>
@@ -64,22 +136,113 @@ export function Timeline() {
 
   return (
     <div className="h-full flex flex-col">
-      <IdeaTabs
-        project={project}
-        activeIdeaId={activeIdeaId}
-        onSelect={setActiveIdea}
-      />
+      {hasMultipleFiles && project && (
+        <FileTabs
+          rootFileGroups={rootFileGroups}
+          activeSetPath={activeRootGroup?.setPath ?? null}
+          currentSetPath={getRootIdeaFor(project, project.currentIdeaId)?.setPath ?? null}
+          project={project}
+          onSelect={(ideaId) => {
+            setActiveIdea(ideaId);
+          }}
+        />
+      )}
 
-      {project.detachedRestore && (
+      {filteredProject && filteredProject.ideas.length > 1 && (
+        <BranchSelector
+          project={filteredProject}
+          activeIdeaId={activeIdeaId}
+          onSelect={handleSelectIdea}
+        />
+      )}
+
+      {project.pendingOpen && (
         <div className="px-3 py-2 border-b border-amber-300/10 bg-amber-300/[0.06]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] text-amber-100/80">
+              Could not open{' '}
+              <span className="font-medium">{project.pendingOpen.setPath}</span>
+              .
+              {project.pendingOpen.error
+                ? ` ${project.pendingOpen.error}`
+                : ' Retry or reveal it in Finder.'}
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  send({
+                    type: 'open-idea',
+                    projectId: project.id,
+                    ideaId: project.pendingOpen!.ideaId,
+                  })
+                }
+              >
+                Open Again
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  send({
+                    type: 'reveal-idea-file',
+                    projectId: project.id,
+                    ideaId: project.pendingOpen!.ideaId,
+                  })
+                }
+              >
+                Reveal
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {project.driftStatus && (
+        <div className="px-3 py-2 border-b border-red-300/10 bg-red-300/[0.06]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] text-red-100/80">
+              {project.driftStatus.kind === 'unknown-file'
+                ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
+                : `Branch file ${project.driftStatus.setPath} is missing.`}
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              {project.driftStatus.kind === 'unknown-file' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    send({ type: 'adopt-drift-file', projectId: project.id })
+                  }
+                >
+                  Adopt File
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  send({
+                    type: 'open-idea',
+                    projectId: project.id,
+                    ideaId: project.currentIdeaId,
+                  })
+                }
+              >
+                Open Current Branch
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {project.presence === 'missing' && (
+        <div className="border-b border-amber-300/10 bg-amber-300/[0.06] px-3 py-2">
           <div className="text-[11px] text-amber-100/80">
-            Restored{' '}
-            <span className="font-medium">
-              {project.saves.find(
-                (s) => s.id === project.detachedRestore?.saveId,
-              )?.label ?? 'old save'}
-            </span>
-            . Next save creates a new branch and keeps the old future intact.
+            This project is missing from your watched folders. History stays
+            safe here, but file actions are disabled until the folder comes back
+            or the root is re-added.
           </div>
         </div>
       )}
@@ -110,16 +273,19 @@ export function Timeline() {
                     depth={item.depth}
                     isCurrent={item.isCurrent}
                     isFocused={item.isFocused}
+                    isCollapsed={item.isCollapsed}
+                    saveCount={item.saveCount}
+                    onToggleCollapse={() => toggleBranchCollapse(item.idea.id)}
                   />
                 ) : item.type === 'group' ? (
-                  <GroupCard
-                    saves={item.saves}
-                    groupKey={item.key}
-                    expanded={expandedGroups.has(item.key)}
-                    depth={item.depth}
-                    dimmed={!item.isFocused}
-                    onToggle={() => toggleGroup(item.key)}
-                  />
+                  <BranchLine depth={item.depth} isFocused={item.isFocused}>
+                    <GroupCard
+                      saves={item.saves}
+                      groupKey={item.key}
+                      expanded={expandedGroups.has(item.key)}
+                      onToggle={() => toggleGroup(item.key)}
+                    />
+                  </BranchLine>
                 ) : (
                   (() => {
                     const save = item.save;
@@ -128,35 +294,37 @@ export function Timeline() {
                     const isSelected = save.id === selectedSaveId;
                     if (isSelected) {
                       return (
-                        <div>
-                          <CollapsedCard
-                            save={save}
-                            isSelected
-                            isHead={isHead}
-                            depth={item.depth}
-                            dimmed={!item.isFocused}
-                            onClick={() => toggleSave(save.id)}
-                          />
-                          <ExpandedCard
-                            save={save}
-                            idea={idea}
-                            isHead={isHead}
-                            projectId={project.id}
-                            depth={item.depth}
-                            onClose={() => toggleSave(save.id)}
-                          />
-                        </div>
+                        <BranchLine
+                          depth={item.depth}
+                          isFocused={item.isFocused}
+                        >
+                          <div>
+                            <CollapsedCard
+                              save={save}
+                              isSelected
+                              isHead={isHead}
+                              onClick={() => toggleSave(save.id)}
+                            />
+                            <ExpandedCard
+                              save={save}
+                              idea={idea}
+                              isHead={isHead}
+                              projectId={project.id}
+                              onClose={() => toggleSave(save.id)}
+                            />
+                          </div>
+                        </BranchLine>
                       );
                     }
                     return (
-                      <CollapsedCard
-                        save={save}
-                        isSelected={false}
-                        isHead={isHead}
-                        depth={item.depth}
-                        dimmed={!item.isFocused}
-                        onClick={() => toggleSave(save.id)}
-                      />
+                      <BranchLine depth={item.depth} isFocused={item.isFocused}>
+                        <CollapsedCard
+                          save={save}
+                          isSelected={false}
+                          isHead={isHead}
+                          onClick={() => toggleSave(save.id)}
+                        />
+                      </BranchLine>
                     );
                   })()
                 )}
@@ -165,6 +333,104 @@ export function Timeline() {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Horizontal file tabs — one per root .als file. Only shown when project has 2+ files. */
+function FileTabs({
+  rootFileGroups,
+  activeSetPath,
+  currentSetPath,
+  project,
+  onSelect,
+}: {
+  rootFileGroups: RootFileGroup[];
+  activeSetPath: string | null;
+  currentSetPath: string | null;
+  project: Project;
+  onSelect: (ideaId: string) => void;
+}) {
+  // Pre-compute subtree IDs and save counts per root idea
+  const subtrees = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const group of rootFileGroups) {
+      const subtree = new Set<string>();
+      for (const idea of group.rootIdeas) {
+        for (const ideaId of getIdeaSubtreeIds(project, idea.id)) {
+          subtree.add(ideaId);
+        }
+      }
+      map.set(group.setPath, subtree);
+    }
+    return map;
+  }, [rootFileGroups, project]);
+
+  return (
+    <div className="flex items-center gap-0.5 border-b border-white/[0.06] px-2 overflow-x-auto shrink-0">
+      {rootFileGroups.map((group) => {
+        const idea = group.representativeIdea;
+        const isActive = group.setPath === activeSetPath;
+        const isCurrent = group.setPath === currentSetPath;
+        const subtree = subtrees.get(group.setPath);
+        const saveCount = subtree
+          ? project.saves.filter((s) => subtree.has(s.ideaId)).length
+          : 0;
+
+        return (
+          <button
+            key={group.setPath}
+            type="button"
+            onClick={() => onSelect(idea.id)}
+            className={cn(
+              'relative flex items-center gap-1.5 px-3 py-2 text-[12px] whitespace-nowrap transition-colors',
+              isActive ? 'text-white/80' : 'text-white/30 hover:text-white/50',
+            )}
+          >
+            {isCurrent && (
+              <span className="size-1.5 rounded-full bg-emerald-400/70 shrink-0" />
+            )}
+            <span className="font-medium">{fileTabName(idea)}</span>
+            {saveCount > 0 && (
+              <span className="text-[10px] text-white/20 tabular-nums">
+                {saveCount}
+              </span>
+            )}
+            {isActive && (
+              <span className="absolute bottom-0 left-3 right-3 h-px bg-white/40" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Wrapper that draws a vertical branch line on the left side of save/group items */
+function BranchLine({
+  depth,
+  isFocused,
+  children,
+}: {
+  depth: number;
+  isFocused: boolean;
+  children: React.ReactNode;
+}) {
+  const lineLeft = 16 + depth * 20;
+
+  return (
+    <div className="relative">
+      {/* Vertical branch line */}
+      <div
+        className="absolute top-0 bottom-0 w-px"
+        style={{
+          left: `${lineLeft + 5}px`,
+          backgroundColor: isFocused
+            ? 'rgba(52, 211, 153, 0.25)'
+            : 'rgba(255, 255, 255, 0.06)',
+        }}
+      />
+      <div style={{ paddingLeft: `${lineLeft + 18}px` }}>{children}</div>
     </div>
   );
 }

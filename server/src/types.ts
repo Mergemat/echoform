@@ -1,7 +1,18 @@
 // ── Domain Types (producer-native language) ─────────────────────────
 
 export type AppState = {
+  roots: TrackedRoot[];
   projects: Project[];
+  activity: ActivityItem[];
+};
+
+export type TrackedRoot = {
+  id: string;
+  path: string;
+  name: string;
+  createdAt: string;
+  lastScannedAt: string | null;
+  lastError: string | null;
 };
 
 export type Project = {
@@ -9,27 +20,39 @@ export type Project = {
   name: string;
   adapter: 'ableton';
   projectPath: string;
-  activeSetPath: string;
+  rootIds: string[];
+  presence: 'active' | 'missing';
+  watchError: string | null;
+  lastSeenAt: string | null;
   createdAt: string;
   updatedAt: string;
   currentIdeaId: string;
-  lastRestoredSaveId: string | null;
-  detachedRestore: DetachedRestore | null;
+  pendingOpen: PendingOpen | null;
+  driftStatus: DriftStatus | null;
   ideas: Idea[];
   saves: Save[];
   watching: boolean;
 };
 
-export type DetachedRestore = {
-  saveId: string;
+export type PendingOpen = {
   ideaId: string;
-  restoredAt: string;
+  setPath: string;
+  requestedAt: string;
+  error: string | null;
+};
+
+export type DriftStatus = {
+  kind: 'unknown-file' | 'missing-file';
+  setPath: string;
+  ideaId: string | null;
+  detectedAt: string;
 };
 
 export type Idea = {
   id: string;
   name: string;
   createdAt: string;
+  setPath: string;
   baseSaveId: string;
   headSaveId: string;
   parentIdeaId: string | null;
@@ -111,22 +134,64 @@ export type CompareResult = {
   };
 };
 
+export type ActivityItem = {
+  id: string;
+  kind:
+    | 'root-added'
+    | 'root-removed'
+    | 'root-scanned'
+    | 'project-discovered'
+    | 'project-missing'
+    | 'project-restored'
+    | 'auto-saved'
+    | 'watcher-error';
+  message: string;
+  createdAt: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
+  rootId?: string | null;
+  projectId?: string | null;
+};
+
+export type RootSuggestion = {
+  path: string;
+  name: string;
+  projectCount: number;
+};
+
 // ── WebSocket Events ────────────────────────────────────────────────
 
 export type WsEvent =
-  | { type: 'projects'; projects: Project[] }
+  | {
+      type: 'snapshot';
+      projects: Project[];
+      roots: TrackedRoot[];
+      activity: ActivityItem[];
+    }
   | { type: 'project-updated'; project: Project }
   | { type: 'change-detected'; projectId: string; projectName: string }
   | { type: 'auto-saved'; projectId: string; save: Save }
   | { type: 'error'; message: string }
-  | { type: 'discovered-projects'; paths: DiscoveredProject[] };
+  | { type: 'discovered-projects'; paths: DiscoveredProject[] }
+  | { type: 'root-suggestions'; suggestions: RootSuggestion[] };
 
 export type WsCommand =
   | { type: 'track-project'; projectPath: string; name?: string }
   | { type: 'delete-project'; projectId: string }
+  | { type: 'add-root'; path: string; name?: string }
+  | { type: 'remove-root'; rootId: string }
+  | { type: 'sync-roots' }
+  | { type: 'discover-root-suggestions' }
   | { type: 'create-save'; projectId: string; label?: string; note?: string }
-  | { type: 'create-idea'; projectId: string; fromSaveId: string; name: string }
-  | { type: 'go-back-to'; projectId: string; saveId: string; force?: boolean }
+  | {
+      type: 'branch-from-save';
+      projectId: string;
+      saveId: string;
+      name: string;
+      fileName: string;
+    }
+  | { type: 'open-idea'; projectId: string; ideaId: string }
+  | { type: 'reveal-idea-file'; projectId: string; ideaId: string }
+  | { type: 'adopt-drift-file'; projectId: string }
   | {
       type: 'compare';
       projectId: string;
@@ -149,6 +214,7 @@ export type DiscoveredProject = {
   name: string;
   setFiles: string[];
   tracked: boolean;
+  rootPath?: string;
 };
 
 // ── Disk Usage ──────────────────────────────────────────────────────

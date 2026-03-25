@@ -23,11 +23,20 @@ import { dirname, join } from 'node:path';
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type ManifestEntry = {
+export type FileManifestEntry = {
+  type?: 'file';
   relativePath: string;
   blobHash: string;
   size: number;
+  mtimeMs?: number;
 };
+
+export type DirectoryManifestEntry = {
+  type: 'dir';
+  relativePath: string;
+};
+
+export type ManifestEntry = FileManifestEntry | DirectoryManifestEntry;
 
 export type Manifest = {
   saveId: string;
@@ -147,6 +156,12 @@ export async function reconstructFromManifest(
   targetDir: string,
 ): Promise<void> {
   for (const entry of manifest.files) {
+    if (entry.type !== 'dir') continue;
+    await mkdir(join(targetDir, entry.relativePath), { recursive: true });
+  }
+
+  for (const entry of manifest.files) {
+    if (entry.type === 'dir') continue;
     const src = getBlobPath(projectPath, entry.blobHash);
     const dest = join(targetDir, entry.relativePath);
     await mkdir(dirname(dest), { recursive: true });
@@ -171,6 +186,7 @@ export async function gcBlobs(
     try {
       const manifest = await readManifest(projectPath, saveId);
       for (const entry of manifest.files) {
+        if (entry.type === 'dir') continue;
         referenced.add(entry.blobHash);
       }
     } catch {
