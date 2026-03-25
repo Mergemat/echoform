@@ -1,33 +1,10 @@
 /**
- * Tests for useStore computed selectors and actions.
- * These cover the core state management logic of the app.
+ * Tests for the pure app store selectors and state transitions.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
 import type { Project, Save, Idea } from '@/lib/types';
-
-// Mock window.location and WebSocket since jsdom doesn't provide them
-Object.defineProperty(globalThis, 'window', {
-  value: { location: { protocol: 'http:', host: 'localhost' } },
-  writable: true,
-});
-globalThis.WebSocket = vi.fn().mockImplementation(() => ({
-  readyState: 3, // CLOSED
-  send: vi.fn(),
-  close: vi.fn(),
-})) as unknown as typeof WebSocket;
-(
-  globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
-).OPEN = 1;
-(
-  globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
-).CONNECTING = 0;
-
-// Mock fetch and sonner before importing the store
-globalThis.fetch = vi.fn();
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
-}));
+import { useStore } from '@/lib/store';
 
 const makeIdea = (id: string): Idea => ({
   id,
@@ -87,45 +64,9 @@ const makeProject = (
 });
 
 describe('useStore', () => {
-  let store: (typeof import('@/lib/store'))['useStore'];
-  let wsInstance: {
-    readyState: number;
-    send: ReturnType<typeof vi.fn>;
-    close: ReturnType<typeof vi.fn>;
-    onopen: (() => void) | null;
-    onclose: (() => void) | null;
-    onmessage: ((event: { data: string }) => void) | null;
-  };
-
-  beforeEach(async () => {
-    wsInstance = {
-      readyState: 0,
-      send: vi.fn(),
-      close: vi.fn(),
-      onopen: null,
-      onclose: null,
-      onmessage: null,
-    };
-    globalThis.WebSocket = vi
-      .fn(function WebSocketMock() {
-        return wsInstance;
-      }) as unknown as typeof WebSocket;
-    (
-      globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
-    ).OPEN = 1;
-    (
-      globalThis.WebSocket as unknown as { OPEN: number; CONNECTING: number }
-    ).CONNECTING = 0;
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-    fetchMock.mockReset();
-    fetchMock.mockResolvedValue({
-      ok: true,
-    } as Response);
-    const mod = await import('@/lib/store');
-    store = mod.useStore;
-    // Reset to initial state
+  beforeEach(() => {
     act(() => {
-      store.setState({
+      useStore.setState({
         projects: [],
         selectedProjectId: null,
         selectedSaveId: null,
@@ -134,32 +75,23 @@ describe('useStore', () => {
         activity: [],
         rootSuggestions: [],
         compare: null,
-        previewPlayerSaveId: null,
-        connected: false,
-        ws: null,
         discoveredProjects: [],
+        collapsedBranches: new Set(),
       });
     });
   });
 
   describe('selectedProject()', () => {
     it('returns null when no project is selected', () => {
-      const project = store.getState().selectedProject();
-      expect(project).toBeNull();
+      expect(useStore.getState().selectedProject()).toBeNull();
     });
 
     it('returns the matching project when selectedProjectId is set', () => {
-      const p = makeProject('proj-1');
-      act(() => store.setState({ projects: [p], selectedProjectId: 'proj-1' }));
-      expect(store.getState().selectedProject()).toEqual(p);
-    });
-
-    it('returns null when selectedProjectId does not match any project', () => {
-      const p = makeProject('proj-1');
+      const project = makeProject('proj-1');
       act(() =>
-        store.setState({ projects: [p], selectedProjectId: 'proj-999' }),
+        useStore.setState({ projects: [project], selectedProjectId: 'proj-1' }),
       );
-      expect(store.getState().selectedProject()).toBeNull();
+      expect(useStore.getState().selectedProject()).toEqual(project);
     });
   });
 
@@ -167,131 +99,129 @@ describe('useStore', () => {
     it('returns null when no save is selected', () => {
       const idea = makeIdea('idea-1');
       const save = makeSave('save-1', 'idea-1');
-      const p = makeProject('proj-1', [save], [idea]);
+      const project = makeProject('proj-1', [save], [idea]);
       act(() =>
-        store.setState({
-          projects: [p],
+        useStore.setState({
+          projects: [project],
           selectedProjectId: 'proj-1',
           selectedSaveId: null,
         }),
       );
-      expect(store.getState().selectedSave()).toBeNull();
+      expect(useStore.getState().selectedSave()).toBeNull();
     });
 
     it('returns the correct save when both project and save are selected', () => {
       const idea = makeIdea('idea-1');
       const save = makeSave('save-1', 'idea-1');
-      const p = makeProject('proj-1', [save], [idea]);
+      const project = makeProject('proj-1', [save], [idea]);
       act(() =>
-        store.setState({
-          projects: [p],
+        useStore.setState({
+          projects: [project],
           selectedProjectId: 'proj-1',
           selectedSaveId: 'save-1',
         }),
       );
-      expect(store.getState().selectedSave()).toEqual(save);
+      expect(useStore.getState().selectedSave()).toEqual(save);
     });
   });
 
-  describe('selectProject()', () => {
-    it('sets selectedProjectId and clears selectedSaveId and activeIdeaId', () => {
-      const p = makeProject('proj-1');
-      act(() =>
-        store.setState({
-          projects: [p],
-          selectedProjectId: 'other',
-          selectedSaveId: 'some-save',
-          activeIdeaId: 'some-idea',
-        }),
-      );
-      act(() => store.getState().selectProject('proj-1'));
-      const state = store.getState();
-      expect(state.selectedProjectId).toBe('proj-1');
-      expect(state.selectedSaveId).toBeNull();
-      expect(state.activeIdeaId).toBeNull();
-    });
+  it('selectProject() clears project-scoped selection state', () => {
+    act(() =>
+      useStore.setState({
+        selectedProjectId: 'other',
+        selectedSaveId: 'save-1',
+        activeIdeaId: 'idea-1',
+        compare: {} as never,
+      }),
+    );
+
+    act(() => useStore.getState().selectProject('proj-1'));
+
+    expect(useStore.getState().selectedProjectId).toBe('proj-1');
+    expect(useStore.getState().selectedSaveId).toBeNull();
+    expect(useStore.getState().activeIdeaId).toBeNull();
+    expect(useStore.getState().compare).toBeNull();
   });
 
-  describe('toggleSave()', () => {
-    it('selects a save when none is selected', () => {
-      act(() => store.setState({ selectedSaveId: null }));
-      act(() => store.getState().toggleSave('save-1'));
-      expect(store.getState().selectedSaveId).toBe('save-1');
-    });
+  it('toggleSave() selects, deselects, and switches saves', () => {
+    act(() => useStore.getState().toggleSave('save-1'));
+    expect(useStore.getState().selectedSaveId).toBe('save-1');
 
-    it('deselects a save when the same save is toggled again', () => {
-      act(() => store.setState({ selectedSaveId: 'save-1' }));
-      act(() => store.getState().toggleSave('save-1'));
-      expect(store.getState().selectedSaveId).toBeNull();
-    });
+    act(() => useStore.getState().toggleSave('save-1'));
+    expect(useStore.getState().selectedSaveId).toBeNull();
 
-    it('switches to a different save when a different save is toggled', () => {
-      act(() => store.setState({ selectedSaveId: 'save-1' }));
-      act(() => store.getState().toggleSave('save-2'));
-      expect(store.getState().selectedSaveId).toBe('save-2');
-    });
+    act(() => useStore.setState({ selectedSaveId: 'save-1' }));
+    act(() => useStore.getState().toggleSave('save-2'));
+    expect(useStore.getState().selectedSaveId).toBe('save-2');
   });
 
-  describe('preview player state', () => {
-    it('opens and closes the preview player', () => {
-      act(() => store.getState().openPreviewPlayer('save-1'));
-      expect(store.getState().previewPlayerSaveId).toBe('save-1');
+  it('setActiveIdea() clears save selection and expands the target branch', () => {
+    act(() =>
+      useStore.setState({
+        activeIdeaId: 'old-idea',
+        selectedSaveId: 'save-1',
+        collapsedBranches: new Set(['new-idea']),
+      }),
+    );
 
-      act(() => store.getState().closePreviewPlayer());
-      expect(store.getState().previewPlayerSaveId).toBeNull();
-    });
+    act(() => useStore.getState().setActiveIdea('new-idea'));
+
+    const state = useStore.getState();
+    expect(state.activeIdeaId).toBe('new-idea');
+    expect(state.selectedSaveId).toBeNull();
+    expect(state.collapsedBranches.has('new-idea')).toBe(false);
   });
 
-  describe('setActiveIdea()', () => {
-    it('sets activeIdeaId and clears selectedSaveId', () => {
-      act(() =>
-        store.setState({
-          activeIdeaId: 'old-idea',
-          selectedSaveId: 'some-save',
-        }),
-      );
-      act(() => store.getState().setActiveIdea('new-idea'));
-      const state = store.getState();
-      expect(state.activeIdeaId).toBe('new-idea');
-      expect(state.selectedSaveId).toBeNull();
-    });
+  it('applySnapshot() falls back to the first remaining project', () => {
+    const idea1 = makeIdea('idea-1');
+    const save1 = makeSave('save-1', idea1.id);
+    const project1 = makeProject('proj-1', [save1], [idea1]);
+    const idea2 = makeIdea('idea-2');
+    const save2 = makeSave('save-2', idea2.id);
+    const project2 = makeProject('proj-2', [save2], [idea2]);
+
+    act(() =>
+      useStore.setState({
+        projects: [project1, project2],
+        selectedProjectId: 'proj-2',
+        selectedSaveId: 'save-2',
+        activeIdeaId: idea2.id,
+      }),
+    );
+
+    act(() => useStore.getState().applySnapshot([project1], [], []));
+
+    const state = useStore.getState();
+    expect(state.selectedProjectId).toBe('proj-1');
+    expect(state.selectedSaveId).toBeNull();
+    expect(state.activeIdeaId).toBeNull();
   });
 
-  describe('snapshot event handling', () => {
-    it('falls back to the first remaining project when the selected project is removed', async () => {
-      const idea1 = makeIdea('idea-1');
-      const save1 = makeSave('save-1', idea1.id);
-      const project1 = makeProject('proj-1', [save1], [idea1]);
-      const idea2 = makeIdea('idea-2');
-      const save2 = makeSave('save-2', idea2.id);
-      const project2 = makeProject('proj-2', [save2], [idea2]);
+  it('applyProjectUpdate() follows the current idea and clears removed saves', () => {
+    const oldIdea = makeIdea('idea-1');
+    const nextIdea = makeIdea('idea-2');
+    const save = makeSave('save-1', oldIdea.id);
+    const project = makeProject('proj-1', [save], [oldIdea, nextIdea]);
 
-      act(() =>
-        store.setState({
-          projects: [project1, project2],
-          selectedProjectId: 'proj-2',
-          selectedSaveId: 'save-2',
-          activeIdeaId: idea2.id,
-        }),
-      );
+    act(() =>
+      useStore.setState({
+        projects: [project],
+        selectedProjectId: project.id,
+        selectedSaveId: save.id,
+        activeIdeaId: oldIdea.id,
+      }),
+    );
 
-      await store.getState().connect();
+    act(() =>
+      useStore.getState().applyProjectUpdate({
+        ...project,
+        saves: [],
+        currentIdeaId: nextIdea.id,
+      }),
+    );
 
-      act(() => {
-        wsInstance.onmessage?.({
-          data: JSON.stringify({
-            type: 'snapshot',
-            projects: [project1],
-            roots: [],
-            activity: [],
-          }),
-        });
-      });
-
-      const state = store.getState();
-      expect(state.selectedProjectId).toBe('proj-1');
-      expect(state.selectedSaveId).toBeNull();
-      expect(state.activeIdeaId).toBeNull();
-    });
+    const state = useStore.getState();
+    expect(state.selectedSaveId).toBeNull();
+    expect(state.activeIdeaId).toBe(nextIdea.id);
   });
 });

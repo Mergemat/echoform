@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { ExpandedCard } from '@/components/expanded-card';
-import { useStore } from '@/lib/store';
+import { usePreviewStore } from '@/lib/preview-store';
 import type { Idea, Save } from '@/lib/types';
 
 vi.mock('sonner', () => ({
@@ -14,6 +14,10 @@ vi.mock('@/components/smart-restore-dialog', () => ({
 
 vi.mock('@/components/preview-request-dialog', () => ({
   PreviewRequestDialog: () => null,
+}));
+
+vi.mock('@/lib/daemon-client', () => ({
+  sendDaemonCommand: vi.fn(),
 }));
 
 function makeIdea(): Idea {
@@ -59,9 +63,13 @@ describe('ExpandedCard preview actions', () => {
 
   beforeEach(() => {
     openPreviewPlayer.mockReset();
-    useStore.setState({
-      send: vi.fn(),
+    usePreviewStore.setState({
+      previewPlayerSaveId: null,
+      previewSidebarOpen: false,
       openPreviewPlayer,
+      closePreviewPlayer: vi.fn(),
+      togglePreviewSidebar: vi.fn(),
+      reconcilePreviewPlayer: vi.fn(),
     });
   });
 
@@ -76,9 +84,7 @@ describe('ExpandedCard preview actions', () => {
       />,
     );
 
-    expect(
-      view.getByRole('button', { name: 'Add preview' }),
-    ).toBeInTheDocument();
+    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(1);
   });
 
   it('shows Add preview when preview is pending (no waiting state)', () => {
@@ -92,9 +98,7 @@ describe('ExpandedCard preview actions', () => {
       />,
     );
 
-    expect(
-      view.getByRole('button', { name: 'Add preview' }),
-    ).toBeInTheDocument();
+    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(2);
   });
 
   it('opens the preview player when the preview is ready', () => {

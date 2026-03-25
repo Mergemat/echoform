@@ -1,104 +1,33 @@
-import { useEffect } from 'react';
 import { useStore } from '@/lib/store';
+import { useConnectionStore } from '@/lib/connection-store';
+import { usePreviewStore } from '@/lib/preview-store';
 import { AppSidebar } from '@/components/sidebar';
 import { Timeline } from '@/components/timeline';
 import { ProjectHeader } from '@/components/project-header';
 import { PreviewPlayer } from '@/components/preview-player';
 import { PreviewSidebar } from '@/components/preview-sidebar';
 import { Toaster } from '@/components/ui/sonner';
-import { toast } from 'sonner';
-import { useState, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import type { PreviewStatus } from '@/lib/types';
-
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 400;
-const DEFAULT_WIDTH = 260;
-const STORAGE_KEY = 'ablegit:sidebar-width';
-const MOBILE_BREAKPOINT = 768;
-
-function readStoredWidth(): number {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v) {
-      const n = Number(v);
-      if (n >= MIN_WIDTH && n <= MAX_WIDTH) return n;
-    }
-  } catch {
-    // Ignore storage access errors and fall back to the default width.
-  }
-  return DEFAULT_WIDTH;
-}
-
-function readIsMobile(): boolean {
-  return window.innerWidth < MOBILE_BREAKPOINT;
-}
+import { useDaemonSync } from '@/hooks/use-daemon-sync';
+import { usePreviewStatusToasts } from '@/hooks/use-preview-status-toasts';
+import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
 
 export function App() {
-  const connect = useStore((s) => s.connect);
-  const connected = useStore((s) => s.connected);
+  useDaemonSync();
+
+  const connected = useConnectionStore((s) => s.connected);
   const selectedProject = useStore((s) => s.selectedProject());
   const projects = useStore((s) => s.projects);
-  const previewPlayerSaveId = useStore((s) => s.previewPlayerSaveId);
-  const closePreviewPlayer = useStore((s) => s.closePreviewPlayer);
-  const previewSidebarOpen = useStore((s) => s.previewSidebarOpen);
-  const [sidebarWidth, setSidebarWidth] = useState(readStoredWidth);
-  const [isMobile, setIsMobile] = useState(readIsMobile);
-  const dragging = useRef(false);
-  const prevPreviewStatuses = useRef<Map<string, PreviewStatus>>(new Map());
+  const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
+  const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
+  const previewSidebarOpen = usePreviewStore((s) => s.previewSidebarOpen);
+  const { isMobile, onDragEnd, onDragMove, onDragStart, sidebarWidth } =
+    useSidebarLayout();
   const previewSave =
     selectedProject?.saves.find((save) => save.id === previewPlayerSaveId) ??
     null;
 
-  useEffect(() => {
-    connect();
-  }, [connect]);
-
-  // Detect preview status transitions: pending → ready → toast
-  useEffect(() => {
-    const prev = prevPreviewStatuses.current;
-    const next = new Map<string, PreviewStatus>();
-
-    for (const project of projects) {
-      for (const save of project.saves) {
-        next.set(save.id, save.previewStatus);
-        const was = prev.get(save.id);
-        if (was === 'pending' && save.previewStatus === 'ready') {
-          toast.success(`Preview attached to "${save.label}"`);
-        }
-      }
-    }
-
-    prevPreviewStatuses.current = next;
-  }, [projects]);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(readIsMobile());
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const onDragStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, []);
-
-  const onDragMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX));
-    setSidebarWidth(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, String(next));
-    } catch {
-      // Ignore storage access errors during drag resize.
-    }
-  }, []);
-
-  const onDragEnd = useCallback(() => {
-    dragging.current = false;
-  }, []);
+  usePreviewStatusToasts(projects);
 
   return (
     <div

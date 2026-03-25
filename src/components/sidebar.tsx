@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
+import { useConnectionStore } from '@/lib/connection-store';
+import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
 import type { ActivityItem, Project } from '@/lib/types';
 import {
@@ -93,12 +96,13 @@ export function ProjectItem({
   selected: boolean;
 }) {
   const selectProject = useStore((state) => state.selectProject);
-  const send = useStore((state) => state.send);
+  const closePreviewPlayer = usePreviewStore((state) => state.closePreviewPlayer);
   const health = projectHealth(project);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
+    closePreviewPlayer();
     selectProject(project.id);
   };
 
@@ -106,7 +110,10 @@ export function ProjectItem({
     <button
       type="button"
       tabIndex={0}
-      onClick={() => selectProject(project.id)}
+      onClick={() => {
+        closePreviewPlayer();
+        selectProject(project.id);
+      }}
       onKeyDown={handleKeyDown}
       className={cn(
         'group w-full cursor-pointer select-none rounded-lg px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20',
@@ -143,7 +150,7 @@ export function ProjectItem({
               size="icon-sm"
               onClick={(event) => {
                 event.stopPropagation();
-                send({
+                sendDaemonCommand({
                   type: 'toggle-watching',
                   projectId: project.id,
                   watching: !project.watching,
@@ -182,7 +189,7 @@ export function AppSidebar() {
   const projects = useStore((state) => state.projects);
   const activity = useStore((state) => state.activity);
   const selectedProjectId = useStore((state) => state.selectedProjectId);
-  const connected = useStore((state) => state.connected);
+  const connected = useConnectionStore((state) => state.connected);
   const [managerOpen, setManagerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 

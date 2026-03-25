@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
+import { usePreviewStore } from '@/lib/preview-store';
 import {
   Command,
   CommandDialog,
@@ -34,19 +36,19 @@ export function ProjectSearchCommand({
   const projects = useStore((s) => s.projects);
   const discoveredProjects = useStore((s) => s.discoveredProjects);
   const selectProject = useStore((s) => s.selectProject);
-  const send = useStore((s) => s.send);
+  const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
   const [hasTriggeredDiscover, setHasTriggeredDiscover] = useState(false);
 
   // Trigger discover scan when dialog opens (once per open)
   useEffect(() => {
     if (open && !hasTriggeredDiscover) {
-      send({ type: 'discover-projects' });
+      sendDaemonCommand({ type: 'discover-projects' });
       setHasTriggeredDiscover(true);
     }
     if (!open) {
       setHasTriggeredDiscover(false);
     }
-  }, [open, hasTriggeredDiscover, send]);
+  }, [open, hasTriggeredDiscover]);
 
   // Sort tracked projects by updatedAt descending (most recently modified first)
   const sorted = [...projects].sort(
@@ -56,12 +58,13 @@ export function ProjectSearchCommand({
   const untracked = discoveredProjects.filter((dp) => !dp.tracked);
 
   function handleSelect(id: string) {
+    closePreviewPlayer();
     selectProject(id);
     onOpenChange(false);
   }
 
   function handleTrack(path: string, name: string) {
-    send({ type: 'track-project', projectPath: path, name });
+    sendDaemonCommand({ type: 'track-project', projectPath: path, name });
     onOpenChange(false);
   }
 

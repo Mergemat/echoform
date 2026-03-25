@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -50,14 +51,13 @@ export function RootManagerDialog({
   const roots = useStore((state) => state.roots);
   const rootSuggestions = useStore((state) => state.rootSuggestions);
   const projects = useStore((state) => state.projects);
-  const send = useStore((state) => state.send);
   const [path, setPath] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    send({ type: 'sync-roots' });
-    send({ type: 'discover-root-suggestions' });
-  }, [open, send]);
+    sendDaemonCommand({ type: 'sync-roots' });
+    sendDaemonCommand({ type: 'discover-root-suggestions' });
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,7 +85,7 @@ export function RootManagerDialog({
                   variant="ghost"
                   size="sm"
                   className="rounded-lg text-[11px]"
-                  onClick={() => send({ type: 'sync-roots' })}
+                  onClick={() => sendDaemonCommand({ type: 'sync-roots' })}
                 >
                   <ArrowsClockwise size={14} />
                   Sync now
@@ -105,7 +105,7 @@ export function RootManagerDialog({
                   onClick={() => {
                     const nextPath = path.trim();
                     if (!nextPath) return;
-                    send({ type: 'add-root', path: nextPath });
+                    sendDaemonCommand({ type: 'add-root', path: nextPath });
                     setPath('');
                   }}
                 >
@@ -150,7 +150,10 @@ export function RootManagerDialog({
                         variant="secondary"
                         className="rounded-lg text-[11px]"
                         onClick={() =>
-                          send({ type: 'add-root', path: suggestion.path })
+                          sendDaemonCommand({
+                            type: 'add-root',
+                            path: suggestion.path,
+                          })
                         }
                       >
                         <FolderSimple size={14} />
@@ -216,7 +219,10 @@ export function RootManagerDialog({
                         size="icon-sm"
                         className="rounded-md"
                         onClick={() =>
-                          send({ type: 'remove-root', rootId: root.id })
+                          sendDaemonCommand({
+                            type: 'remove-root',
+                            rootId: root.id,
+                          })
                         }
                         aria-label={`Remove ${root.name}`}
                       >

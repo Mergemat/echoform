@@ -8,6 +8,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { ProjectItem } from '@/components/sidebar';
+import { useConnectionStore } from '@/lib/connection-store';
 import { useStore } from '@/lib/store';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -88,11 +89,9 @@ describe('ProjectItem keyboard support', () => {
       activity: [],
       rootSuggestions: [],
       compare: null,
-      previewPlayerSaveId: null,
-      connected: false,
-      ws: null,
       discoveredProjects: [],
     });
+    useConnectionStore.setState({ connected: false });
   });
 
   it('selects a project when Space is pressed on its row', () => {

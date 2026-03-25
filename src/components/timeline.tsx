@@ -1,4 +1,5 @@
 import { useStore } from '@/lib/store';
+import { sendDaemonCommand } from '@/lib/daemon-client';
 import { useRef, useState, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
@@ -24,7 +25,6 @@ export function Timeline() {
   const selectedSaveId = useStore((s) => s.selectedSaveId);
   const activeIdeaId = useStore((s) => s.activeIdeaId);
   const collapsedBranches = useStore((s) => s.collapsedBranches);
-  const send = useStore((s) => s.send);
   const toggleSave = useStore((s) => s.toggleSave);
   const setActiveIdea = useStore((s) => s.setActiveIdea);
   const toggleBranchCollapse = useStore((s) => s.toggleBranchCollapse);
@@ -106,9 +106,9 @@ export function Timeline() {
     (ideaId: string) => {
       setActiveIdea(ideaId);
       if (!project) return;
-      send({ type: 'open-idea', projectId: project.id, ideaId });
+      sendDaemonCommand({ type: 'open-idea', projectId: project.id, ideaId });
     },
-    [project, send, setActiveIdea],
+    [project, setActiveIdea],
   );
 
   if (!project) {
@@ -187,7 +187,7 @@ export function Timeline() {
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  send({
+                  sendDaemonCommand({
                     type: 'open-idea',
                     projectId: project.id,
                     ideaId: project.pendingOpen!.ideaId,
@@ -200,7 +200,7 @@ export function Timeline() {
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  send({
+                  sendDaemonCommand({
                     type: 'reveal-idea-file',
                     projectId: project.id,
                     ideaId: project.pendingOpen!.ideaId,
@@ -228,7 +228,10 @@ export function Timeline() {
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    send({ type: 'adopt-drift-file', projectId: project.id })
+                    sendDaemonCommand({
+                      type: 'adopt-drift-file',
+                      projectId: project.id,
+                    })
                   }
                 >
                   Adopt File
@@ -238,7 +241,7 @@ export function Timeline() {
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  send({
+                  sendDaemonCommand({
                     type: 'open-idea',
                     projectId: project.id,
                     ideaId: project.currentIdeaId,
