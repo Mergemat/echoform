@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
 import {
   Popover,
   PopoverContent,
@@ -36,54 +35,114 @@ async function pruneSaves(
 
 // ── Sub-components ───────────────────────────────────────────────────
 
-function StatBox({ label, value }: { label: string; value: string | number }) {
+/** SVG arc ring showing dedup efficiency. */
+function UsageRing({
+  usedBytes,
+  totalBytes,
+}: {
+  usedBytes: number;
+  totalBytes: number;
+}) {
+  const size = 52;
+  const stroke = 3.5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const ratio = totalBytes > 0 ? Math.min(usedBytes / totalBytes, 1) : 0;
+  const offset = circumference * (1 - ratio);
+
   return (
-    <div className="bg-white/[0.03] rounded-lg px-2.5 py-2 border border-white/[0.06] min-w-0">
-      <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium mb-0.5">
-        {label}
-      </div>
-      <div className="text-[13px] font-medium text-white/75 tabular-nums truncate">
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0 -rotate-90"
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        className="text-white/[0.06]"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="text-white/40 transition-all duration-500"
+      />
+    </svg>
+  );
+}
+
+function StatRow({
+  label,
+  value,
+  dim,
+}: {
+  label: string;
+  value: string | number;
+  dim?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between">
+      <span className="text-[11px] text-white/35">{label}</span>
+      <span
+        className={cn(
+          'text-[11px] font-mono tabular-nums',
+          dim ? 'text-white/30' : 'text-white/60',
+        )}
+      >
         {value}
-      </div>
+      </span>
     </div>
   );
 }
 
 /** Horizontal bar chart showing per-save snapshot sizes. */
-function SaveSizeBar({ saves }: { saves: DiskUsageSave[] }) {
+function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
   if (saves.length === 0) return null;
   const maxBytes = Math.max(...saves.map((s) => s.snapshotBytes), 1);
 
   return (
-    <div className="space-y-px">
+    <div className="space-y-[3px]">
       {saves.map((s) => {
         const pct = (s.snapshotBytes / maxBytes) * 100;
         return (
           <div
             key={s.id}
-            className="flex items-center gap-2 group py-0.5"
+            className="group flex items-center gap-2"
             title={`${s.label} — ${formatSize(s.snapshotBytes)} @ ${formatDateTime(s.createdAt)}`}
           >
-            <div className="w-[6px] shrink-0">
+            <span
+              className={cn(
+                'text-[9px] w-[52px] truncate shrink-0 transition-colors',
+                s.auto
+                  ? 'text-white/20 group-hover:text-white/35'
+                  : 'text-white/35 group-hover:text-white/50',
+              )}
+            >
+              {s.label}
+            </span>
+            <div className="flex-1 h-[5px] bg-white/[0.04] rounded-full overflow-hidden">
               <div
                 className={cn(
-                  'size-[5px] rounded-full',
+                  'h-full rounded-full transition-all duration-300',
                   s.auto ? 'bg-white/15' : 'bg-white/35',
                 )}
+                style={{ width: `${Math.max(pct, 2)}%` }}
               />
             </div>
-            <div className="flex-1 h-[4px] bg-white/[0.04] rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all',
-                  s.auto ? 'bg-white/20' : 'bg-white/40',
-                )}
-                style={{ width: `${Math.max(pct, 1)}%` }}
-              />
-            </div>
-            <div className="text-[9px] font-mono text-white/25 w-[42px] text-right shrink-0 tabular-nums group-hover:text-white/40 transition-colors">
+            <span className="text-[9px] font-mono text-white/20 w-[38px] text-right shrink-0 tabular-nums group-hover:text-white/40 transition-colors">
               {formatSize(s.snapshotBytes)}
-            </div>
+            </span>
           </div>
         );
       })}
@@ -94,10 +153,10 @@ function SaveSizeBar({ saves }: { saves: DiskUsageSave[] }) {
 // ── Main panel ───────────────────────────────────────────────────────
 
 const PRUNE_OPTIONS = [
-  { label: '7 days', days: 7 },
-  { label: '14 days', days: 14 },
-  { label: '30 days', days: 30 },
-  { label: '90 days', days: 90 },
+  { label: '7d', days: 7 },
+  { label: '14d', days: 14 },
+  { label: '30d', days: 30 },
+  { label: '90d', days: 90 },
 ];
 
 export function DiskUsagePanel({ projectId }: { projectId: string }) {
@@ -134,8 +193,8 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
       const deleted = await pruneSaves(projectId, days);
       setPruneMsg(
         deleted === 0
-          ? `No auto-saves older than ${days} days found.`
-          : `Deleted ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
+          ? `No auto-saves older than ${days}d.`
+          : `Pruned ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
       );
       const fresh = await fetchDiskUsage(projectId);
       setUsage(fresh);
@@ -145,6 +204,11 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
       setPruning(false);
     }
   };
+
+  const dedupPct =
+    usage && usage.totalSnapshotBytes > 0
+      ? Math.round((usage.dedupSavings / usage.totalSnapshotBytes) * 100)
+      : 0;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -160,96 +224,124 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
 
       <PopoverContent
         align="end"
-        className="w-[340px] p-0 bg-[#111114] border-white/[0.08] rounded-xl"
+        className="w-[320px] p-0 bg-[#111114] border-white/[0.08] rounded-xl overflow-hidden"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-          <span className="text-[12px] font-medium text-white/75">Storage</span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setOpen(false)}
-            className="text-white/25 hover:text-white/50 size-5 rounded-full"
-          >
-            ✕
-          </Button>
-        </div>
-
         <div className="p-4 space-y-4">
           {loading && !usage && (
-            <div className="space-y-1.5">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-8 w-2/3 rounded-lg" />
             </div>
           )}
-          {error && <div className="text-[11px] text-red-400/70">{error}</div>}
+          {error && (
+            <div className="text-[11px] text-red-400/70 bg-red-400/[0.06] rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
 
           {usage && (
             <>
-              {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-1.5">
-                <StatBox
-                  label="On disk"
-                  value={formatSize(usage.blobStorageBytes)}
+              {/* Hero: ring + primary stat */}
+              <div className="flex items-center gap-4">
+                <UsageRing
+                  usedBytes={usage.blobStorageBytes}
+                  totalBytes={usage.totalSnapshotBytes}
                 />
-                <StatBox label="Saves" value={usage.totalSaveCount} />
-                <StatBox
-                  label="Dedup saved"
-                  value={formatSize(usage.dedupSavings)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5">
-                <StatBox label="Auto-saves" value={usage.autoSaveCount} />
-                <StatBox label="Manual saves" value={usage.manualSaveCount} />
-              </div>
-
-              {/* Per-save bar chart */}
-              {usage.saves.length > 0 && (
                 <div>
-                  <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium mb-2">
-                    Per-save snapshot size
+                  <div className="text-[20px] font-semibold text-white/85 tabular-nums leading-tight tracking-tight">
+                    {formatSize(usage.blobStorageBytes)}
                   </div>
-                  <SaveSizeBar saves={usage.saves} />
+                  <div className="text-[10px] text-white/30 mt-0.5">
+                    on disk
+                    {dedupPct > 0 && (
+                      <span className="text-white/20">
+                        {' '}
+                        &middot; {dedupPct}% saved by dedup
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="space-y-1.5 pt-1">
+                <StatRow label="Total saves" value={usage.totalSaveCount} />
+                <StatRow
+                  label="Auto / manual"
+                  value={`${usage.autoSaveCount} / ${usage.manualSaveCount}`}
+                  dim
+                />
+                <StatRow
+                  label="Dedup savings"
+                  value={formatSize(usage.dedupSavings)}
+                  dim
+                />
+              </div>
+
+              {/* Per-save chart */}
+              {usage.saves.length > 0 && (
+                <div className="pt-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-[9px] uppercase tracking-wider text-white/25 font-medium">
+                      Saves
+                    </span>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <span className="flex items-center gap-1 text-[9px] text-white/20">
+                        <span className="inline-block size-1.5 rounded-full bg-white/35" />
+                        manual
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-white/20">
+                        <span className="inline-block size-1.5 rounded-full bg-white/15" />
+                        auto
+                      </span>
+                    </div>
+                  </div>
+                  <SaveSizeChart saves={usage.saves} />
                 </div>
               )}
 
-              {/* Prune section */}
-              <Separator className="bg-white/[0.06]" />
-              <div className="space-y-2.5">
-                <div className="text-[9px] uppercase tracking-wider text-white/25 font-medium">
-                  Prune auto-saves older than
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRUNE_OPTIONS.map((opt) => (
-                    <Button
-                      key={opt.days}
-                      variant="ghost"
-                      size="sm"
-                      disabled={pruning || usage.autoSaveCount === 0}
-                      onClick={() => handlePrune(opt.days)}
-                      className="rounded-lg text-[11px]"
-                    >
-                      {opt.label}
-                    </Button>
-                  ))}
+              {/* Prune */}
+              <div className="pt-1 border-t border-white/[0.06]">
+                <div className="flex items-center justify-between pt-3">
+                  <span className="text-[10px] text-white/30">
+                    Prune auto-saves older than
+                  </span>
+                  <div className="flex gap-1">
+                    {PRUNE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.days}
+                        type="button"
+                        disabled={pruning || usage.autoSaveCount === 0}
+                        onClick={() => handlePrune(opt.days)}
+                        className={cn(
+                          'text-[10px] px-2 py-0.5 rounded-md transition-colors',
+                          'text-white/30 hover:text-white/60 hover:bg-white/[0.06]',
+                          'disabled:opacity-30 disabled:pointer-events-none',
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {pruneMsg && (
-                  <div className="text-[10px] text-white/45">{pruneMsg}</div>
+                  <div className="text-[10px] text-white/40 mt-1.5">
+                    {pruneMsg}
+                  </div>
                 )}
-                <div className="text-[9px] text-white/25 leading-relaxed">
-                  Head saves and idea base saves are never pruned.
+                <div className="text-[9px] text-white/15 mt-2">
+                  Head and idea-base saves are never pruned.
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
+              {/* Refresh */}
+              <button
+                type="button"
                 onClick={load}
-                className="text-[10px] text-white/25 hover:text-white/45 px-0 h-auto"
+                className="text-[10px] text-white/20 hover:text-white/40 transition-colors"
               >
                 Refresh
-              </Button>
+              </button>
             </>
           )}
         </div>
