@@ -676,6 +676,27 @@ Bun.serve({
       }
     }
 
+    // REST: compact auto-saves using retention buckets
+    // POST /api/projects/:id/compact-storage
+    if (
+      url.pathname.match(/^\/api\/projects\/[^/]+\/compact-storage$/) &&
+      req.method === 'POST'
+    ) {
+      const parts = url.pathname.split('/');
+      const projectId = parts[3]!;
+      try {
+        const { project, deletedCount } = await service.compactStorage(
+          projectId,
+        );
+        await broadcastSnapshot();
+        return jsonResponse(req, { project, deletedCount });
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
     // REST: media proxy
     if (url.pathname === '/api/media') {
       const p = url.searchParams.get('path');

@@ -33,6 +33,15 @@ async function pruneSaves(
   return data.deletedCount as number;
 }
 
+async function compactStorage(projectId: string): Promise<number> {
+  const res = await fetch(`/api/projects/${projectId}/compact-storage`, {
+    method: 'POST',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? 'Compaction failed');
+  return data.deletedCount as number;
+}
+
 // ── Sub-components ───────────────────────────────────────────────────
 
 /** SVG arc ring showing dedup efficiency. */
@@ -163,8 +172,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
   const [usage, setUsage] = useState<DiskUsage | null>(null);
   const [loading, setLoading] = useState(false);
   const [pruning, setPruning] = useState(false);
+  const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pruneMsg, setPruneMsg] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -183,15 +193,15 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (next && !usage) load();
-    if (!next) setPruneMsg(null);
+    if (!next) setActionMsg(null);
   };
 
   const handlePrune = async (days: number) => {
     setPruning(true);
-    setPruneMsg(null);
+    setActionMsg(null);
     try {
       const deleted = await pruneSaves(projectId, days);
-      setPruneMsg(
+      setActionMsg(
         deleted === 0
           ? `No auto-saves older than ${days}d.`
           : `Pruned ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
@@ -199,9 +209,28 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
       const fresh = await fetchDiskUsage(projectId);
       setUsage(fresh);
     } catch (err) {
-      setPruneMsg(err instanceof Error ? err.message : 'Prune failed');
+      setActionMsg(err instanceof Error ? err.message : 'Prune failed');
     } finally {
       setPruning(false);
+    }
+  };
+
+  const handleCompact = async () => {
+    setCompacting(true);
+    setActionMsg(null);
+    try {
+      const deleted = await compactStorage(projectId);
+      setActionMsg(
+        deleted === 0
+          ? 'No auto-saves were eligible for compaction.'
+          : `Compacted ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
+      );
+      const fresh = await fetchDiskUsage(projectId);
+      setUsage(fresh);
+    } catch (err) {
+      setActionMsg(err instanceof Error ? err.message : 'Compaction failed');
+    } finally {
+      setCompacting(false);
     }
   };
 
@@ -267,13 +296,35 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               <div className="space-y-1.5 pt-1">
                 <StatRow label="Total saves" value={usage.totalSaveCount} />
                 <StatRow
-                  label="Auto / manual"
-                  value={`${usage.autoSaveCount} / ${usage.manualSaveCount}`}
-                  dim
+                  label="Auto-saves"
+                  value={usage.autoSaveCount}
+                />
+                <StatRow
+                  label="Manual saves"
+                  value={usage.manualSaveCount}
                 />
                 <StatRow
                   label="Dedup savings"
                   value={formatSize(usage.dedupSavings)}
+                  dim
+                />
+                <StatRow
+                  label="Compactable"
+                  value={usage.eligibleAutoSaveCount}
+                  dim
+                />
+                <StatRow
+                  label="Largest auto-save"
+                  value={formatSize(usage.largestAutoSaveBytes)}
+                  dim
+                />
+                <StatRow
+                  label="Oldest auto-save"
+                  value={
+                    usage.oldestAutoSaveAt
+                      ? formatDateTime(usage.oldestAutoSaveAt)
+                      : '-'
+                  }
                   dim
                 />
               </div>
@@ -300,8 +351,32 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                 </div>
               )}
 
-              {/* Prune */}
+              {/* Compact + Prune */}
               <div className="pt-1 border-t border-white/[0.06]">
+                <div className="flex items-center justify-between pt-3">
+                  <span className="text-[10px] text-white/30">
+                    Retention compaction
+                  </span>
+                  <button
+                    type="button"
+                    disabled={
+                      compacting ||
+                      pruning ||
+                      usage.eligibleAutoSaveCount === 0
+                    }
+                    onClick={handleCompact}
+                    className={cn(
+                      'text-[10px] px-2 py-0.5 rounded-md transition-colors',
+                      'text-white/30 hover:text-white/60 hover:bg-white/[0.06]',
+                      'disabled:opacity-30 disabled:pointer-events-none',
+                    )}
+                  >
+                    {compacting ? 'Compacting...' : 'Compact auto-saves'}
+                  </button>
+                </div>
+                <div className="text-[9px] text-white/15 mt-1.5">
+                  Keeps all last-24h auto-saves, then one per hour/day/week.
+                </div>
                 <div className="flex items-center justify-between pt-3">
                   <span className="text-[10px] text-white/30">
                     Prune auto-saves older than
@@ -311,7 +386,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                       <button
                         key={opt.days}
                         type="button"
-                        disabled={pruning || usage.autoSaveCount === 0}
+                        disabled={
+                          pruning || compacting || usage.autoSaveCount === 0
+                        }
                         onClick={() => handlePrune(opt.days)}
                         className={cn(
                           'text-[10px] px-2 py-0.5 rounded-md transition-colors',
@@ -324,9 +401,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                     ))}
                   </div>
                 </div>
-                {pruneMsg && (
+                {actionMsg && (
                   <div className="text-[10px] text-white/40 mt-1.5">
-                    {pruneMsg}
+                    {actionMsg}
                   </div>
                 )}
                 <div className="text-[9px] text-white/15 mt-2">

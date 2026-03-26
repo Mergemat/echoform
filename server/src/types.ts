@@ -247,6 +247,9 @@ export type DiskUsage = {
   /** Sum of all saves' metadata.sizeBytes — inflated vs blobStorageBytes due to dedup */
   totalSnapshotBytes: number;
   dedupSavings: number; // totalSnapshotBytes - blobStorageBytes
+  eligibleAutoSaveCount: number;
+  oldestAutoSaveAt: string | null;
+  largestAutoSaveBytes: number;
   saves: DiskUsageSave[];
 };
 

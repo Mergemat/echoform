@@ -352,6 +352,118 @@ describe('AblegitService file-bound branches', () => {
     expect(typeof sampleEntry?.mtimeMs).toBe('number');
   });
 
+  test('autosave ignores unchanged .als content when only mtime changes', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    const first = await svc.createSave(tracked.id, { label: 'Original' });
+    expect(first.save).not.toBeNull();
+
+    await Bun.sleep(5);
+    await writeFile(join(projectDir, 'song.als'), 'version-1');
+
+    const changed = await svc.handleWatchedAlsChange(
+      tracked.id,
+      join(projectDir, 'song.als'),
+    );
+
+    expect(changed.save).toBeNull();
+
+    const state = await svc.loadState();
+    expect(state.projects[0]?.saves).toHaveLength(1);
+  });
+
+  test('tracking and saving ignore Ableton Backup directories', async () => {
+    await mkdir(join(projectDir, 'Backup'), { recursive: true });
+    await Bun.write(join(projectDir, 'Backup', 'backup.als'), 'backup-version');
+    await Bun.write(join(projectDir, 'Backup', 'take.wav'), 'backup-audio');
+
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    expect(tracked.ideas).toHaveLength(1);
+    expect(tracked.ideas[0]?.setPath).toBe('song.als');
+
+    const created = await svc.createSave(tracked.id, { label: 'Original' });
+    expect(created.save).not.toBeNull();
+    expect(created.save?.metadata.fileCount).toBe(1);
+    expect(created.save?.metadata.sizeBytes).toBe('version-1'.length);
+
+    const manifest = JSON.parse(
+      await readFile(
+        join(projectDir, '.ablegit-state', 'manifests', `${created.save!.id}.json`),
+        'utf8',
+      ),
+    ) as { files: Array<{ relativePath: string }> };
+
+    expect(
+      manifest.files.some((entry) => entry.relativePath.startsWith('Backup/')),
+    ).toBe(false);
+  });
+
+  test('compactStorage keeps protected/manual saves and removes redundant auto-saves', async () => {
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+
+    const baseAuto = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'version-2');
+    const dayAutoA = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'version-3');
+    const dayAutoB = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'version-4');
+    const weekAutoA = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'version-5');
+    const weekAutoB = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'version-6');
+    const recentAuto = await svc.createSave(tracked.id, { auto: true });
+    await writeFile(join(projectDir, 'song.als'), 'manual-version');
+    const manual = await svc.createSave(tracked.id, { label: 'Manual keep' });
+
+    const state = await svc.loadState();
+    const project = state.projects[0]!;
+    const now = Date.now();
+    const isoDaysAgo = (days: number, hour = 0, minute = 0) => {
+      const date = new Date(now - days * 24 * 60 * 60 * 1000);
+      date.setUTCHours(hour, minute, 0, 0);
+      return date.toISOString();
+    };
+    const createdAtById = new Map<string, string>([
+      [baseAuto.save!.id, isoDaysAgo(90, 0, 0)],
+      [dayAutoA.save!.id, isoDaysAgo(10, 8, 10)],
+      [dayAutoB.save!.id, isoDaysAgo(10, 9, 20)],
+      [weekAutoA.save!.id, isoDaysAgo(45, 8, 10)],
+      [weekAutoB.save!.id, isoDaysAgo(44, 8, 10)],
+      [recentAuto.save!.id, isoDaysAgo(1, 12, 0)],
+      [manual.save!.id, new Date(now).toISOString()],
+    ]);
+
+    for (const save of project.saves) {
+      const createdAt = createdAtById.get(save.id);
+      if (createdAt) save.createdAt = createdAt;
+    }
+    project.updatedAt = new Date(now).toISOString();
+    await Bun.write(join(stateDir, 'state.json'), JSON.stringify(state, null, 2));
+
+    const usageBefore = await svc.getDiskUsage(tracked.id);
+    expect(usageBefore.eligibleAutoSaveCount).toBe(2);
+
+    const compacted = await svc.compactStorage(tracked.id);
+    expect(compacted.deletedCount).toBe(2);
+
+    const compactedState = await svc.loadState();
+    const remainingIds = new Set(compactedState.projects[0]!.saves.map((save) => save.id));
+
+    expect(remainingIds.has(baseAuto.save!.id)).toBe(true);
+    expect(remainingIds.has(dayAutoB.save!.id)).toBe(true);
+    expect(remainingIds.has(weekAutoB.save!.id)).toBe(true);
+    expect(remainingIds.has(recentAuto.save!.id)).toBe(true);
+    expect(remainingIds.has(manual.save!.id)).toBe(true);
+    expect(remainingIds.has(dayAutoA.save!.id)).toBe(false);
+    expect(remainingIds.has(weekAutoA.save!.id)).toBe(false);
+
+    const usageAfter = await svc.getDiskUsage(tracked.id);
+    expect(usageAfter.eligibleAutoSaveCount).toBe(0);
+    expect(usageAfter.manualSaveCount).toBe(1);
+    expect(usageAfter.autoSaveCount).toBe(4);
+    expect(usageAfter.oldestAutoSaveAt).toBe(createdAtById.get(baseAuto.save!.id));
+    expect(usageAfter.largestAutoSaveBytes).toBeGreaterThan(0);
+  });
+
   test('requestPreview creates deterministic pending preview state', async () => {
     const tracked = await svc.trackProject({ projectPath: projectDir });
     const created = await svc.createSave(tracked.id, { label: 'Original' });
