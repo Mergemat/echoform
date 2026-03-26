@@ -72,12 +72,20 @@ const AUDIO_EXTENSIONS = new Set([
   '.wav',
 ]);
 
-type FileRecord = { relativePath: string; size: number; mtimeMs: number };
+type FileRecord = {
+  relativePath: string;
+  size: number;
+  mtimeMs: number;
+  contentHash?: string;
+};
 type ProjectSnapshot = { files: FileRecord[]; emptyDirs: string[] };
 const MAX_ACTIVITY_ITEMS = 80;
 const WALK_CONCURRENCY = 32;
+const ALS_HASH_CONCURRENCY = 4;
 const SAVE_SETTLE_RETRY_MS = 200;
 const SAVE_SETTLE_MAX_ATTEMPTS = 8;
+const AUTO_COMPACT_MAX_AUTO_SAVES = 100;
+const AUTO_COMPACT_MAX_BLOB_STORAGE_BYTES = 2 * 1024 * 1024 * 1024;
 const PREVIEW_FILE_BASENAME = 'preview';
 const PREVIEW_EXTENSIONS = ['.wav', '.aif', '.aiff', '.mp3', '.m4a'] as const;
 const PREVIEW_EXTENSION_SET = new Set<string>(PREVIEW_EXTENSIONS);
@@ -88,6 +96,14 @@ const PREVIEW_MIME_BY_EXTENSION: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.m4a': 'audio/mp4',
 };
+
+function isAlsPath(path: string): boolean {
+  return extname(path).toLowerCase() === '.als';
+}
+
+function isBackupRelativePath(path: string): boolean {
+  return path.startsWith('Backup/') || path.startsWith('Backup\\');
+}
 
 export class AppError extends Error {
   status: number;
@@ -333,7 +349,7 @@ async function walkProject(
     async (entry): Promise<ProjectSnapshot> => {
       const abs = join(currentPath, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === '.ablegit-state') {
+        if (entry.name === '.ablegit-state' || entry.name === 'Backup') {
           return { files: [], emptyDirs: [] };
         }
         const child = await walkProject(rootPath, abs);
@@ -370,13 +386,79 @@ async function walkProject(
   return { files, emptyDirs };
 }
 
+async function enrichAlsContentHashes(
+  rootPath: string,
+  snapshot: ProjectSnapshot,
+): Promise<ProjectSnapshot> {
+  const alsFiles = snapshot.files.filter((file) => isAlsPath(file.relativePath));
+  if (alsFiles.length === 0) return snapshot;
+
+  const contentHashes = new Map<string, string>();
+  const results = await mapWithConcurrency(
+    alsFiles,
+    ALS_HASH_CONCURRENCY,
+    async (file) => {
+      const content = await readFile(join(rootPath, file.relativePath));
+      return {
+        relativePath: file.relativePath,
+        contentHash: createHash('sha256').update(content).digest('hex'),
+      };
+    },
+  );
+
+  for (const result of results) {
+    contentHashes.set(result.relativePath, result.contentHash);
+  }
+
+  return {
+    emptyDirs: snapshot.emptyDirs,
+    files: snapshot.files.map((file) =>
+      contentHashes.has(file.relativePath)
+        ? {
+            ...file,
+            contentHash: contentHashes.get(file.relativePath),
+          }
+        : file,
+    ),
+  };
+}
+
 function hashFiles(files: FileRecord[]): string {
+  const h = createHash('sha256');
+  for (const f of files) {
+    h.update(`file:${f.relativePath}:${f.size}:`);
+    if (isAlsPath(f.relativePath) && f.contentHash) {
+      h.update(`content:${f.contentHash}`);
+    } else {
+      h.update(`mtime:${f.mtimeMs}`);
+    }
+    h.update('\n');
+  }
+  return h.digest('hex');
+}
+
+function hashProject(snapshot: ProjectSnapshot): string {
+  const h = createHash('sha256');
+  for (const f of snapshot.files) {
+    h.update(`file:${f.relativePath}:${f.size}:`);
+    if (isAlsPath(f.relativePath) && f.contentHash) {
+      h.update(`content:${f.contentHash}`);
+    } else {
+      h.update(`mtime:${f.mtimeMs}`);
+    }
+    h.update('\n');
+  }
+  for (const dir of snapshot.emptyDirs) h.update(`dir:${dir}\n`);
+  return h.digest('hex');
+}
+
+function hashFilesLegacy(files: FileRecord[]): string {
   const h = createHash('sha256');
   for (const f of files) h.update(`${f.relativePath}:${f.size}:${f.mtimeMs}\n`);
   return h.digest('hex');
 }
 
-function hashProject(snapshot: ProjectSnapshot): string {
+function hashProjectLegacy(snapshot: ProjectSnapshot): string {
   const h = createHash('sha256');
   for (const f of snapshot.files) {
     h.update(`file:${f.relativePath}:${f.size}:${f.mtimeMs}\n`);
@@ -391,7 +473,9 @@ function matchesProjectHash(
 ): boolean {
   return (
     hashProject(snapshot) === expectedHash ||
-    hashFiles(snapshot.files) === expectedHash
+    hashFiles(snapshot.files) === expectedHash ||
+    hashProjectLegacy(snapshot) === expectedHash ||
+    hashFilesLegacy(snapshot.files) === expectedHash
   );
 }
 
@@ -399,13 +483,9 @@ function metadataFromFiles(
   files: FileRecord[],
   preferred?: string,
 ): ProjectMetadata {
-  const isBackup = (p: string) =>
-    p.startsWith('Backup/') || p.startsWith('Backup\\');
   const setFiles = files
     .filter(
-      (f) =>
-        extname(f.relativePath).toLowerCase() === '.als' &&
-        !isBackup(f.relativePath),
+      (f) => isAlsPath(f.relativePath) && !isBackupRelativePath(f.relativePath),
     )
     .map((f) => f.relativePath)
     .sort();
@@ -439,7 +519,14 @@ function detectActiveSet(files: FileRecord[], setFiles: string[]): string {
 
 function manifestFileEntries(
   entries: ManifestEntry[],
-): Array<ManifestEntry & { blobHash: string; size: number; mtimeMs?: number }> {
+): Array<
+  ManifestEntry & {
+    blobHash: string;
+    size: number;
+    mtimeMs?: number;
+    contentHash?: string;
+  }
+> {
   return entries.filter(
     (
       entry,
@@ -447,6 +534,7 @@ function manifestFileEntries(
       blobHash: string;
       size: number;
       mtimeMs?: number;
+      contentHash?: string;
     } => entry.type !== 'dir',
   );
 }
@@ -455,7 +543,12 @@ function buildManifestFileIndex(
   entries: ManifestEntry[],
 ): Map<
   string,
-  ManifestEntry & { blobHash: string; size: number; mtimeMs?: number }
+  ManifestEntry & {
+    blobHash: string;
+    size: number;
+    mtimeMs?: number;
+    contentHash?: string;
+  }
 > {
   return new Map(
     manifestFileEntries(entries).map((entry) => [entry.relativePath, entry]),
@@ -477,9 +570,7 @@ function diffManifestEntries(
   const removedFiles: string[] = [];
   const modifiedFiles: string[] = [];
   const skip = (p: string) =>
-    extname(p).toLowerCase() === '.als' ||
-    p.startsWith('Backup/') ||
-    p.startsWith('Backup\\');
+    isAlsPath(p) || isBackupRelativePath(p);
   for (const [path, file] of currMap) {
     if (skip(path)) continue;
     const old = prevMap.get(path);
@@ -551,7 +642,8 @@ async function captureSettledSnapshot(
   expectedSetPaths: string[],
 ): Promise<{ snapshot: ProjectSnapshot; metadata: ProjectMetadata }> {
   for (let attempt = 0; attempt < SAVE_SETTLE_MAX_ATTEMPTS; attempt++) {
-    const snapshot = await walkProject(projectPath);
+    const walked = await walkProject(projectPath);
+    const snapshot = await enrichAlsContentHashes(projectPath, walked);
     const metadata = metadataFromFiles(snapshot.files, expectedSetPaths[0]);
 
     if (
@@ -570,6 +662,97 @@ async function captureSettledSnapshot(
     `Ableton save did not settle for ${expectedSetPaths[0] ?? 'the current set'}. Refusing to create a corrupted tab.`,
     409,
   );
+}
+
+async function getBlobStorageStats(projectPath: string): Promise<{
+  blobStorageBytes: number;
+  blobCount: number;
+}> {
+  const blobsDirPath = join(projectPath, '.ablegit-state', 'blobs');
+  let blobStorageBytes = 0;
+  let blobCount = 0;
+  try {
+    const entries = await readdir(blobsDirPath);
+    for (const name of entries) {
+      if (name.endsWith('.tmp')) continue;
+      const s = await stat(join(blobsDirPath, name)).catch(() => null);
+      if (!s) continue;
+      blobStorageBytes += s.size;
+      blobCount++;
+    }
+  } catch {
+    // blobs dir doesn't exist yet
+  }
+  return { blobStorageBytes, blobCount };
+}
+
+function compactRetentionBucketKey(
+  createdAt: string,
+  now: Date,
+): string | null {
+  const created = new Date(createdAt);
+  const ageMs = now.getTime() - created.getTime();
+  if (ageMs < 0) return `future:${createdAt}`;
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (ageMs <= dayMs) return null;
+  if (ageMs <= 7 * dayMs) {
+    const hour = created.toISOString().slice(0, 13);
+    return `hour:${hour}`;
+  }
+  if (ageMs <= 30 * dayMs) {
+    const day = created.toISOString().slice(0, 10);
+    return `day:${day}`;
+  }
+
+  const weekStart = new Date(created);
+  weekStart.setUTCHours(0, 0, 0, 0);
+  const day = weekStart.getUTCDay();
+  const delta = (day + 6) % 7;
+  weekStart.setUTCDate(weekStart.getUTCDate() - delta);
+  return `week:${weekStart.toISOString().slice(0, 10)}`;
+}
+
+function getProtectedSaveIds(project: Project): Set<string> {
+  return new Set([
+    ...project.ideas.map((idea) => idea.headSaveId),
+    ...project.ideas.map((idea) => idea.baseSaveId),
+    ...project.ideas
+      .map((idea) => idea.forkedFromSaveId)
+      .filter((id): id is string => Boolean(id)),
+  ]);
+}
+
+function computeAutoSavesToCompact(
+  project: Project,
+  now = new Date(),
+): Save[] {
+  const protectedIds = getProtectedSaveIds(project);
+  const autoSaves = project.saves
+    .filter((save) => save.auto)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const kept = new Set<string>();
+  const bucketKeepers = new Map<string, string>();
+
+  for (const save of autoSaves) {
+    if (protectedIds.has(save.id)) {
+      kept.add(save.id);
+      continue;
+    }
+
+    const bucket = compactRetentionBucketKey(save.createdAt, now);
+    if (bucket === null) {
+      kept.add(save.id);
+      continue;
+    }
+
+    if (!bucketKeepers.has(bucket)) {
+      bucketKeepers.set(bucket, save.id);
+      kept.add(save.id);
+    }
+  }
+
+  return autoSaves.filter((save) => !kept.has(save.id));
 }
 
 /** Attempt to compute the semantic .als diff between two .als blob paths.
@@ -993,6 +1176,39 @@ export class AblegitService {
       }
       throw err;
     }
+  }
+
+  private async compactProjectAutoSavesInState(
+    state: AppState,
+    project: Project,
+  ): Promise<number> {
+    const toDelete = computeAutoSavesToCompact(project);
+    if (toDelete.length === 0) return 0;
+
+    for (const save of toDelete) {
+      await this.clearManagedPreviewFiles(save.previewRefs);
+      await deleteManifest(project.projectPath, save.id);
+    }
+
+    const deleteIds = new Set(toDelete.map((save) => save.id));
+    project.saves = project.saves.filter((save) => !deleteIds.has(save.id));
+    project.updatedAt = new Date().toISOString();
+    await this.saveState(state);
+
+    await gcBlobs(
+      project.projectPath,
+      project.saves.map((save) => save.id),
+    );
+    return toDelete.length;
+  }
+
+  private async shouldCompactProjectAutoSaves(
+    project: Project,
+  ): Promise<boolean> {
+    const autoSaveCount = project.saves.filter((save) => save.auto).length;
+    if (autoSaveCount > AUTO_COMPACT_MAX_AUTO_SAVES) return true;
+    const { blobStorageBytes } = await getBlobStorageStats(project.projectPath);
+    return blobStorageBytes > AUTO_COMPACT_MAX_BLOB_STORAGE_BYTES;
   }
 
   /** Run a callback with exclusive state access. */
@@ -1615,13 +1831,16 @@ export class AblegitService {
       if (
         reusable &&
         reusable.size === file.size &&
-        reusable.mtimeMs === file.mtimeMs
+        (isAlsPath(file.relativePath)
+          ? reusable.contentHash === file.contentHash
+          : reusable.mtimeMs === file.mtimeMs)
       ) {
         entries.push({
           relativePath: file.relativePath,
           blobHash: reusable.blobHash,
           size: reusable.size,
           mtimeMs: file.mtimeMs,
+          contentHash: file.contentHash,
         });
         continue;
       }
@@ -1633,6 +1852,7 @@ export class AblegitService {
         blobHash: hash,
         size,
         mtimeMs: file.mtimeMs,
+        contentHash: file.contentHash,
       });
     }
     for (const relativePath of snapshot.emptyDirs) {
@@ -1714,6 +1934,11 @@ export class AblegitService {
       await deleteManifest(project.projectPath, saveId);
       throw err;
     }
+
+    if (save.auto && (await this.shouldCompactProjectAutoSaves(project))) {
+      await this.compactProjectAutoSavesInState(state, project);
+    }
+
     return { project, save };
   }
 
@@ -2291,24 +2516,9 @@ export class AblegitService {
   async getDiskUsage(projectId: string): Promise<DiskUsage> {
     const state = await this.loadState();
     const project = requireProject(state, projectId);
-
-    // Scan blobs directory for actual disk usage
-    const blobsDirPath = join(project.projectPath, '.ablegit-state', 'blobs');
-    let blobStorageBytes = 0;
-    let blobCount = 0;
-    try {
-      const entries = await readdir(blobsDirPath);
-      for (const name of entries) {
-        if (name.endsWith('.tmp')) continue;
-        const s = await stat(join(blobsDirPath, name)).catch(() => null);
-        if (s) {
-          blobStorageBytes += s.size;
-          blobCount++;
-        }
-      }
-    } catch {
-      // blobs dir doesn't exist yet
-    }
+    const { blobStorageBytes, blobCount } = await getBlobStorageStats(
+      project.projectPath,
+    );
 
     // Count manifests
     const manifestsDirPath = join(
@@ -2324,8 +2534,11 @@ export class AblegitService {
       // manifests dir doesn't exist yet
     }
 
-    const autoSaves = project.saves.filter((s) => s.auto);
+    const autoSaves = project.saves
+      .filter((s) => s.auto)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const manualSaves = project.saves.filter((s) => !s.auto);
+    const eligibleAutoSaves = computeAutoSavesToCompact(project);
     const totalSnapshotBytes = project.saves.reduce(
       (sum, s) => sum + s.metadata.sizeBytes,
       0,
@@ -2341,6 +2554,12 @@ export class AblegitService {
       manualSaveCount: manualSaves.length,
       totalSnapshotBytes,
       dedupSavings: Math.max(0, totalSnapshotBytes - blobStorageBytes),
+      eligibleAutoSaveCount: eligibleAutoSaves.length,
+      oldestAutoSaveAt: autoSaves[0]?.createdAt ?? null,
+      largestAutoSaveBytes: autoSaves.reduce(
+        (largest, save) => Math.max(largest, save.metadata.sizeBytes),
+        0,
+      ),
       saves: project.saves.map((s) => ({
         id: s.id,
         label: s.label,
@@ -2349,6 +2568,20 @@ export class AblegitService {
         auto: s.auto,
       })),
     };
+  }
+
+  async compactStorage(
+    projectId: string,
+  ): Promise<{ project: Project; deletedCount: number }> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const deletedCount = await this.compactProjectAutoSavesInState(
+        state,
+        project,
+      );
+      return { project, deletedCount };
+    });
   }
 
   /** Delete auto-saves older than the given number of days. Returns deleted count. */

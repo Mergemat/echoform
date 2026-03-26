@@ -29,6 +29,7 @@ export type FileManifestEntry = {
   blobHash: string;
   size: number;
   mtimeMs?: number;
+  contentHash?: string;
 };
 
 export type DirectoryManifestEntry = {

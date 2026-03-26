@@ -8,8 +8,10 @@ import {
 import type { Project, Save } from '@/lib/types';
 import WaveSurfer from 'wavesurfer.js';
 
-function mediaUrl(save: Save): string | null {
-  const previewRef = save.previewRefs[0];
+type Lane = 'a' | 'b';
+
+function mediaUrl(save: Save | null): string | null {
+  const previewRef = save?.previewRefs[0];
   if (!previewRef) return null;
   return `/api/media?path=${encodeURIComponent(previewRef)}`;
 }
@@ -29,17 +31,27 @@ export function PreviewPlayer({
   save: Save;
   onClose: () => void;
 }) {
-  const waveformRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WaveSurfer | null>(null);
+  const waveformRefs = useRef<Record<Lane, HTMLDivElement | null>>({
+    a: null,
+    b: null,
+  });
+  const instancesRef = useRef<Record<Lane, WaveSurfer | null>>({
+    a: null,
+    b: null,
+  });
+  const readyRef = useRef<Record<Lane, boolean>>({ a: false, b: false });
+  const durationRef = useRef<Record<Lane, number>>({ a: 0, b: 0 });
+  const currentTimeRef = useRef(0);
+  const playingRef = useRef(false);
+  const activeLaneRef = useRef<Lane>('a');
+  const hasCompareRef = useRef(false);
+
   const [compareSaveId, setCompareSaveId] = useState<string>('');
-  const [activeLane, setActiveLane] = useState<'a' | 'b'>('a');
+  const [activeLane, setActiveLane] = useState<Lane>('a');
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playError, setPlayError] = useState<string | null>(null);
-
-  // Track playback position per lane so A/B switching preserves position
-  const positionRef = useRef<{ a: number; b: number }>({ a: 0, b: 0 });
 
   const compareOptions = useMemo(
     () =>
@@ -59,21 +71,98 @@ export function PreviewPlayer({
     ? compareSaveId
     : '';
   const compareSave =
-    compareOptions.find(
-      (candidate) => candidate.id === effectiveCompareSaveId,
-    ) ?? null;
-  const effectiveLane = activeLane === 'b' && compareSave ? 'b' : 'a';
+    compareOptions.find((candidate) => candidate.id === effectiveCompareSaveId) ??
+    null;
+  const hasCompare = compareSave !== null;
+  const effectiveLane = activeLane === 'b' && hasCompare ? 'b' : 'a';
   const currentSave = effectiveLane === 'b' && compareSave ? compareSave : save;
-  const currentUrl = mediaUrl(currentSave);
 
-  // Create / recreate WaveSurfer when URL changes
+  const laneSaves = useMemo<Record<Lane, Save | null>>(
+    () => ({ a: save, b: compareSave }),
+    [compareSave, save],
+  );
+  const laneUrls = useMemo<Record<Lane, string | null>>(
+    () => ({ a: mediaUrl(save), b: mediaUrl(compareSave) }),
+    [compareSave, save],
+  );
+
+  const syncVolumes = useCallback((lane: Lane, instance: WaveSurfer | null) => {
+    if (!instance) return;
+    const audible =
+      lane === 'a'
+        ? activeLaneRef.current === 'a' || !hasCompareRef.current
+        : activeLaneRef.current === 'b' && hasCompareRef.current;
+    instance.setVolume(audible ? 1 : 0);
+  }, []);
+
+  const syncAllVolumes = useCallback(() => {
+    syncVolumes('a', instancesRef.current.a);
+    syncVolumes('b', instancesRef.current.b);
+  }, [syncVolumes]);
+
+  const syncPlaybackTimes = useCallback((sourceLane: Lane) => {
+    const source = instancesRef.current[sourceLane];
+    const otherLane: Lane = sourceLane === 'a' ? 'b' : 'a';
+    const other = instancesRef.current[otherLane];
+    if (!source || !other || !readyRef.current[otherLane]) return;
+
+    const time = source.getCurrentTime();
+    currentTimeRef.current = time;
+    other.setTime(time);
+  }, []);
+
+  const pauseAll = useCallback(() => {
+    for (const lane of ['a', 'b'] as const) {
+      instancesRef.current[lane]?.pause();
+    }
+    playingRef.current = false;
+    setPlaying(false);
+  }, []);
+
+  const playAllReady = useCallback(async () => {
+    const playable = (['a', 'b'] as const).filter(
+      (lane) => instancesRef.current[lane] && readyRef.current[lane],
+    );
+    if (playable.length === 0) return;
+
+    await Promise.all(
+      playable.map(async (lane) => {
+        const instance = instancesRef.current[lane];
+        if (!instance) return;
+        instance.setTime(currentTimeRef.current);
+        if (!instance.isPlaying()) {
+          await instance.play();
+        }
+      }),
+    );
+
+    playingRef.current = true;
+    setPlaying(true);
+    syncAllVolumes();
+  }, [syncAllVolumes]);
+
   useEffect(() => {
-    const container = waveformRef.current;
-    if (!container || !currentUrl) return;
+    activeLaneRef.current = effectiveLane;
+    hasCompareRef.current = hasCompare;
+    setDuration(durationRef.current[effectiveLane] ?? 0);
+    syncAllVolumes();
+  }, [effectiveLane, hasCompare, syncAllVolumes]);
+
+  useEffect(() => {
+    if (!hasCompare && activeLane === 'b') {
+      setActiveLane('a');
+    }
+  }, [activeLane, hasCompare]);
+
+  useEffect(() => {
+    const lane: Lane = 'a';
+    const container = waveformRefs.current[lane];
+    const url = laneUrls[lane];
+    if (!container || !url) return;
 
     const ws = WaveSurfer.create({
       container,
-      url: currentUrl,
+      url,
       height: 32,
       barWidth: 2,
       barGap: 1,
@@ -86,85 +175,200 @@ export function PreviewPlayer({
       backend: 'WebAudio',
     });
 
-    ws.on('play', () => setPlaying(true));
-    ws.on('pause', () => setPlaying(false));
-    ws.on('finish', () => setPlaying(false));
-    ws.on('timeupdate', (time) => {
-      setCurrentTime(time);
-      positionRef.current[effectiveLane] = time;
-    });
-    ws.on('decode', (dur) => setDuration(dur));
-    ws.on('error', () => {
-      setPlaying(false);
-      setPlayError('Preview file is missing or unreadable.');
-    });
+    instancesRef.current[lane] = ws;
+    readyRef.current[lane] = false;
+    durationRef.current[lane] = 0;
 
-    // Restore position for this lane
+    ws.on('play', () => {
+      playingRef.current = true;
+      setPlaying(true);
+    });
+    ws.on('pause', () => {
+      if ((['a', 'b'] as const).every((name) => !instancesRef.current[name]?.isPlaying())) {
+        playingRef.current = false;
+        setPlaying(false);
+      }
+    });
+    ws.on('finish', () => {
+      if (lane === 'a' || !hasCompareRef.current) {
+        pauseAll();
+        currentTimeRef.current = 0;
+        setCurrentTime(0);
+      }
+    });
+    ws.on('timeupdate', (time) => {
+      currentTimeRef.current = time;
+      if (activeLaneRef.current === lane || (lane === 'a' && !hasCompareRef.current)) {
+        setCurrentTime(time);
+      }
+      if (lane === 'a' && readyRef.current.b) {
+        syncPlaybackTimes('a');
+      }
+    });
+    ws.on('decode', (dur) => {
+      durationRef.current[lane] = dur;
+      if (activeLaneRef.current === lane) {
+        setDuration(dur);
+      }
+    });
+    ws.on('error', () => {
+      setPlayError('Preview file is missing or unreadable.');
+      pauseAll();
+    });
     ws.on('ready', () => {
-      const savedPos = positionRef.current[effectiveLane];
-      if (savedPos > 0) {
-        ws.setTime(savedPos);
+      readyRef.current[lane] = true;
+      ws.setTime(currentTimeRef.current);
+      syncVolumes(lane, ws);
+      if (activeLaneRef.current === lane || (lane === 'a' && !hasCompareRef.current)) {
+        setCurrentTime(currentTimeRef.current);
+        setDuration(durationRef.current[lane] ?? 0);
+      }
+      if (playingRef.current) {
+        void playAllReady().catch((err) => {
+          setPlaying(false);
+          setPlayError(
+            err instanceof Error ? err.message : 'Could not play preview',
+          );
+        });
       }
     });
 
-    wsRef.current = ws;
+    return () => {
+      readyRef.current[lane] = false;
+      durationRef.current[lane] = 0;
+      if (instancesRef.current[lane] === ws) {
+        instancesRef.current[lane] = null;
+      }
+      ws.destroy();
+    };
+  }, [laneUrls.a, pauseAll, playAllReady, syncPlaybackTimes, syncVolumes]);
+
+  useEffect(() => {
+    const lane: Lane = 'b';
+    const container = waveformRefs.current[lane];
+    const url = laneUrls[lane];
+
+    if (!container || !url || !laneSaves.b) {
+      readyRef.current[lane] = false;
+      durationRef.current[lane] = 0;
+      if (instancesRef.current[lane]) {
+        const existing = instancesRef.current[lane];
+        instancesRef.current[lane] = null;
+        existing.destroy();
+      }
+      return;
+    }
+
+    const ws = WaveSurfer.create({
+      container,
+      url,
+      height: 32,
+      barWidth: 2,
+      barGap: 1,
+      barRadius: 1,
+      waveColor: 'rgba(255, 255, 255, 0.15)',
+      progressColor: 'rgba(255, 255, 255, 0.45)',
+      cursorColor: 'rgba(255, 255, 255, 0.5)',
+      cursorWidth: 1,
+      normalize: true,
+      backend: 'WebAudio',
+    });
+
+    instancesRef.current[lane] = ws;
+    readyRef.current[lane] = false;
+    durationRef.current[lane] = 0;
+
+    ws.on('play', () => {
+      playingRef.current = true;
+      setPlaying(true);
+    });
+    ws.on('pause', () => {
+      if ((['a', 'b'] as const).every((name) => !instancesRef.current[name]?.isPlaying())) {
+        playingRef.current = false;
+        setPlaying(false);
+      }
+    });
+    ws.on('finish', () => {
+      pauseAll();
+      currentTimeRef.current = 0;
+      setCurrentTime(0);
+    });
+    ws.on('timeupdate', (time) => {
+      currentTimeRef.current = time;
+      if (activeLaneRef.current === lane) {
+        setCurrentTime(time);
+      }
+    });
+    ws.on('decode', (dur) => {
+      durationRef.current[lane] = dur;
+      if (activeLaneRef.current === lane) {
+        setDuration(dur);
+      }
+    });
+    ws.on('error', () => {
+      setPlayError('Preview file is missing or unreadable.');
+      pauseAll();
+    });
+    ws.on('ready', () => {
+      readyRef.current[lane] = true;
+      ws.setTime(currentTimeRef.current);
+      syncVolumes(lane, ws);
+      if (activeLaneRef.current === lane) {
+        setCurrentTime(currentTimeRef.current);
+        setDuration(durationRef.current[lane] ?? 0);
+      }
+      if (readyRef.current.a) {
+        ws.setTime(instancesRef.current.a?.getCurrentTime() ?? currentTimeRef.current);
+      }
+      if (playingRef.current) {
+        void playAllReady().catch((err) => {
+          setPlaying(false);
+          setPlayError(
+            err instanceof Error ? err.message : 'Could not play preview',
+          );
+        });
+      }
+    });
 
     return () => {
+      readyRef.current[lane] = false;
+      durationRef.current[lane] = 0;
+      if (instancesRef.current[lane] === ws) {
+        instancesRef.current[lane] = null;
+      }
       ws.destroy();
-      wsRef.current = null;
     };
-    // effectiveLane is intentionally in deps so we rebuild when switching lanes
-  }, [currentUrl, effectiveLane]);
+  }, [laneSaves.b, laneUrls.b, pauseAll, playAllReady, syncVolumes]);
 
   const handleTogglePlayback = useCallback(async () => {
-    const ws = wsRef.current;
-    if (!ws || !currentUrl) return;
+    setPlayError(null);
+
     try {
-      await ws.playPause();
+      if (playingRef.current) {
+        pauseAll();
+        return;
+      }
+      await playAllReady();
     } catch (err) {
       setPlaying(false);
       setPlayError(
         err instanceof Error ? err.message : 'Could not play preview',
       );
     }
-  }, [currentUrl]);
+  }, [pauseAll, playAllReady]);
 
   const switchLane = useCallback(
-    (lane: 'a' | 'b') => {
-      const ws = wsRef.current;
-      const wasPlaying = ws?.isPlaying() ?? false;
-
-      // Save current position before switching
-      if (ws) {
-        positionRef.current[effectiveLane] = ws.getCurrentTime();
-      }
-
+    (lane: Lane) => {
       setPlayError(null);
-      setActiveLane(lane);
-
-      // If was playing, auto-play after lane switch (the new WaveSurfer
-      // instance will be created by the useEffect and we'll start it via ready event)
-      if (wasPlaying) {
-        // Small delay to let the new WaveSurfer instance initialize
-        const checkAndPlay = () => {
-          const newWs = wsRef.current;
-          if (newWs) {
-            newWs.play().catch(() => {});
-          } else {
-            requestAnimationFrame(checkAndPlay);
-          }
-        };
-        // Queue the auto-play for after the next render + wavesurfer init
-        setTimeout(checkAndPlay, 100);
-      }
+      activeLaneRef.current = lane === 'b' && !hasCompare ? 'a' : lane;
+      setActiveLane(lane === 'b' && !hasCompare ? 'a' : lane);
+      syncAllVolumes();
     },
-    [effectiveLane],
+    [hasCompare, syncAllVolumes],
   );
 
-  // Keyboard shortcuts: Space = play/pause, Tab = toggle A/B
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't capture when typing in inputs
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||
@@ -186,17 +390,18 @@ export function PreviewPlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePlayback, switchLane, compareSave, effectiveLane]);
+  }, [compareSave, effectiveLane, handleTogglePlayback, switchLane]);
 
   const handleClose = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws) {
-      ws.pause();
-      ws.destroy();
-      wsRef.current = null;
+    pauseAll();
+    for (const lane of ['a', 'b'] as const) {
+      const instance = instancesRef.current[lane];
+      if (!instance) continue;
+      instancesRef.current[lane] = null;
+      instance.destroy();
     }
     onClose();
-  }, [onClose]);
+  }, [onClose, pauseAll]);
 
   return (
     <div className="border-t border-border bg-[#0f1014] px-4 py-3">
@@ -206,7 +411,8 @@ export function PreviewPlayer({
           variant="outline"
           size="icon-sm"
           onClick={handleTogglePlayback}
-          disabled={!currentUrl}
+          disabled={!laneUrls.a}
+          aria-label={playing ? 'Pause preview' : 'Play preview'}
           className="mt-0.5 shrink-0 rounded-full size-8"
         >
           {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -225,11 +431,30 @@ export function PreviewPlayer({
             </div>
           </div>
 
-          {/* Waveform */}
-          <div
-            ref={waveformRef}
-            className="mt-2 rounded-md overflow-hidden cursor-pointer"
-          />
+          <div className="relative mt-2 h-8 overflow-hidden rounded-md">
+            <div
+              ref={(node) => {
+                waveformRefs.current.a = node;
+              }}
+              className={
+                effectiveLane === 'a'
+                  ? 'absolute inset-0 opacity-100'
+                  : 'pointer-events-none absolute inset-0 opacity-35'
+              }
+            />
+            <div
+              ref={(node) => {
+                waveformRefs.current.b = node;
+              }}
+              className={
+                compareSave
+                  ? effectiveLane === 'b'
+                    ? 'absolute inset-0 opacity-100'
+                    : 'pointer-events-none absolute inset-0 opacity-35'
+                  : 'pointer-events-none absolute inset-0 opacity-0'
+              }
+            />
+          </div>
 
           <div className="mt-1 text-[13px] font-medium text-white/85">
             {currentSave.label}
@@ -251,11 +476,8 @@ export function PreviewPlayer({
               onChange={(event) => {
                 const nextId = event.target.value;
                 setCompareSaveId(nextId);
-                if (nextId) {
-                  switchLane('b');
-                } else {
-                  switchLane('a');
-                }
+                setPlayError(null);
+                setActiveLane(nextId ? 'b' : 'a');
               }}
               className="w-[220px] rounded-lg text-[11px]"
             >
