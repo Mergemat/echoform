@@ -115,10 +115,10 @@ export function Timeline() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center px-6">
-          <div className="text-[14px] text-white/20 font-medium">
+          <div className="text-base text-white/20 font-medium">
             No project selected
           </div>
-          <div className="mt-1 text-[12px] text-white/10">
+          <div className="mt-1 text-[13px] text-white/10">
             Select a project from the sidebar to see its timeline
           </div>
         </div>
@@ -130,10 +130,10 @@ export function Timeline() {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center px-6">
-          <div className="text-[14px] text-white/25 font-medium">
+          <div className="text-base text-white/25 font-medium">
             No saves yet
           </div>
-          <div className="mt-1 text-[12px] text-white/15 leading-relaxed">
+          <div className="mt-1 text-[13px] text-white/15 leading-relaxed">
             {project.presence === 'missing'
               ? 'Project folder is missing from watched roots'
               : project.watching
@@ -170,9 +170,9 @@ export function Timeline() {
       )}
 
       {project.pendingOpen && (
-        <div className="px-4 py-2.5 border-b border-amber-400/10 bg-amber-400/[0.04]">
+        <div className="px-5 py-3 border-b border-amber-400/10 bg-amber-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] text-amber-200/80 leading-relaxed">
+            <div className="text-xs text-amber-200/80 leading-relaxed">
               Could not open{' '}
               <span className="font-medium text-amber-200">
                 {project.pendingOpen.setPath}
@@ -215,9 +215,9 @@ export function Timeline() {
       )}
 
       {project.driftStatus && (
-        <div className="px-4 py-2.5 border-b border-red-400/10 bg-red-400/[0.04]">
+        <div className="px-5 py-3 border-b border-red-400/10 bg-red-400/[0.04]">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] text-red-200/80 leading-relaxed">
+            <div className="text-xs text-red-200/80 leading-relaxed">
               {project.driftStatus.kind === 'unknown-file'
                 ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
                 : `Branch file ${project.driftStatus.setPath} is missing.`}
@@ -256,8 +256,8 @@ export function Timeline() {
       )}
 
       {project.presence === 'missing' && (
-        <div className="border-b border-amber-400/10 bg-amber-400/[0.04] px-4 py-2.5">
-          <div className="text-[11px] text-amber-200/80 leading-relaxed">
+        <div className="border-b border-amber-400/10 bg-amber-400/[0.04] px-5 py-3">
+          <div className="text-xs text-amber-200/80 leading-relaxed">
             This project is missing from your watched folders. History stays
             safe here, but file actions are disabled until the folder comes back
             or the root is re-added.
@@ -401,7 +401,7 @@ function FileTabs({
             type="button"
             onClick={() => onSelect(idea.id)}
             className={cn(
-              'relative flex items-center gap-1.5 px-3 py-2.5 text-[12px] whitespace-nowrap transition-colors duration-150',
+              'relative flex items-center gap-1.5 px-4 py-3 text-[13px] whitespace-nowrap transition-colors duration-150',
               isActive ? 'text-white/85' : 'text-white/30 hover:text-white/50',
             )}
           >
@@ -410,7 +410,7 @@ function FileTabs({
             )}
             <span className="font-medium">{fileTabName(idea)}</span>
             {saveCount > 0 && (
-              <span className="text-[10px] text-white/20 tabular-nums">
+              <span className="text-[11px] text-white/20 tabular-nums">
                 {saveCount}
               </span>
             )}

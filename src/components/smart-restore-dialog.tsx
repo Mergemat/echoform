@@ -115,7 +115,7 @@ export function SmartRestoreDialog({
           <DialogTitle className="text-[13px] font-semibold text-white/90">
             Smart Restore
           </DialogTitle>
-          <DialogDescription className="text-[11px] text-white/40 mt-1">
+          <DialogDescription className="text-xs text-white/40 mt-1">
             Restore selected tracks from this save into the current active set.
           </DialogDescription>
         </DialogHeader>

@@ -21,7 +21,7 @@ function PreviewItem({
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left px-3 py-2 rounded-lg transition-colors group',
+        'w-full text-left px-3 py-2.5 rounded-lg transition-colors group',
         isPlaying
           ? 'bg-white/[0.08] text-white/90'
           : 'text-white/55 hover:bg-white/[0.04] hover:text-white/75',
@@ -38,10 +38,10 @@ function PreviewItem({
               : 'text-white/20 group-hover:text-white/35',
           )}
         />
-        <span className="text-[12px] font-medium truncate">{save.label}</span>
+        <span className="text-[13px] font-medium truncate">{save.label}</span>
       </div>
       {idea && (
-        <div className="text-[10px] text-white/25 truncate mt-0.5 pl-5">
+        <div className="text-[11px] text-white/25 truncate mt-0.5 pl-5">
           {idea.name}
         </div>
       )}
@@ -87,7 +87,7 @@ export function PreviewSidebar({ project }: { project: Project }) {
     return (
       <div className="flex h-full w-full flex-col overflow-hidden border-l border-border bg-white/[0.015]">
         <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3">
-          <div className="text-[12px] font-semibold text-white/70">
+          <div className="text-[13px] font-semibold text-white/70">
             Previews
           </div>
           <Button
@@ -101,7 +101,7 @@ export function PreviewSidebar({ project }: { project: Project }) {
           </Button>
         </div>
         <div className="flex-1 flex items-center justify-center px-6">
-          <p className="text-[11px] text-white/20 text-center leading-relaxed">
+          <p className="text-xs text-white/20 text-center leading-relaxed">
             No previews yet. Add one from the save detail panel.
           </p>
         </div>
@@ -115,10 +115,10 @@ export function PreviewSidebar({ project }: { project: Project }) {
     <div className="flex h-full w-full flex-col overflow-hidden border-l border-border bg-white/[0.015]">
       <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3">
         <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-white/70">
+          <span className="text-[13px] font-semibold text-white/70">
             Previews
           </span>
-          <span className="text-[10px] text-white/25 tabular-nums">
+          <span className="text-[11px] text-white/25 tabular-nums">
             {totalCount}
           </span>
         </div>
@@ -137,7 +137,7 @@ export function PreviewSidebar({ project }: { project: Project }) {
         {groups.map(({ idea, saves }) => (
           <div key={idea?.id ?? 'unknown'}>
             {!singleGroup && (
-              <div className="text-[10px] text-white/25 uppercase tracking-wider font-medium px-3 mb-1">
+              <div className="text-[11px] text-white/25 uppercase tracking-wider font-medium px-3 mb-1">
                 {idea?.name ?? 'Unknown'}
               </div>
             )}
