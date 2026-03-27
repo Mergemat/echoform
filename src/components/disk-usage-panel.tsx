@@ -52,8 +52,8 @@ function UsageRing({
   usedBytes: number;
   totalBytes: number;
 }) {
-  const size = 52;
-  const stroke = 3.5;
+  const size = 60;
+  const stroke = 4;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const ratio = totalBytes > 0 ? Math.min(usedBytes / totalBytes, 1) : 0;
@@ -102,10 +102,10 @@ function StatRow({
 }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className="text-[11px] text-white/35">{label}</span>
+      <span className="text-xs text-white/35">{label}</span>
       <span
         className={cn(
-          'text-[11px] font-mono tabular-nums',
+          'text-xs font-mono tabular-nums',
           dim ? 'text-white/30' : 'text-white/60',
         )}
       >
@@ -132,7 +132,7 @@ function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
           >
             <span
               className={cn(
-                'text-[9px] w-[52px] truncate shrink-0 transition-colors',
+                'text-[10px] w-[52px] truncate shrink-0 transition-colors',
                 s.auto
                   ? 'text-white/20 group-hover:text-white/35'
                   : 'text-white/35 group-hover:text-white/50',
@@ -149,7 +149,7 @@ function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
                 style={{ width: `${Math.max(pct, 2)}%` }}
               />
             </div>
-            <span className="text-[9px] font-mono text-white/20 w-[38px] text-right shrink-0 tabular-nums group-hover:text-white/40 transition-colors">
+            <span className="text-[10px] font-mono text-white/20 w-[38px] text-right shrink-0 tabular-nums group-hover:text-white/40 transition-colors">
               {formatSize(s.snapshotBytes)}
             </span>
           </div>
@@ -245,7 +245,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-auto px-1 py-0 text-[10px] text-white/25 hover:text-white/50 font-mono tabular-nums"
+          className="h-auto px-1 py-0 text-[11px] text-white/25 hover:text-white/50 font-mono tabular-nums"
         >
           {usage ? formatSize(usage.blobStorageBytes) : 'Storage'}
         </Button>
@@ -253,7 +253,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
 
       <PopoverContent
         align="end"
-        className="w-[320px] p-0 bg-[#111114] border-white/[0.08] rounded-xl overflow-hidden"
+        className="w-[360px] p-0 bg-[#111114] border-white/[0.08] rounded-xl overflow-hidden"
       >
         <div className="p-4 space-y-4">
           {loading && !usage && (
@@ -280,7 +280,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                   <div className="text-[20px] font-semibold text-white/85 tabular-nums leading-tight tracking-tight">
                     {formatSize(usage.blobStorageBytes)}
                   </div>
-                  <div className="text-[10px] text-white/30 mt-0.5">
+                  <div className="text-[11px] text-white/30 mt-0.5">
                     on disk
                     {dedupPct > 0 && (
                       <span className="text-white/20">
@@ -295,14 +295,8 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               {/* Stats */}
               <div className="space-y-1.5 pt-1">
                 <StatRow label="Total saves" value={usage.totalSaveCount} />
-                <StatRow
-                  label="Auto-saves"
-                  value={usage.autoSaveCount}
-                />
-                <StatRow
-                  label="Manual saves"
-                  value={usage.manualSaveCount}
-                />
+                <StatRow label="Auto-saves" value={usage.autoSaveCount} />
+                <StatRow label="Manual saves" value={usage.manualSaveCount} />
                 <StatRow
                   label="Dedup savings"
                   value={formatSize(usage.dedupSavings)}
@@ -333,15 +327,15 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               {usage.saves.length > 0 && (
                 <div className="pt-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="text-[9px] uppercase tracking-wider text-white/25 font-medium">
+                    <span className="text-[10px] uppercase tracking-wider text-white/25 font-medium">
                       Saves
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
-                      <span className="flex items-center gap-1 text-[9px] text-white/20">
+                      <span className="flex items-center gap-1 text-[10px] text-white/20">
                         <span className="inline-block size-1.5 rounded-full bg-white/35" />
                         manual
                       </span>
-                      <span className="flex items-center gap-1 text-[9px] text-white/20">
+                      <span className="flex items-center gap-1 text-[10px] text-white/20">
                         <span className="inline-block size-1.5 rounded-full bg-white/15" />
                         auto
                       </span>
@@ -354,19 +348,17 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               {/* Compact + Prune */}
               <div className="pt-1 border-t border-white/[0.06]">
                 <div className="flex items-center justify-between pt-3">
-                  <span className="text-[10px] text-white/30">
+                  <span className="text-[11px] text-white/30">
                     Retention compaction
                   </span>
                   <button
                     type="button"
                     disabled={
-                      compacting ||
-                      pruning ||
-                      usage.eligibleAutoSaveCount === 0
+                      compacting || pruning || usage.eligibleAutoSaveCount === 0
                     }
                     onClick={handleCompact}
                     className={cn(
-                      'text-[10px] px-2 py-0.5 rounded-md transition-colors',
+                      'text-[11px] px-2 py-0.5 rounded-md transition-colors',
                       'text-white/30 hover:text-white/60 hover:bg-white/[0.06]',
                       'disabled:opacity-30 disabled:pointer-events-none',
                     )}
@@ -374,11 +366,11 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                     {compacting ? 'Compacting...' : 'Compact auto-saves'}
                   </button>
                 </div>
-                <div className="text-[9px] text-white/15 mt-1.5">
+                <div className="text-[10px] text-white/15 mt-1.5">
                   Keeps all last-24h auto-saves, then one per hour/day/week.
                 </div>
                 <div className="flex items-center justify-between pt-3">
-                  <span className="text-[10px] text-white/30">
+                  <span className="text-[11px] text-white/30">
                     Prune auto-saves older than
                   </span>
                   <div className="flex gap-1">
@@ -391,7 +383,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                         }
                         onClick={() => handlePrune(opt.days)}
                         className={cn(
-                          'text-[10px] px-2 py-0.5 rounded-md transition-colors',
+                          'text-[11px] px-2 py-0.5 rounded-md transition-colors',
                           'text-white/30 hover:text-white/60 hover:bg-white/[0.06]',
                           'disabled:opacity-30 disabled:pointer-events-none',
                         )}
@@ -402,11 +394,11 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                   </div>
                 </div>
                 {actionMsg && (
-                  <div className="text-[10px] text-white/40 mt-1.5">
+                  <div className="text-[11px] text-white/40 mt-1.5">
                     {actionMsg}
                   </div>
                 )}
-                <div className="text-[9px] text-white/15 mt-2">
+                <div className="text-[10px] text-white/15 mt-2">
                   Head and idea-base saves are never pruned.
                 </div>
               </div>
@@ -415,7 +407,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={load}
-                className="text-[10px] text-white/20 hover:text-white/40 transition-colors"
+                className="text-[11px] text-white/20 hover:text-white/40 transition-colors"
               >
                 Refresh
               </button>

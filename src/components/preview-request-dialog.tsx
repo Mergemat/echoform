@@ -172,10 +172,10 @@ export function PreviewRequestDialog({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="sm:max-w-[480px] p-0 gap-0 bg-[#111215] text-white border border-white/[0.08] rounded-xl overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle className="text-[15px] font-semibold text-white/90">
+          <DialogTitle className="text-base font-semibold text-white/90">
             Add a preview
           </DialogTitle>
-          <DialogDescription className="text-[12px] text-white/40 mt-1 leading-relaxed">
+          <DialogDescription className="text-[13px] text-white/40 mt-1 leading-relaxed">
             Drop an audio file here, or bounce from Ableton into the folder
             below.
           </DialogDescription>
@@ -188,11 +188,11 @@ export function PreviewRequestDialog({
               <MusicNote size={16} className="text-white/40" weight="duotone" />
             </div>
             <div className="min-w-0">
-              <div className="text-[13px] text-white/85 font-medium truncate">
+              <div className="text-sm text-white/85 font-medium truncate">
                 {save.label}
               </div>
               {idea && (
-                <div className="text-[11px] text-white/35 truncate mt-0.5">
+                <div className="text-xs text-white/35 truncate mt-0.5">
                   {idea.name}
                 </div>
               )}
@@ -228,14 +228,14 @@ export function PreviewRequestDialog({
               className={`transition-colors ${dragOver ? 'text-white/60' : 'text-white/25'}`}
               weight="duotone"
             />
-            <div className="text-[12px] text-white/50">
+            <div className="text-[13px] text-white/50">
               {uploading
                 ? 'Uploading...'
                 : dragOver
                   ? 'Drop to attach'
                   : 'Drop audio file or click to browse'}
             </div>
-            <div className="text-[10px] text-white/20">
+            <div className="text-[11px] text-white/20">
               {ACCEPTED_EXTENSIONS.join(', ')}
             </div>
           </button>
@@ -243,7 +243,7 @@ export function PreviewRequestDialog({
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[10px] text-white/20 uppercase tracking-wider">
+            <span className="text-[11px] text-white/20 uppercase tracking-wider">
               or export from Ableton
             </span>
             <div className="flex-1 h-px bg-white/[0.06]" />
@@ -258,10 +258,10 @@ export function PreviewRequestDialog({
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] text-white/35 mb-1.5">
+                <div className="text-xs text-white/35 mb-1.5">
                   Export to this folder
                 </div>
-                <div className="text-[11px] text-white/65 break-all leading-relaxed">
+                <div className="text-xs text-white/65 break-all leading-relaxed">
                   {loading ? 'Setting up...' : (preview?.folderPath ?? '...')}
                 </div>
               </div>
@@ -273,25 +273,25 @@ export function PreviewRequestDialog({
                 />
               </div>
             </div>
-            <div className="text-[10px] text-white/25 mt-2">
+            <div className="text-[11px] text-white/25 mt-2">
               {revealing ? 'Opening in Finder...' : 'Click to open in Finder'}
               {' · any audio filename works'}
             </div>
           </button>
 
           {error && (
-            <div className="rounded-lg bg-red-400/8 border border-red-400/12 px-3 py-2.5 text-[11px] text-red-300/75 leading-relaxed">
+            <div className="rounded-lg bg-red-400/8 border border-red-400/12 px-3 py-2.5 text-xs text-red-300/75 leading-relaxed">
               {error}
             </div>
           )}
 
           {/* Footer area */}
           <div className="flex items-center justify-between pt-1">
-            <div className="text-[11px] text-white/25">{statusText}</div>
+            <div className="text-xs text-white/25">{statusText}</div>
             <Button
               variant="ghost"
               size="sm"
-              className="rounded-lg text-[11px] text-white/40 hover:text-white/70"
+              className="rounded-lg text-xs text-white/40 hover:text-white/70"
               onClick={() => {
                 if (!idea) return;
                 sendDaemonCommand({

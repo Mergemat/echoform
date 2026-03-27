@@ -69,15 +69,15 @@ export function BranchSelector({
             className="w-full justify-between h-auto py-2 px-2.5 text-left rounded-lg hover:bg-white/[0.06] transition-colors"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="size-6 rounded-md bg-white/[0.06] flex items-center justify-center shrink-0">
+              <div className="size-7 rounded-md bg-white/[0.06] flex items-center justify-center shrink-0">
                 <GitFork size={13} className="text-white/40" />
               </div>
               <div className="min-w-0">
-                <span className="text-[12px] font-medium text-white/75 truncate block">
+                <span className="text-[13px] font-medium text-white/75 truncate block">
                   {focusedIdea?.name ?? 'Main'}
                 </span>
                 {focusedId === project.currentIdeaId && (
-                  <span className="text-[9px] uppercase tracking-wider text-emerald-400/60 block mt-0.5">
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400/60 block mt-0.5">
                     current
                   </span>
                 )}
@@ -90,7 +90,7 @@ export function BranchSelector({
           align="start"
           className="w-[var(--radix-popover-trigger-width)] p-1.5"
         >
-          <div className="text-[9px] uppercase tracking-[0.14em] text-white/25 font-medium px-2 py-1.5">
+          <div className="text-[10px] uppercase tracking-[0.14em] text-white/25 font-medium px-2 py-1.5">
             Branches
           </div>
           <div className="max-h-[280px] overflow-y-auto scrollbar-thin">
@@ -106,7 +106,7 @@ export function BranchSelector({
                     setOpen(false);
                   }}
                   className={cn(
-                    'w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-left transition-colors',
+                    'w-full flex items-center gap-2 py-2 px-2 rounded-md text-left transition-colors',
                     isActive
                       ? 'bg-white/[0.08] text-white/90'
                       : 'text-white/50 hover:bg-white/[0.04] hover:text-white/70',
@@ -118,7 +118,7 @@ export function BranchSelector({
                       &#x2514;
                     </span>
                   )}
-                  <span className="text-[12px] truncate flex-1">
+                  <span className="text-[13px] truncate flex-1">
                     {idea.name}
                   </span>
                   <span className="text-[10px] text-white/20 shrink-0 tabular-nums">

@@ -88,7 +88,12 @@ function makeSave(
 }
 
 function makeProject(): Project {
-  const left = makeSave('save-a', 'Save A', '/tmp/a.wav', '2024-01-01T00:00:00Z');
+  const left = makeSave(
+    'save-a',
+    'Save A',
+    '/tmp/a.wav',
+    '2024-01-01T00:00:00Z',
+  );
   const right = makeSave(
     'save-b',
     'Save B',
@@ -184,7 +189,7 @@ describe('PreviewPlayer compare switching', () => {
     });
 
     await act(async () => {
-      fireEvent.keyDown(window, { key: 'Tab' });
+      fireEvent.keyDown(window, { key: '`' });
     });
 
     expect(MockWaveSurfer.instances).toHaveLength(2);
@@ -197,7 +202,7 @@ describe('PreviewPlayer compare switching', () => {
       laneA.emit('timeupdate', 32);
     });
 
-    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getAllByText('A').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/0:32 \/ 1:30/)).toBeInTheDocument();
   });
 });

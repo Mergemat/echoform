@@ -76,7 +76,7 @@ export const ProjectItem = memo(function ProjectItem({
   );
   const health = projectHealth(project);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     closePreviewPlayer();
@@ -84,8 +84,8 @@ export const ProjectItem = memo(function ProjectItem({
   };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
       tabIndex={0}
       onClick={() => {
         closePreviewPlayer();
@@ -158,7 +158,7 @@ export const ProjectItem = memo(function ProjectItem({
           <span className="truncate">{project.watchError}</span>
         </div>
       )}
-    </button>
+    </div>
   );
 });
 

@@ -163,7 +163,7 @@ export function TrackThumbnail({
         role="img"
         aria-label={`${rows.length} tracks`}
       >
-        <div className="flex flex-col gap-[1px] w-[72px]">
+        <div className="flex flex-col gap-[1px] w-[80px]">
           {visible.map(({ track, depth }, i) => {
             const indent = Math.min(depth, 4) * 4;
             return (
@@ -220,7 +220,7 @@ export function TrackThumbnail({
           );
         })}
         {overflow > 0 && (
-          <div className="text-[9px] text-white/15 text-center pt-0.5">
+          <div className="text-[10px] text-white/15 text-center pt-0.5">
             +{overflow} more
           </div>
         )}

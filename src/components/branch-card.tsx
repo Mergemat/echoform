@@ -83,12 +83,12 @@ export function BranchCard({
         <div className="shrink-0">
           {isCollapsed ? (
             <CaretRight
-              size={11}
+              size={14}
               className="text-white/15 group-hover:text-white/35 transition-colors"
             />
           ) : (
             <CaretDown
-              size={11}
+              size={14}
               className="text-white/15 group-hover:text-white/35 transition-colors"
             />
           )}
@@ -99,7 +99,7 @@ export function BranchCard({
       {fromSave && (
         <div
           className={cn(
-            'text-[10px] pb-2.5 -mt-1',
+            'text-[11px] pb-2.5 -mt-1',
             isFocused ? 'text-white/25' : 'text-white/12',
           )}
           style={{ paddingLeft: `${lineLeft + 22}px` }}

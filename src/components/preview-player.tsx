@@ -10,6 +10,8 @@ import WaveSurfer from 'wavesurfer.js';
 
 type Lane = 'a' | 'b';
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
 function mediaUrl(save: Save | null): string | null {
   const previewRef = save?.previewRefs[0];
   if (!previewRef) return null;
@@ -21,6 +23,48 @@ function formatTime(seconds: number): string {
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+function relativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function shortDate(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+const WS_OPTS = {
+  height: 32,
+  barWidth: 2,
+  barGap: 1,
+  barRadius: 1,
+  waveColor: 'rgba(255, 255, 255, 0.15)',
+  progressColor: 'rgba(255, 255, 255, 0.45)',
+  cursorColor: 'rgba(255, 255, 255, 0.5)',
+  cursorWidth: 1,
+  normalize: true,
+  backend: 'WebAudio' as const,
+};
+
+// ── Component ────────────────────────────────────────────────────────
 
 export function PreviewPlayer({
   project,
@@ -71,8 +115,9 @@ export function PreviewPlayer({
     ? compareSaveId
     : '';
   const compareSave =
-    compareOptions.find((candidate) => candidate.id === effectiveCompareSaveId) ??
-    null;
+    compareOptions.find(
+      (candidate) => candidate.id === effectiveCompareSaveId,
+    ) ?? null;
   const hasCompare = compareSave !== null;
   const effectiveLane = activeLane === 'b' && hasCompare ? 'b' : 'a';
   const currentSave = effectiveLane === 'b' && compareSave ? compareSave : save;
@@ -85,6 +130,9 @@ export function PreviewPlayer({
     () => ({ a: mediaUrl(save), b: mediaUrl(compareSave) }),
     [compareSave, save],
   );
+
+  // Determine which save is newer/older for badges
+  const isANewer = compareSave ? save.createdAt >= compareSave.createdAt : true;
 
   const syncVolumes = useCallback((lane: Lane, instance: WaveSurfer | null) => {
     if (!instance) return;
@@ -105,7 +153,6 @@ export function PreviewPlayer({
     const otherLane: Lane = sourceLane === 'a' ? 'b' : 'a';
     const other = instancesRef.current[otherLane];
     if (!source || !other || !readyRef.current[otherLane]) return;
-
     const time = source.getCurrentTime();
     currentTimeRef.current = time;
     other.setTime(time);
@@ -124,7 +171,6 @@ export function PreviewPlayer({
       (lane) => instancesRef.current[lane] && readyRef.current[lane],
     );
     if (playable.length === 0) return;
-
     await Promise.all(
       playable.map(async (lane) => {
         const instance = instancesRef.current[lane];
@@ -135,214 +181,13 @@ export function PreviewPlayer({
         }
       }),
     );
-
     playingRef.current = true;
     setPlaying(true);
     syncAllVolumes();
   }, [syncAllVolumes]);
 
-  useEffect(() => {
-    activeLaneRef.current = effectiveLane;
-    hasCompareRef.current = hasCompare;
-    setDuration(durationRef.current[effectiveLane] ?? 0);
-    syncAllVolumes();
-  }, [effectiveLane, hasCompare, syncAllVolumes]);
-
-  useEffect(() => {
-    if (!hasCompare && activeLane === 'b') {
-      setActiveLane('a');
-    }
-  }, [activeLane, hasCompare]);
-
-  useEffect(() => {
-    const lane: Lane = 'a';
-    const container = waveformRefs.current[lane];
-    const url = laneUrls[lane];
-    if (!container || !url) return;
-
-    const ws = WaveSurfer.create({
-      container,
-      url,
-      height: 32,
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 1,
-      waveColor: 'rgba(255, 255, 255, 0.15)',
-      progressColor: 'rgba(255, 255, 255, 0.45)',
-      cursorColor: 'rgba(255, 255, 255, 0.5)',
-      cursorWidth: 1,
-      normalize: true,
-      backend: 'WebAudio',
-    });
-
-    instancesRef.current[lane] = ws;
-    readyRef.current[lane] = false;
-    durationRef.current[lane] = 0;
-
-    ws.on('play', () => {
-      playingRef.current = true;
-      setPlaying(true);
-    });
-    ws.on('pause', () => {
-      if ((['a', 'b'] as const).every((name) => !instancesRef.current[name]?.isPlaying())) {
-        playingRef.current = false;
-        setPlaying(false);
-      }
-    });
-    ws.on('finish', () => {
-      if (lane === 'a' || !hasCompareRef.current) {
-        pauseAll();
-        currentTimeRef.current = 0;
-        setCurrentTime(0);
-      }
-    });
-    ws.on('timeupdate', (time) => {
-      currentTimeRef.current = time;
-      if (activeLaneRef.current === lane || (lane === 'a' && !hasCompareRef.current)) {
-        setCurrentTime(time);
-      }
-      if (lane === 'a' && readyRef.current.b) {
-        syncPlaybackTimes('a');
-      }
-    });
-    ws.on('decode', (dur) => {
-      durationRef.current[lane] = dur;
-      if (activeLaneRef.current === lane) {
-        setDuration(dur);
-      }
-    });
-    ws.on('error', () => {
-      setPlayError('Preview file is missing or unreadable.');
-      pauseAll();
-    });
-    ws.on('ready', () => {
-      readyRef.current[lane] = true;
-      ws.setTime(currentTimeRef.current);
-      syncVolumes(lane, ws);
-      if (activeLaneRef.current === lane || (lane === 'a' && !hasCompareRef.current)) {
-        setCurrentTime(currentTimeRef.current);
-        setDuration(durationRef.current[lane] ?? 0);
-      }
-      if (playingRef.current) {
-        void playAllReady().catch((err) => {
-          setPlaying(false);
-          setPlayError(
-            err instanceof Error ? err.message : 'Could not play preview',
-          );
-        });
-      }
-    });
-
-    return () => {
-      readyRef.current[lane] = false;
-      durationRef.current[lane] = 0;
-      if (instancesRef.current[lane] === ws) {
-        instancesRef.current[lane] = null;
-      }
-      ws.destroy();
-    };
-  }, [laneUrls.a, pauseAll, playAllReady, syncPlaybackTimes, syncVolumes]);
-
-  useEffect(() => {
-    const lane: Lane = 'b';
-    const container = waveformRefs.current[lane];
-    const url = laneUrls[lane];
-
-    if (!container || !url || !laneSaves.b) {
-      readyRef.current[lane] = false;
-      durationRef.current[lane] = 0;
-      if (instancesRef.current[lane]) {
-        const existing = instancesRef.current[lane];
-        instancesRef.current[lane] = null;
-        existing.destroy();
-      }
-      return;
-    }
-
-    const ws = WaveSurfer.create({
-      container,
-      url,
-      height: 32,
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 1,
-      waveColor: 'rgba(255, 255, 255, 0.15)',
-      progressColor: 'rgba(255, 255, 255, 0.45)',
-      cursorColor: 'rgba(255, 255, 255, 0.5)',
-      cursorWidth: 1,
-      normalize: true,
-      backend: 'WebAudio',
-    });
-
-    instancesRef.current[lane] = ws;
-    readyRef.current[lane] = false;
-    durationRef.current[lane] = 0;
-
-    ws.on('play', () => {
-      playingRef.current = true;
-      setPlaying(true);
-    });
-    ws.on('pause', () => {
-      if ((['a', 'b'] as const).every((name) => !instancesRef.current[name]?.isPlaying())) {
-        playingRef.current = false;
-        setPlaying(false);
-      }
-    });
-    ws.on('finish', () => {
-      pauseAll();
-      currentTimeRef.current = 0;
-      setCurrentTime(0);
-    });
-    ws.on('timeupdate', (time) => {
-      currentTimeRef.current = time;
-      if (activeLaneRef.current === lane) {
-        setCurrentTime(time);
-      }
-    });
-    ws.on('decode', (dur) => {
-      durationRef.current[lane] = dur;
-      if (activeLaneRef.current === lane) {
-        setDuration(dur);
-      }
-    });
-    ws.on('error', () => {
-      setPlayError('Preview file is missing or unreadable.');
-      pauseAll();
-    });
-    ws.on('ready', () => {
-      readyRef.current[lane] = true;
-      ws.setTime(currentTimeRef.current);
-      syncVolumes(lane, ws);
-      if (activeLaneRef.current === lane) {
-        setCurrentTime(currentTimeRef.current);
-        setDuration(durationRef.current[lane] ?? 0);
-      }
-      if (readyRef.current.a) {
-        ws.setTime(instancesRef.current.a?.getCurrentTime() ?? currentTimeRef.current);
-      }
-      if (playingRef.current) {
-        void playAllReady().catch((err) => {
-          setPlaying(false);
-          setPlayError(
-            err instanceof Error ? err.message : 'Could not play preview',
-          );
-        });
-      }
-    });
-
-    return () => {
-      readyRef.current[lane] = false;
-      durationRef.current[lane] = 0;
-      if (instancesRef.current[lane] === ws) {
-        instancesRef.current[lane] = null;
-      }
-      ws.destroy();
-    };
-  }, [laneSaves.b, laneUrls.b, pauseAll, playAllReady, syncVolumes]);
-
   const handleTogglePlayback = useCallback(async () => {
     setPlayError(null);
-
     try {
       if (playingRef.current) {
         pauseAll();
@@ -367,6 +212,154 @@ export function PreviewPlayer({
     [hasCompare, syncAllVolumes],
   );
 
+  // Stable refs so setupWs never changes identity
+  const pauseAllRef = useRef(pauseAll);
+  pauseAllRef.current = pauseAll;
+  const playAllReadyRef = useRef(playAllReady);
+  playAllReadyRef.current = playAllReady;
+  const syncPlaybackTimesRef = useRef(syncPlaybackTimes);
+  syncPlaybackTimesRef.current = syncPlaybackTimes;
+  const syncVolumesRef = useRef(syncVolumes);
+  syncVolumesRef.current = syncVolumes;
+
+  // Shared WaveSurfer factory — stable identity (no callback deps)
+  const setupWs = useCallback(
+    (lane: Lane, container: HTMLDivElement, url: string): WaveSurfer => {
+      const ws = WaveSurfer.create({ container, url, ...WS_OPTS });
+
+      ws.on('play', () => {
+        playingRef.current = true;
+        setPlaying(true);
+      });
+      ws.on('pause', () => {
+        if (
+          (['a', 'b'] as const).every(
+            (l) => !instancesRef.current[l]?.isPlaying(),
+          )
+        ) {
+          playingRef.current = false;
+          setPlaying(false);
+        }
+      });
+      ws.on('finish', () => {
+        pauseAllRef.current();
+        currentTimeRef.current = 0;
+        setCurrentTime(0);
+      });
+      ws.on('timeupdate', (time) => {
+        currentTimeRef.current = time;
+        if (activeLaneRef.current === lane) {
+          setCurrentTime(time);
+        }
+        // Only sync from the active lane to avoid ping-pong loop
+        if (activeLaneRef.current === lane) {
+          const other: Lane = lane === 'a' ? 'b' : 'a';
+          if (readyRef.current[other]) {
+            syncPlaybackTimesRef.current(lane);
+          }
+        }
+      });
+      ws.on('decode', (dur) => {
+        durationRef.current[lane] = dur;
+        if (activeLaneRef.current === lane) {
+          setDuration(dur);
+        }
+      });
+      ws.on('error', () => {
+        setPlayError('Preview file is missing or unreadable.');
+        pauseAllRef.current();
+      });
+      ws.on('ready', () => {
+        readyRef.current[lane] = true;
+        ws.setTime(currentTimeRef.current);
+        syncVolumesRef.current(lane, ws);
+        if (activeLaneRef.current === lane) {
+          setCurrentTime(currentTimeRef.current);
+          setDuration(durationRef.current[lane] ?? 0);
+        }
+        // Sync to other lane's time if it's already playing
+        const other: Lane = lane === 'a' ? 'b' : 'a';
+        if (readyRef.current[other]) {
+          const otherTime = instancesRef.current[other]?.getCurrentTime();
+          if (otherTime !== undefined) ws.setTime(otherTime);
+        }
+        if (playingRef.current) {
+          void playAllReadyRef.current().catch((err) => {
+            setPlaying(false);
+            setPlayError(
+              err instanceof Error ? err.message : 'Could not play preview',
+            );
+          });
+        }
+      });
+
+      return ws;
+    },
+    [],
+  );
+
+  // Lane A effect
+  useEffect(() => {
+    const container = waveformRefs.current.a;
+    const url = laneUrls.a;
+    if (!container || !url) return;
+
+    const ws = setupWs('a', container, url);
+    instancesRef.current.a = ws;
+    readyRef.current.a = false;
+    durationRef.current.a = 0;
+
+    return () => {
+      readyRef.current.a = false;
+      durationRef.current.a = 0;
+      if (instancesRef.current.a === ws) instancesRef.current.a = null;
+      ws.destroy();
+    };
+  }, [laneUrls.a, setupWs]);
+
+  // Lane B effect
+  useEffect(() => {
+    const container = waveformRefs.current.b;
+    const url = laneUrls.b;
+
+    if (!container || !url || !laneSaves.b) {
+      readyRef.current.b = false;
+      durationRef.current.b = 0;
+      if (instancesRef.current.b) {
+        const existing = instancesRef.current.b;
+        instancesRef.current.b = null;
+        existing.destroy();
+      }
+      return;
+    }
+
+    const ws = setupWs('b', container, url);
+    instancesRef.current.b = ws;
+    readyRef.current.b = false;
+    durationRef.current.b = 0;
+
+    return () => {
+      readyRef.current.b = false;
+      durationRef.current.b = 0;
+      if (instancesRef.current.b === ws) instancesRef.current.b = null;
+      ws.destroy();
+    };
+  }, [laneSaves.b, laneUrls.b, setupWs]);
+
+  // Sync on lane/compare changes
+  useEffect(() => {
+    activeLaneRef.current = effectiveLane;
+    hasCompareRef.current = hasCompare;
+    setDuration(durationRef.current[effectiveLane] ?? 0);
+    syncAllVolumes();
+  }, [effectiveLane, hasCompare, syncAllVolumes]);
+
+  useEffect(() => {
+    if (!hasCompare && activeLane === 'b') {
+      setActiveLane('a');
+    }
+  }, [activeLane, hasCompare]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -382,7 +375,7 @@ export function PreviewPlayer({
       if (e.key === ' ') {
         e.preventDefault();
         void handleTogglePlayback();
-      } else if (e.key === 'Tab' && compareSave) {
+      } else if (e.key === '`' && compareSave) {
         e.preventDefault();
         switchLane(effectiveLane === 'a' ? 'b' : 'a');
       }
@@ -404,8 +397,9 @@ export function PreviewPlayer({
   }, [onClose, pauseAll]);
 
   return (
-    <div className="border-t border-border bg-[#0f1014] px-4 py-3">
+    <div className="border-t border-border bg-background px-5 py-4">
       <div className="flex items-start gap-3">
+        {/* Play / Pause */}
         <Button
           type="button"
           variant="outline"
@@ -415,116 +409,187 @@ export function PreviewPlayer({
           aria-label={playing ? 'Pause preview' : 'Play preview'}
           className="mt-0.5 shrink-0 rounded-full size-8"
         >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? <Pause size={16} /> : <Play size={16} />}
         </Button>
 
+        {/* Main content */}
         <div className="min-w-0 flex-1">
+          {/* Header: label + time */}
           <div className="flex items-center gap-2">
-            <div className="text-[10px] uppercase tracking-wider text-white/30 font-medium">
-              Preview
-            </div>
-            <div className="rounded-full border border-white/[0.1] bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50 font-medium">
-              {effectiveLane === 'a' ? 'A' : 'B'}
-            </div>
-            <div className="text-[10px] text-white/30 font-mono tabular-nums ml-auto">
+            <span className="truncate text-sm font-medium text-foreground/85">
+              {currentSave.label}
+            </span>
+            {hasCompare && (
+              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {effectiveLane.toUpperCase()}
+              </span>
+            )}
+            {!hasCompare && (
+              <span className="text-[11px] text-muted-foreground">
+                {relativeDate(currentSave.createdAt)}
+              </span>
+            )}
+            <span className="ml-auto shrink-0 text-[11px] font-mono tabular-nums text-muted-foreground">
               {formatTime(currentTime)} / {formatTime(duration)}
-            </div>
+            </span>
           </div>
 
-          <div className="relative mt-2 h-8 overflow-hidden rounded-md">
-            <div
-              ref={(node) => {
-                waveformRefs.current.a = node;
-              }}
-              className={
+          {/* Lane A waveform */}
+          <button
+            type="button"
+            onClick={() => switchLane('a')}
+            className={`mt-2 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all ${
+              effectiveLane === 'a'
+                ? 'border-border bg-muted/50'
+                : 'border-transparent bg-transparent opacity-50 hover:opacity-75'
+            }`}
+          >
+            <span
+              className={`inline-flex size-5 shrink-0 items-center justify-center rounded text-[11px] font-bold ${
                 effectiveLane === 'a'
-                  ? 'absolute inset-0 opacity-100'
-                  : 'pointer-events-none absolute inset-0 opacity-35'
-              }
-            />
-            <div
-              ref={(node) => {
-                waveformRefs.current.b = node;
-              }}
-              className={
-                compareSave
-                  ? effectiveLane === 'b'
-                    ? 'absolute inset-0 opacity-100'
-                    : 'pointer-events-none absolute inset-0 opacity-35'
-                  : 'pointer-events-none absolute inset-0 opacity-0'
-              }
-            />
-          </div>
-
-          <div className="mt-1 text-[13px] font-medium text-white/85">
-            {currentSave.label}
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant={effectiveLane === 'a' ? 'outline' : 'ghost'}
-              size="sm"
-              className="rounded-lg text-[11px]"
-              onClick={() => switchLane('a')}
+                  ? 'bg-foreground/15 text-foreground'
+                  : 'bg-muted text-muted-foreground'
+              }`}
             >
-              A: {save.label}
-            </Button>
+              A
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center gap-1.5">
+                <span className="truncate text-xs text-foreground/70">
+                  {save.label}
+                </span>
+                {hasCompare && (
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      isANewer
+                        ? 'bg-emerald-400/10 text-emerald-400/80 border border-emerald-400/15'
+                        : 'bg-muted text-muted-foreground border border-border'
+                    }`}
+                  >
+                    {isANewer ? 'Newer' : 'Older'}
+                  </span>
+                )}
+                <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                  {relativeDate(save.createdAt)}
+                </span>
+              </div>
+              <div
+                ref={(node) => {
+                  waveformRefs.current.a = node;
+                }}
+                className="h-8 rounded"
+              />
+            </div>
+          </button>
 
+          {/* Compare controls */}
+          <div className="mt-2 flex items-center gap-2">
             <NativeSelect
               value={effectiveCompareSaveId}
               onChange={(event) => {
                 const nextId = event.target.value;
+                pauseAll();
+                currentTimeRef.current = 0;
+                setCurrentTime(0);
                 setCompareSaveId(nextId);
                 setPlayError(null);
                 setActiveLane(nextId ? 'b' : 'a');
               }}
-              className="w-[220px] rounded-lg text-[11px]"
+              className="max-w-[260px] flex-1 rounded-lg text-xs"
+              aria-label="Compare with another save"
             >
               <NativeSelectOption value="">
                 Compare with another save
               </NativeSelectOption>
               {compareOptions.map((candidate) => (
                 <NativeSelectOption key={candidate.id} value={candidate.id}>
-                  {candidate.label}
+                  {candidate.label} — {shortDate(candidate.createdAt)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-
-            {compareSave && (
-              <Button
-                type="button"
-                variant={effectiveLane === 'b' ? 'outline' : 'ghost'}
-                size="sm"
-                className="rounded-lg text-[11px]"
-                onClick={() => switchLane('b')}
-              >
-                B: {compareSave.label}
-              </Button>
-            )}
-
-            {compareSave && (
-              <span className="text-[10px] text-white/20 ml-1">
-                Tab to switch
+            {hasCompare && (
+              <span className="text-[11px] text-muted-foreground">
+                ` to switch
               </span>
             )}
           </div>
 
+          {/* Lane B waveform (only when compare is active) */}
+          {hasCompare && compareSave && (
+            <button
+              type="button"
+              onClick={() => switchLane('b')}
+              className={`mt-2 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-all ${
+                effectiveLane === 'b'
+                  ? 'border-border bg-muted/50'
+                  : 'border-transparent bg-transparent opacity-50 hover:opacity-75'
+              }`}
+            >
+              <span
+                className={`inline-flex size-5 shrink-0 items-center justify-center rounded text-[11px] font-bold ${
+                  effectiveLane === 'b'
+                    ? 'bg-foreground/15 text-foreground'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                B
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className="truncate text-xs text-foreground/70">
+                    {compareSave.label}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                      !isANewer
+                        ? 'bg-emerald-400/10 text-emerald-400/80 border border-emerald-400/15'
+                        : 'bg-muted text-muted-foreground border border-border'
+                    }`}
+                  >
+                    {!isANewer ? 'Newer' : 'Older'}
+                  </span>
+                  <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                    {relativeDate(compareSave.createdAt)}
+                  </span>
+                </div>
+                <div
+                  ref={(node) => {
+                    waveformRefs.current.b = node;
+                  }}
+                  className="h-8 rounded"
+                />
+              </div>
+            </button>
+          )}
+
+          {/* Hidden B container when no compare (WaveSurfer needs a DOM node) */}
+          {!hasCompare && (
+            <div
+              ref={(node) => {
+                waveformRefs.current.b = node;
+              }}
+              className="hidden"
+            />
+          )}
+
+          {/* Error */}
           {playError && (
-            <div className="mt-2 rounded-md bg-red-400/10 border border-red-400/15 px-2.5 py-1.5 text-[11px] text-red-300/80">
+            <div className="mt-2 rounded-md bg-destructive/10 border border-destructive/15 px-2.5 py-1.5 text-xs text-destructive">
               {playError}
             </div>
           )}
         </div>
 
+        {/* Close */}
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
           onClick={handleClose}
-          className="shrink-0 text-white/30 hover:text-white/65 rounded-full"
+          aria-label="Close preview player"
+          className="shrink-0 text-muted-foreground hover:text-foreground rounded-full"
         >
-          <X size={14} />
+          <X size={16} />
         </Button>
       </div>
     </div>
