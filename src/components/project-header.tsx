@@ -57,18 +57,18 @@ export function ProjectHeader() {
   const canOpenFiles = project.presence === 'active';
 
   return (
-    <div className="flex items-center justify-between border-b border-border px-5 py-3">
+    <div className="flex items-center justify-between border-b border-border px-6 py-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex items-center justify-center size-8 rounded-lg bg-white/[0.04] shrink-0">
-          <Waveform size={16} className="text-white/40" weight="bold" />
+        <div className="flex items-center justify-center size-10 rounded-lg bg-white/[0.04] shrink-0">
+          <Waveform size={20} className="text-white/40" weight="bold" />
         </div>
         <div className="min-w-0">
-          <h2 className="truncate text-[14px] font-semibold text-white/90 leading-tight">
+          <h2 className="truncate text-base font-semibold text-white/90 leading-tight">
             {project.name}
           </h2>
-          <div className="mt-1 flex items-center gap-2 text-[11px]">
+          <div className="mt-1 flex items-center gap-2 text-xs">
             <span
-              className={cn('size-1.5 rounded-full shrink-0', health.dotClass)}
+              className={cn('size-2 rounded-full shrink-0', health.dotClass)}
             />
             <span className={health.textClass}>{health.label}</span>
           </div>
@@ -113,7 +113,7 @@ export function ProjectHeader() {
           Reveal
         </Button>
 
-        <div className="w-px h-4 bg-white/[0.06] mx-1" />
+        <div className="w-px h-5 bg-white/[0.06] mx-1" />
 
         <DiskUsagePanel projectId={project.id} />
 
@@ -122,7 +122,7 @@ export function ProjectHeader() {
           variant={previewSidebarOpen ? 'outline' : 'ghost'}
           size="sm"
           className={cn(
-            'text-[11px]',
+            'text-xs',
             previewSidebarOpen
               ? 'text-white/70'
               : 'text-white/35 hover:text-white/60',

@@ -51,7 +51,7 @@ export function CollapsedCard({
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full text-left py-2 pr-3 pl-3 flex items-center gap-2.5 transition-all duration-150 min-h-[36px]',
+        'w-full text-left py-3 pr-4 pl-4 flex items-center gap-2.5 transition-all duration-150 min-h-[44px]',
         isSelected
           ? 'bg-white/[0.06] border-l-2 border-white/50'
           : 'border-l-2 border-transparent hover:bg-white/[0.03]',
@@ -60,7 +60,7 @@ export function CollapsedCard({
       {/* Dot */}
       <div
         className={cn(
-          'shrink-0 size-[6px] rounded-full ring-2',
+          'shrink-0 size-2 rounded-full ring-2',
           isSelected
             ? 'bg-white ring-white/20'
             : isHead
@@ -72,7 +72,7 @@ export function CollapsedCard({
       />
 
       {/* Time */}
-      <span className="text-[11px] font-mono text-white/30 shrink-0 tabular-nums">
+      <span className="text-xs font-mono text-white/30 shrink-0 tabular-nums">
         {formatTime(save.createdAt)}
       </span>
 
@@ -81,7 +81,7 @@ export function CollapsedCard({
         <div className="flex items-center gap-1.5 min-w-0">
           <span
             className={cn(
-              'text-[12px] truncate leading-tight',
+              'text-[13px] truncate leading-tight',
               isSelected ? 'text-white/90 font-medium' : 'text-white/55',
             )}
           >
@@ -90,7 +90,7 @@ export function CollapsedCard({
           {!save.auto && (
             <Badge
               variant="secondary"
-              className="text-[9px] uppercase tracking-widest px-1 py-0 rounded shrink-0 h-auto border-transparent text-emerald-400/60 bg-emerald-400/8 leading-tight"
+              className="text-[10px] uppercase tracking-widest px-1 py-0 rounded shrink-0 h-auto border-transparent text-emerald-400/60 bg-emerald-400/8 leading-tight"
             >
               saved
             </Badge>
@@ -99,7 +99,7 @@ export function CollapsedCard({
         {hasChips && (
           <div className="flex flex-wrap items-center gap-1">
             {fallbackText ? (
-              <span className="text-[10px] text-white/20">{fallbackText}</span>
+              <span className="text-[11px] text-white/20">{fallbackText}</span>
             ) : (
               <>
                 {visible.map((chip) => (
@@ -107,7 +107,7 @@ export function CollapsedCard({
                     key={chip.label}
                     variant="outline"
                     className={cn(
-                      'text-[9px] px-1 py-0 rounded h-auto font-mono leading-tight',
+                      'text-[10px] px-1 py-0 rounded h-auto font-mono leading-tight',
                       chipColor(chip.kind),
                     )}
                   >
@@ -115,7 +115,7 @@ export function CollapsedCard({
                   </Badge>
                 ))}
                 {overflow > 0 && (
-                  <span className="text-[10px] text-white/20 ml-0.5">
+                  <span className="text-[11px] text-white/20 ml-0.5">
                     +{overflow}
                   </span>
                 )}

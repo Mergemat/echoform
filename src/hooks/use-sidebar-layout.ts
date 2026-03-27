@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MIN_WIDTH = 200;
-const MAX_WIDTH = 400;
-const DEFAULT_WIDTH = 260;
+const MAX_WIDTH = 500;
+const DEFAULT_WIDTH = 300;
 const STORAGE_KEY = 'ablegit:sidebar-width';
 const MOBILE_BREAKPOINT = 768;
 

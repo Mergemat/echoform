@@ -101,17 +101,17 @@ export const ProjectItem = memo(function ProjectItem({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium leading-tight">
+          <span className="block truncate text-sm font-medium leading-tight">
             {project.name}
           </span>
           <div className="mt-1.5 flex items-center gap-1.5">
             <div
-              className={cn('size-1.5 rounded-full shrink-0', health.dotClass)}
+              className={cn('size-2 rounded-full shrink-0', health.dotClass)}
             />
-            <span className={cn('text-[10px] leading-none', health.textClass)}>
+            <span className={cn('text-[11px] leading-none', health.textClass)}>
               {health.label}
             </span>
-            <span className="text-[10px] text-white/20 ml-auto tabular-nums">
+            <span className="text-[11px] text-white/20 ml-auto tabular-nums">
               {project.saves.length > 0
                 ? `${project.saves.length} save${project.saves.length === 1 ? '' : 's'}`
                 : 'No saves'}
@@ -153,7 +153,7 @@ export const ProjectItem = memo(function ProjectItem({
       </div>
 
       {project.watchError && (
-        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-300/70">
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-red-300/70">
           <WarningCircle size={12} className="shrink-0" />
           <span className="truncate">{project.watchError}</span>
         </div>
@@ -230,10 +230,10 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
     return (
       <div className="flex-1 min-h-0 px-2 py-1">
         <div className="px-3 py-10 text-center">
-          <div className="text-[13px] text-white/25 font-medium">
+          <div className="text-sm text-white/25 font-medium">
             No watched projects
           </div>
-          <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
+          <div className="mt-1 text-xs text-white/15 leading-relaxed">
             Point Ablegit at your music folders to start protecting your
             sessions automatically.
           </div>
@@ -321,10 +321,10 @@ export function AppSidebar() {
         <div className="shrink-0 px-4 pt-5 pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-[15px] font-semibold tracking-tight text-white/90">
+              <h1 className="text-base font-semibold tracking-tight text-white/90">
                 Ablegit
               </h1>
-              <p className="mt-0.5 text-[11px] text-white/25 leading-tight">
+              <p className="mt-0.5 text-xs text-white/25 leading-tight">
                 protecting your sessions
               </p>
             </div>
@@ -335,7 +335,7 @@ export function AppSidebar() {
             type="button"
             onPointerDown={handleSearchPointerDown}
             onClick={handleSearchClick}
-            className="mt-3 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[12px] text-white/25 hover:bg-white/[0.05] hover:text-white/40 hover:border-white/[0.1] transition-all duration-150"
+            className="mt-3 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white/25 hover:bg-white/[0.05] hover:text-white/40 hover:border-white/[0.1] transition-all duration-150"
           >
             <MagnifyingGlass size={13} className="shrink-0 text-white/20" />
             <span className="flex-1 text-left">Search projects...</span>

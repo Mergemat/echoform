@@ -34,17 +34,17 @@ export function BranchCard({
     >
       {/* Main row */}
       <div
-        className="flex items-center gap-2 py-3 pr-4"
+        className="flex items-center gap-2 py-3.5 pr-4"
         style={{ paddingLeft: `${lineLeft}px` }}
       >
         {/* Branch dot + connector */}
         <div className="relative flex items-center shrink-0">
           {depth > 0 && (
-            <GitFork size={10} className="text-white/15 mr-0.5" weight="bold" />
+            <GitFork size={12} className="text-white/15 mr-0.5" weight="bold" />
           )}
           <div
             className={cn(
-              'size-2.5 rounded-full border transition-colors',
+              'size-3 rounded-full border transition-colors',
               isCurrent
                 ? 'bg-emerald-400/80 border-emerald-400/30'
                 : isFocused
@@ -58,20 +58,20 @@ export function BranchCard({
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span
             className={cn(
-              'text-[12px] font-medium truncate',
+              'text-[13px] font-medium truncate',
               isFocused ? 'text-white/85' : 'text-white/40',
             )}
           >
             {idea.name}
           </span>
           {isCurrent && (
-            <span className="text-[9px] uppercase tracking-[0.12em] text-emerald-400/60 shrink-0 font-medium">
+            <span className="text-[10px] uppercase tracking-[0.12em] text-emerald-400/60 shrink-0 font-medium">
               current
             </span>
           )}
           <span
             className={cn(
-              'text-[10px] tabular-nums shrink-0',
+              'text-[11px] tabular-nums shrink-0',
               isFocused ? 'text-white/25' : 'text-white/15',
             )}
           >
