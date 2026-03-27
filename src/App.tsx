@@ -81,7 +81,7 @@ export function App() {
 
         {/* Right sidebar: all previews */}
         {selectedProject && previewSidebarOpen && !isMobile && (
-          <div className="shrink-0 w-[220px]">
+          <div className="shrink-0 w-[260px]">
             <PreviewSidebar project={selectedProject} />
           </div>
         )}
@@ -89,7 +89,7 @@ export function App() {
 
       {/* Connection indicator */}
       {!connected && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-500/10 text-red-300 text-[11px] font-medium px-4 py-2 rounded-full border border-red-500/20 backdrop-blur-md z-50 shadow-lg shadow-red-500/5">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-500/10 text-red-300 text-xs font-medium px-5 py-2.5 rounded-full border border-red-500/20 backdrop-blur-md z-50 shadow-lg shadow-red-500/5">
           Connecting to daemon...
         </div>
       )}

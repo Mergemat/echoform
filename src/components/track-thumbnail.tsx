@@ -187,14 +187,14 @@ export function TrackThumbnail({
 
   return (
     <div className={className} role="img" aria-label={`${rows.length} tracks`}>
-      <div className="space-y-px rounded-md bg-white/[0.03] p-1 border border-white/[0.04]">
+      <div className="space-y-px rounded bg-white/[0.03] p-0.5 border border-white/[0.04]">
         {visible.map(({ track, depth }, i) => {
           const indent = Math.min(depth, 4) * indentPx;
           const guideOffset = Math.max(indent - 3, 0);
           return (
             <div
               key={`${track.type}-${track.name}-${i}`}
-              className="relative h-[3px] overflow-hidden rounded-[1.5px] bg-white/[0.05]"
+              className="relative h-[2px] overflow-hidden rounded-[1px] bg-white/[0.05]"
               title={trackTitle(track)}
             >
               {depth > 0 && (
@@ -204,7 +204,7 @@ export function TrackThumbnail({
                 />
               )}
               <div
-                className="absolute top-0 bottom-0 rounded-[1.5px]"
+                className="absolute top-0 bottom-0 rounded-[1px]"
                 style={{
                   left: `${indent}px`,
                   right: '0px',
