@@ -7,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { formatSize, formatDateTime } from './timeline-utils';
+import { formatSize, formatDateTime, getSaveDisplayTitle } from './timeline-utils';
 import type { DiskUsage, DiskUsageSave } from '@/lib/types';
 
 // ── Fetch helpers ────────────────────────────────────────────────────
@@ -128,17 +128,17 @@ function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
           <div
             key={s.id}
             className="group flex items-center gap-2"
-            title={`${s.label} — ${formatSize(s.snapshotBytes)} @ ${formatDateTime(s.createdAt)}`}
+            title={`${getSaveDisplayTitle(s)} — ${formatSize(s.snapshotBytes)} @ ${formatDateTime(s.createdAt)}`}
           >
             <span
               className={cn(
-                'text-[10px] w-[52px] truncate shrink-0 transition-colors',
+                'text-[10px] w-[86px] truncate shrink-0 transition-colors',
                 s.auto
                   ? 'text-white/20 group-hover:text-white/35'
                   : 'text-white/35 group-hover:text-white/50',
               )}
             >
-              {s.label}
+              {getSaveDisplayTitle(s, { compact: true })}
             </span>
             <div className="flex-1 h-[5px] bg-white/[0.04] rounded-full overflow-hidden">
               <div

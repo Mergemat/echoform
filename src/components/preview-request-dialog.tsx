@@ -16,6 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import type { Idea, PreviewRequestResult, Save } from '@/lib/types';
 import { sendDaemonCommand } from '@/lib/daemon-client';
+import { getSaveDisplayTitle } from './timeline-utils';
 
 const ACCEPTED_EXTENSIONS = ['.wav', '.aif', '.aiff', '.mp3', '.m4a'];
 const ACCEPT_STRING = ACCEPTED_EXTENSIONS.map((e) => `audio/*,${e}`).join(',');
@@ -189,7 +190,7 @@ export function PreviewRequestDialog({
             </div>
             <div className="min-w-0">
               <div className="text-sm text-white/85 font-medium truncate">
-                {save.label}
+                {getSaveDisplayTitle(save)}
               </div>
               {idea && (
                 <div className="text-xs text-white/35 truncate mt-0.5">

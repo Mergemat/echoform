@@ -62,6 +62,7 @@ export type Idea = {
 export type Save = {
   id: string;
   label: string;
+  customLabel?: boolean;
   note: string;
   createdAt: string;
   ideaId: string;
@@ -256,6 +257,7 @@ export type DiskUsage = {
 export type DiskUsageSave = {
   id: string;
   label: string;
+  customLabel?: boolean;
   createdAt: string;
   snapshotBytes: number;
   auto: boolean;

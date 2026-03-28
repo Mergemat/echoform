@@ -5,11 +5,17 @@ import { basename } from '@/lib/path';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { Save, Idea } from '@/lib/types';
+import type { Save, Idea, Project } from '@/lib/types';
 import { useState } from 'react';
 import { TrashSimple, GitFork, X } from '@phosphor-icons/react';
 import { toast } from 'sonner';
-import { formatDateTime, formatSize, isAudio, isAls } from './timeline-utils';
+import {
+  formatDateTime,
+  formatSize,
+  getSaveDisplayTitle,
+  isAudio,
+  isAls,
+} from './timeline-utils';
 import { TrackThumbnail } from './track-thumbnail';
 import { SmartRestoreDialog } from './smart-restore-dialog';
 import { PreviewRequestDialog } from './preview-request-dialog';
@@ -25,16 +31,17 @@ export function ExpandedCard({
   save,
   idea,
   isHead,
-  projectId,
+  project,
   onClose,
 }: {
   save: Save;
   idea: Idea | undefined;
   isHead: boolean;
-  projectId: string;
+  project: Project;
   onClose: () => void;
 }) {
   const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
+  const projectId = project.id;
   const [labelVal, setLabelVal] = useState(save.label);
   const [noteVal, setNoteVal] = useState(save.note);
   const [showIdeaForm, setShowIdeaForm] = useState(false);
@@ -44,14 +51,18 @@ export function ExpandedCard({
   const [fileName, setFileName] = useState('');
   const [computing, setComputing] = useState(false);
 
-  const commitEdit = () =>
+  const commitEdit = () => {
+    const nextLabel = labelVal.trim();
+    const nextNote = noteVal;
+    if (nextLabel === save.label && nextNote === save.note) return;
     sendDaemonCommand({
       type: 'update-save',
       projectId,
       saveId: save.id,
-      note: noteVal,
-      label: labelVal,
+      ...(nextNote !== save.note ? { note: nextNote } : {}),
+      ...(nextLabel !== save.label ? { label: nextLabel } : {}),
     });
+  };
   const handleDelete = () =>
     sendDaemonCommand({ type: 'delete-save', projectId, saveId: save.id });
   const handleCreateIdea = () => {
@@ -71,7 +82,8 @@ export function ExpandedCard({
     setShowIdeaForm((prev) => {
       const next = !prev;
       if (next) {
-        const defaultBranchName = ideaName.trim() || `Recovered ${save.label}`;
+        const defaultBranchName =
+          ideaName.trim() || `Recovered ${getSaveDisplayTitle(save)}`;
         setIdeaName(defaultBranchName);
         setFileName(fileName.trim() || `${defaultBranchName}.als`);
       }
@@ -395,7 +407,7 @@ export function ExpandedCard({
           size="sm"
           onClick={() => {
             if (save.previewStatus === 'ready') {
-              openPreviewPlayer(save.id);
+              openPreviewPlayer(save.id, project);
               return;
             }
             setShowPreviewDialog(true);

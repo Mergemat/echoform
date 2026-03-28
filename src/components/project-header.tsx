@@ -1,9 +1,8 @@
 import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
-import { usePreviewStore } from '@/lib/preview-store';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/lib/types';
-import { Waveform, MusicNotes } from '@phosphor-icons/react';
+import { Waveform } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { DiskUsagePanel } from '@/components/disk-usage-panel';
 
@@ -38,12 +37,6 @@ function projectHealth(project: Project) {
 
 export function ProjectHeader() {
   const project = useStore((state) => state.selectedProject());
-  const togglePreviewSidebar = usePreviewStore(
-    (state) => state.togglePreviewSidebar,
-  );
-  const previewSidebarOpen = usePreviewStore(
-    (state) => state.previewSidebarOpen,
-  );
 
   if (!project) return null;
 
@@ -116,22 +109,6 @@ export function ProjectHeader() {
         <div className="w-px h-5 bg-white/[0.06] mx-1" />
 
         <DiskUsagePanel projectId={project.id} />
-
-        <Button
-          type="button"
-          variant={previewSidebarOpen ? 'outline' : 'ghost'}
-          size="sm"
-          className={cn(
-            'text-xs',
-            previewSidebarOpen
-              ? 'text-white/70'
-              : 'text-white/35 hover:text-white/60',
-          )}
-          onClick={togglePreviewSidebar}
-        >
-          <MusicNotes size={14} />
-          Previews
-        </Button>
       </div>
     </div>
   );

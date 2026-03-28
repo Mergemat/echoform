@@ -205,4 +205,43 @@ describe('PreviewPlayer compare switching', () => {
     expect(screen.getAllByText('A').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/0:32 \/ 1:30/)).toBeInTheDocument();
   });
+
+  it('pauses the current preview before switching to another save', async () => {
+    const project = makeProject();
+    const { rerender } = render(
+      <PreviewPlayer
+        key={project.saves[0]!.id}
+        project={project}
+        save={project.saves[0]!}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const firstLane = MockWaveSurfer.instances[0]!;
+    act(() => {
+      firstLane.emit('decode', 90);
+      firstLane.emit('ready');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Play preview' }));
+    });
+
+    expect(firstLane.play).toHaveBeenCalledTimes(1);
+    expect(firstLane.pause).not.toHaveBeenCalled();
+
+    rerender(
+      <PreviewPlayer
+        key={project.saves[1]!.id}
+        project={project}
+        save={project.saves[1]!}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(firstLane.pause).toHaveBeenCalled();
+    expect(firstLane.destroy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Play preview' })).toBeInTheDocument();
+    expect(MockWaveSurfer.instances[1]!.play).not.toHaveBeenCalled();
+  });
 });

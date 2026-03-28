@@ -4,6 +4,7 @@ import { useRef, useState, useMemo, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { MusicNotes } from '@phosphor-icons/react';
 import {
   buildTimelineDisplayItems,
   getRootFileGroups,
@@ -29,6 +30,7 @@ export function Timeline() {
   const setActiveIdea = useStore((s) => s.setActiveIdea);
   const toggleBranchCollapse = useStore((s) => s.toggleBranchCollapse);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Derive file tabs and active tab from project data
@@ -85,8 +87,35 @@ export function Timeline() {
     );
   }, [filteredProject, activeIdeaId, expandedGroups, collapsedBranches]);
 
+  const previewCount = useMemo(
+    () =>
+      project?.saves.filter(
+        (s) => s.previewStatus === 'ready' && s.previewRefs.length > 0,
+      ).length ?? 0,
+    [project],
+  );
+  const previewSaveIds = useMemo(() => {
+    if (!showPreviewsOnly) return null;
+    return new Set(
+      project?.saves
+        .filter((s) => s.previewStatus === 'ready' && s.previewRefs.length > 0)
+        .map((s) => s.id) ?? [],
+    );
+  }, [project, showPreviewsOnly]);
+
+  const visibleItems = useMemo(() => {
+    if (!previewSaveIds) return displayItems;
+    return displayItems.filter((item) => {
+      if (item.type === 'branch') return true;
+      if (item.type === 'save') return previewSaveIds.has(item.save.id);
+      if (item.type === 'group')
+        return item.saves.some((s) => previewSaveIds.has(s.id));
+      return true;
+    });
+  }, [displayItems, previewSaveIds]);
+
   const virtualizer = useVirtualizer({
-    count: displayItems.length,
+    count: visibleItems.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: useCallback(() => 56, []),
     overscan: 8,
@@ -265,12 +294,35 @@ export function Timeline() {
         </div>
       )}
 
+      {previewCount > 0 && (
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-border">
+          <Button
+            type="button"
+            variant={showPreviewsOnly ? 'outline' : 'ghost'}
+            size="sm"
+            className={cn(
+              'text-xs gap-1.5',
+              showPreviewsOnly
+                ? 'text-white/70'
+                : 'text-white/30 hover:text-white/50',
+            )}
+            onClick={() => setShowPreviewsOnly((v) => !v)}
+          >
+            <MusicNotes size={13} />
+            Previews
+            <span className="text-[10px] tabular-nums text-white/20">
+              {previewCount}
+            </span>
+          </Button>
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         <div
           style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
         >
           {virtualizer.getVirtualItems().map((vItem) => {
-            const item = displayItems[vItem.index]!;
+            const item = visibleItems[vItem.index]!;
             return (
               <div
                 key={vItem.key}
@@ -321,13 +373,14 @@ export function Timeline() {
                               save={save}
                               isSelected
                               isHead={isHead}
+                              project={project}
                               onClick={() => toggleSave(save.id)}
                             />
                             <ExpandedCard
                               save={save}
                               idea={idea}
                               isHead={isHead}
-                              projectId={project.id}
+                              project={project}
                               onClose={() => toggleSave(save.id)}
                             />
                           </div>
@@ -340,6 +393,7 @@ export function Timeline() {
                           save={save}
                           isSelected={false}
                           isHead={isHead}
+                          project={project}
                           onClick={() => toggleSave(save.id)}
                         />
                       </BranchLine>

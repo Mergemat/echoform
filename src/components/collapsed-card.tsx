@@ -1,10 +1,11 @@
 import { cn } from '@/lib/utils';
-import type { Save } from '@/lib/types';
+import { usePreviewStore } from '@/lib/preview-store';
+import type { Project, Save } from '@/lib/types';
 import { useMemo } from 'react';
-import { SpeakerHigh } from '@phosphor-icons/react';
+import { Play, Pause } from '@phosphor-icons/react';
 import {
-  formatTime,
   formatSizeDelta,
+  getSaveDisplayTitle,
   buildChips,
   type Chip,
 } from './timeline-utils';
@@ -15,13 +16,17 @@ export function CollapsedCard({
   save,
   isSelected,
   isHead,
+  project,
   onClick,
 }: {
   save: Save;
   isSelected: boolean;
   isHead: boolean;
+  project: Project;
   onClick: () => void;
 }) {
+  const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
+  const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
   const chips = useMemo(() => buildChips(save), [save]);
   const MAX_CHIPS = 3;
   const visible = chips.slice(0, MAX_CHIPS);
@@ -71,11 +76,6 @@ export function CollapsedCard({
         )}
       />
 
-      {/* Time */}
-      <span className="text-xs font-mono text-white/30 shrink-0 tabular-nums">
-        {formatTime(save.createdAt)}
-      </span>
-
       {/* Label + chips stacked tight */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -85,7 +85,7 @@ export function CollapsedCard({
               isSelected ? 'text-white/90 font-medium' : 'text-white/55',
             )}
           >
-            {save.label}
+            {getSaveDisplayTitle(save)}
           </span>
           {!save.auto && (
             <Badge
@@ -133,13 +133,30 @@ export function CollapsedCard({
         />
       )}
 
-      {/* Audio icon */}
+      {/* Inline play button */}
       {save.previewStatus === 'ready' && (
-        <SpeakerHigh
-          size={11}
-          className="shrink-0 text-white/20"
-          weight="fill"
-        />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openPreviewPlayer(save.id, project);
+          }}
+          className={cn(
+            'shrink-0 flex items-center justify-center size-6 rounded-full transition-all',
+            previewPlayerSaveId === save.id
+              ? 'bg-white/15 text-white/70'
+              : 'text-white/20 hover:text-white/50 hover:bg-white/[0.06]',
+          )}
+          aria-label={
+            previewPlayerSaveId === save.id ? 'Now playing' : 'Play preview'
+          }
+        >
+          {previewPlayerSaveId === save.id ? (
+            <Pause size={11} weight="fill" />
+          ) : (
+            <Play size={11} weight="fill" />
+          )}
+        </button>
       )}
     </button>
   );

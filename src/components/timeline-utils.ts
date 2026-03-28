@@ -122,6 +122,29 @@ export function formatDateTime(iso: string): string {
   );
 }
 
+export function formatSaveTitle(
+  iso: string,
+  options?: { compact?: boolean },
+): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: options?.compact ? undefined : 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+export function getSaveDisplayTitle(
+  save: { label: string; createdAt: string; customLabel?: boolean },
+  options?: { compact?: boolean },
+): string {
+  if (save.customLabel && save.label.trim()) {
+    return save.label.trim();
+  }
+  return formatSaveTitle(save.createdAt, options);
+}
+
 // ── File-type helpers ────────────────────────────────────────────────
 const AUDIO_EXT = new Set([
   '.aif',
