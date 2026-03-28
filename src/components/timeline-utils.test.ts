@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Idea, Project, Save } from '@/lib/types';
-import { buildTimelineDisplayItems, getRootFileGroups } from './timeline-utils';
+import {
+  buildTimelineDisplayItems,
+  getRootFileGroups,
+  getSaveDisplayTitle,
+} from './timeline-utils';
 
 function makeIdea(id: string, fields: Partial<Idea> = {}): Idea {
   return {
@@ -138,5 +142,26 @@ describe('getRootFileGroups', () => {
       .toHaveLength(3);
     expect(groups.find((group) => group.setPath === 'quick night.als')?.rootIdeas)
       .toHaveLength(1);
+  });
+});
+
+describe('getSaveDisplayTitle', () => {
+  it('prefers a custom label when present', () => {
+    expect(
+      getSaveDisplayTitle({
+        label: 'Chorus bounce',
+        customLabel: true,
+        createdAt: '2024-01-03T14:45:00Z',
+      }),
+    ).toBe('Chorus bounce');
+  });
+
+  it('falls back to a timestamp when the label is not custom', () => {
+    expect(
+      getSaveDisplayTitle({
+        label: '3 files changed',
+        createdAt: '2024-01-03T14:45:00Z',
+      }),
+    ).not.toBe('3 files changed');
   });
 });

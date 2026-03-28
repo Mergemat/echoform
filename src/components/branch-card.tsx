@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import type { Idea, Save } from '@/lib/types';
 import { CaretDown, CaretRight, GitFork } from '@phosphor-icons/react';
+import { getSaveDisplayTitle } from './timeline-utils';
 
 export function BranchCard({
   idea,
@@ -104,7 +105,7 @@ export function BranchCard({
           )}
           style={{ paddingLeft: `${lineLeft + 22}px` }}
         >
-          forked from <span className="font-medium">{fromSave.label}</span>
+          forked from <span className="font-medium">{getSaveDisplayTitle(fromSave)}</span>
         </div>
       )}
     </button>

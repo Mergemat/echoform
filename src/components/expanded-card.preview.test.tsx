@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { ExpandedCard } from '@/components/expanded-card';
 import { usePreviewStore } from '@/lib/preview-store';
-import type { Idea, Save } from '@/lib/types';
+import type { Idea, Project, Save } from '@/lib/types';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -58,6 +58,27 @@ function makeSave(status: Save['previewStatus']): Save {
   };
 }
 
+function makeProject(save: Save): Project {
+  return {
+    id: 'proj-1',
+    name: 'Test Project',
+    projectPath: '/tmp/test',
+    adapter: 'ableton',
+    presence: 'active',
+    watching: true,
+    watchError: null,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    lastSeenAt: '2024-01-01T00:00:00Z',
+    currentIdeaId: 'idea-1',
+    pendingOpen: null,
+    driftStatus: null,
+    rootIds: [],
+    ideas: [makeIdea()],
+    saves: [save],
+  };
+}
+
 describe('ExpandedCard preview actions', () => {
   const openPreviewPlayer = vi.fn();
 
@@ -65,21 +86,22 @@ describe('ExpandedCard preview actions', () => {
     openPreviewPlayer.mockReset();
     usePreviewStore.setState({
       previewPlayerSaveId: null,
-      previewSidebarOpen: false,
+      compareSaveId: null,
       openPreviewPlayer,
       closePreviewPlayer: vi.fn(),
-      togglePreviewSidebar: vi.fn(),
+      setCompareSaveId: vi.fn(),
       reconcilePreviewPlayer: vi.fn(),
     });
   });
 
   it('shows Add preview when no preview exists', () => {
+    const save = makeSave('none');
     const view = render(
       <ExpandedCard
-        save={makeSave('none')}
+        save={save}
         idea={makeIdea()}
         isHead={false}
-        projectId="proj-1"
+        project={makeProject(save)}
         onClose={vi.fn()}
       />,
     );
@@ -88,32 +110,37 @@ describe('ExpandedCard preview actions', () => {
   });
 
   it('shows Add preview when preview is pending (no waiting state)', () => {
+    const save = makeSave('pending');
     const view = render(
       <ExpandedCard
-        save={makeSave('pending')}
+        save={save}
         idea={makeIdea()}
         isHead={false}
-        projectId="proj-1"
+        project={makeProject(save)}
         onClose={vi.fn()}
       />,
     );
 
-    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(2);
+    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(1);
   });
 
   it('opens the preview player when the preview is ready', () => {
+    const save = makeSave('ready');
     const view = render(
       <ExpandedCard
-        save={makeSave('ready')}
+        save={save}
         idea={makeIdea()}
         isHead={false}
-        projectId="proj-1"
+        project={makeProject(save)}
         onClose={vi.fn()}
       />,
     );
 
     fireEvent.click(view.getByRole('button', { name: 'Preview' }));
 
-    expect(openPreviewPlayer).toHaveBeenCalledWith('save-1');
+    expect(openPreviewPlayer).toHaveBeenCalledWith(
+      'save-1',
+      expect.objectContaining({ id: 'proj-1' }),
+    );
   });
 });

@@ -6,7 +6,9 @@ import {
   NativeSelectOption,
 } from '@/components/ui/native-select';
 import type { Project, Save } from '@/lib/types';
+import { usePreviewStore } from '@/lib/preview-store';
 import WaveSurfer from 'wavesurfer.js';
+import { getSaveDisplayTitle } from './timeline-utils';
 
 type Lane = 'a' | 'b';
 
@@ -38,16 +40,6 @@ function relativeDate(iso: string): string {
   return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-  });
-}
-
-function shortDate(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
   });
 }
 
@@ -90,7 +82,8 @@ export function PreviewPlayer({
   const activeLaneRef = useRef<Lane>('a');
   const hasCompareRef = useRef(false);
 
-  const [compareSaveId, setCompareSaveId] = useState<string>('');
+  const storeCompareSaveId = usePreviewStore((s) => s.compareSaveId);
+  const setStoreCompareSaveId = usePreviewStore((s) => s.setCompareSaveId);
   const [activeLane, setActiveLane] = useState<Lane>('a');
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -110,9 +103,9 @@ export function PreviewPlayer({
     [project.saves, save.id],
   );
   const effectiveCompareSaveId = compareOptions.some(
-    (candidate) => candidate.id === compareSaveId,
+    (candidate) => candidate.id === storeCompareSaveId,
   )
-    ? compareSaveId
+    ? storeCompareSaveId!
     : '';
   const compareSave =
     compareOptions.find(
@@ -164,6 +157,19 @@ export function PreviewPlayer({
     }
     playingRef.current = false;
     setPlaying(false);
+  }, []);
+
+  const disposeAllPlayers = useCallback(() => {
+    for (const lane of ['a', 'b'] as const) {
+      const instance = instancesRef.current[lane];
+      readyRef.current[lane] = false;
+      durationRef.current[lane] = 0;
+      if (!instance) continue;
+      instance.pause();
+      instance.destroy();
+      instancesRef.current[lane] = null;
+    }
+    playingRef.current = false;
   }, []);
 
   const playAllReady = useCallback(async () => {
@@ -312,8 +318,11 @@ export function PreviewPlayer({
     return () => {
       readyRef.current.a = false;
       durationRef.current.a = 0;
-      if (instancesRef.current.a === ws) instancesRef.current.a = null;
-      ws.destroy();
+      if (instancesRef.current.a === ws) {
+        instancesRef.current.a = null;
+        ws.pause();
+        ws.destroy();
+      }
     };
   }, [laneUrls.a, setupWs]);
 
@@ -341,8 +350,11 @@ export function PreviewPlayer({
     return () => {
       readyRef.current.b = false;
       durationRef.current.b = 0;
-      if (instancesRef.current.b === ws) instancesRef.current.b = null;
-      ws.destroy();
+      if (instancesRef.current.b === ws) {
+        instancesRef.current.b = null;
+        ws.pause();
+        ws.destroy();
+      }
     };
   }, [laneSaves.b, laneUrls.b, setupWs]);
 
@@ -385,16 +397,18 @@ export function PreviewPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [compareSave, effectiveLane, handleTogglePlayback, switchLane]);
 
+  useEffect(
+    () => () => {
+      disposeAllPlayers();
+    },
+    [disposeAllPlayers],
+  );
+
   const handleClose = useCallback(() => {
-    pauseAll();
-    for (const lane of ['a', 'b'] as const) {
-      const instance = instancesRef.current[lane];
-      if (!instance) continue;
-      instancesRef.current[lane] = null;
-      instance.destroy();
-    }
+    disposeAllPlayers();
+    setPlaying(false);
     onClose();
-  }, [onClose, pauseAll]);
+  }, [disposeAllPlayers, onClose]);
 
   return (
     <div className="border-t border-border bg-background px-5 py-4">
@@ -417,7 +431,7 @@ export function PreviewPlayer({
           {/* Header: label + time */}
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-foreground/85">
-              {currentSave.label}
+              {getSaveDisplayTitle(currentSave)}
             </span>
             {hasCompare && (
               <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -456,7 +470,7 @@ export function PreviewPlayer({
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className="truncate text-xs text-foreground/70">
-                  {save.label}
+                  {getSaveDisplayTitle(save)}
                 </span>
                 {hasCompare && (
                   <span
@@ -491,7 +505,7 @@ export function PreviewPlayer({
                 pauseAll();
                 currentTimeRef.current = 0;
                 setCurrentTime(0);
-                setCompareSaveId(nextId);
+                setStoreCompareSaveId(nextId || null);
                 setPlayError(null);
                 setActiveLane(nextId ? 'b' : 'a');
               }}
@@ -503,7 +517,7 @@ export function PreviewPlayer({
               </NativeSelectOption>
               {compareOptions.map((candidate) => (
                 <NativeSelectOption key={candidate.id} value={candidate.id}>
-                  {candidate.label} — {shortDate(candidate.createdAt)}
+                  {getSaveDisplayTitle(candidate, { compact: true })}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -537,7 +551,7 @@ export function PreviewPlayer({
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center gap-1.5">
                   <span className="truncate text-xs text-foreground/70">
-                    {compareSave.label}
+                    {getSaveDisplayTitle(compareSave)}
                   </span>
                   <span
                     className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${

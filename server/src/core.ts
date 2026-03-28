@@ -1889,6 +1889,7 @@ export class AblegitService {
       label:
         input?.label?.trim() ||
         (input?.auto ? formatDiffAsLabel(setDiff, changes) : autoLabel()),
+      customLabel: Boolean(input?.label?.trim()),
       note: input?.note?.trim() || '',
       createdAt: now,
       ideaId: idea.id,
@@ -2283,7 +2284,11 @@ export class AblegitService {
       const project = requireProject(state, projectId);
       const save = requireSave(project, saveId);
       if (input.note !== undefined) save.note = input.note;
-      if (input.label !== undefined) save.label = input.label;
+      if (input.label !== undefined) {
+        const nextLabel = input.label.trim();
+        save.label = nextLabel;
+        save.customLabel = nextLabel.length > 0;
+      }
       project.updatedAt = new Date().toISOString();
       await this.saveState(state);
       return project;
@@ -2563,6 +2568,7 @@ export class AblegitService {
       saves: project.saves.map((s) => ({
         id: s.id,
         label: s.label,
+        customLabel: s.customLabel,
         createdAt: s.createdAt,
         snapshotBytes: s.metadata.sizeBytes,
         auto: s.auto,

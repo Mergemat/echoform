@@ -1,12 +1,27 @@
 import { create } from 'zustand';
-import type { Project } from '@/lib/types';
+import type { Project, Save } from '@/lib/types';
+
+/** Find the nearest previous save (by date) that has a ready preview. */
+function findPreviousPreviewSave(project: Project, save: Save): Save | null {
+  return (
+    project.saves
+      .filter(
+        (s) =>
+          s.id !== save.id &&
+          s.previewStatus === 'ready' &&
+          s.previewRefs.length > 0 &&
+          s.createdAt < save.createdAt,
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+  );
+}
 
 type PreviewStore = {
   previewPlayerSaveId: string | null;
-  previewSidebarOpen: boolean;
-  openPreviewPlayer: (saveId: string) => void;
+  compareSaveId: string | null;
+  openPreviewPlayer: (saveId: string, project?: Project) => void;
   closePreviewPlayer: () => void;
-  togglePreviewSidebar: () => void;
+  setCompareSaveId: (id: string | null) => void;
   reconcilePreviewPlayer: (
     projects: Project[],
     selectedProjectId: string | null,
@@ -15,16 +30,28 @@ type PreviewStore = {
 
 export const usePreviewStore = create<PreviewStore>((set) => ({
   previewPlayerSaveId: null,
-  previewSidebarOpen: false,
+  compareSaveId: null,
 
-  openPreviewPlayer: (saveId) => set({ previewPlayerSaveId: saveId }),
-  closePreviewPlayer: () => set({ previewPlayerSaveId: null }),
-  togglePreviewSidebar: () =>
-    set((state) => ({ previewSidebarOpen: !state.previewSidebarOpen })),
+  openPreviewPlayer: (saveId, project) => {
+    let autoCompareId: string | null = null;
+    if (project) {
+      const save = project.saves.find((s) => s.id === saveId);
+      if (save) {
+        autoCompareId = findPreviousPreviewSave(project, save)?.id ?? null;
+      }
+    }
+    set({ previewPlayerSaveId: saveId, compareSaveId: autoCompareId });
+  },
+
+  closePreviewPlayer: () =>
+    set({ previewPlayerSaveId: null, compareSaveId: null }),
+
+  setCompareSaveId: (id) => set({ compareSaveId: id }),
+
   reconcilePreviewPlayer: (projects, selectedProjectId) =>
     set((state) => {
       if (!state.previewPlayerSaveId || !selectedProjectId) {
-        return { previewPlayerSaveId: null };
+        return { previewPlayerSaveId: null, compareSaveId: null };
       }
 
       const selectedProject = projects.find(
@@ -36,8 +63,8 @@ export const usePreviewStore = create<PreviewStore>((set) => ({
 
       return previewStillExists
         ? state
-        : {
-            previewPlayerSaveId: null,
-          };
+        : { previewPlayerSaveId: null, compareSaveId: null };
     }),
 }));
+
+export { findPreviousPreviewSave };

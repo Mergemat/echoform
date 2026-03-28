@@ -5,7 +5,6 @@ import { AppSidebar } from '@/components/sidebar';
 import { Timeline } from '@/components/timeline';
 import { ProjectHeader } from '@/components/project-header';
 import { PreviewPlayer } from '@/components/preview-player';
-import { PreviewSidebar } from '@/components/preview-sidebar';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import { useDaemonSync } from '@/hooks/use-daemon-sync';
@@ -20,7 +19,6 @@ export function App() {
   const projects = useStore((s) => s.projects);
   const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
   const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
-  const previewSidebarOpen = usePreviewStore((s) => s.previewSidebarOpen);
   const { isMobile, onDragEnd, onDragMove, onDragStart, sidebarWidth } =
     useSidebarLayout();
   const previewSave =
@@ -78,13 +76,6 @@ export function App() {
             />
           )}
         </div>
-
-        {/* Right sidebar: all previews */}
-        {selectedProject && previewSidebarOpen && !isMobile && (
-          <div className="shrink-0 w-[260px]">
-            <PreviewSidebar project={selectedProject} />
-          </div>
-        )}
       </div>
 
       {/* Connection indicator */}
