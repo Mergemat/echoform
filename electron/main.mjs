@@ -10,6 +10,7 @@ import {
   shell,
   Tray,
 } from "electron";
+import { getServerRestartDelayMs } from "./server-supervisor.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -19,10 +20,36 @@ const baseUrl = `http://127.0.0.1:${port}`;
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
+let serverReady = false;
+let serverRestartAttempt = 0;
+let serverRestartTimer = null;
+let serverLaunchInFlight = false;
 let isQuitting = false;
+const serverReadyWaiters = new Set();
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    function onAbort() {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Aborted"));
+    }
+
+    if (!signal) {
+      return;
+    }
+
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function resolveResourcesRoot() {
@@ -45,12 +72,40 @@ function resolveServerProcess() {
   };
 }
 
-async function waitForServer() {
+function clearServerRestartTimer() {
+  if (serverRestartTimer) {
+    clearTimeout(serverRestartTimer);
+    serverRestartTimer = null;
+  }
+}
+
+function notifyServerReady() {
+  for (const resolve of serverReadyWaiters) {
+    resolve();
+  }
+  serverReadyWaiters.clear();
+}
+
+function waitForHealthyServer() {
+  if (serverReady) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    serverReadyWaiters.add(resolve);
+  });
+}
+
+async function waitForServer(signal) {
   const timeoutMs = 15_000;
   const startedAt = Date.now();
   let lastError = null;
 
   while (Date.now() - startedAt < timeoutMs) {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error("Server launch aborted");
+    }
+
     try {
       const response = await fetch(`${baseUrl}/api/session`);
       if (response.ok) {
@@ -61,21 +116,49 @@ async function waitForServer() {
       lastError = error;
     }
 
-    await sleep(250);
+    await sleep(250, signal);
   }
 
   throw lastError ?? new Error("Timed out waiting for Echoform server");
 }
 
-async function startServer() {
-  if (serverProcess) {
+function describeServerStop(code, signal) {
+  if (signal === null) {
+    return `server exited with code ${code ?? "unknown"}`;
+  }
+  return `server exited via signal ${signal}`;
+}
+
+function scheduleServerRestart(reason) {
+  if (isQuitting || serverRestartTimer) {
     return;
   }
 
+  const delayMs = getServerRestartDelayMs(serverRestartAttempt);
+  serverRestartAttempt += 1;
+  console.error(
+    `[echoform] daemon stopped; restarting in ${delayMs}ms`,
+    reason
+  );
+  serverRestartTimer = setTimeout(() => {
+    serverRestartTimer = null;
+    void startServer();
+  }, delayMs);
+}
+
+async function startServer() {
+  if (serverReady || serverProcess || serverLaunchInFlight) {
+    return waitForHealthyServer();
+  }
+
+  clearServerRestartTimer();
+  serverLaunchInFlight = true;
   const resourcesRoot = resolveResourcesRoot();
   const server = resolveServerProcess();
   const stateRoot = app.getPath("userData");
   const legacyStateRoot = join(app.getPath("appData"), "Ablegit");
+  const launchAbort = new AbortController();
+  let stopped = false;
 
   serverProcess = spawn(server.command, server.args, {
     cwd: server.cwd,
@@ -89,22 +172,50 @@ async function startServer() {
     stdio: "inherit",
   });
 
-  serverProcess.once("exit", (code, signal) => {
-    serverProcess = null;
-    if (isQuitting) {
+  const child = serverProcess;
+  const handleServerStop = (reason) => {
+    if (stopped) {
       return;
     }
+    stopped = true;
+    serverReady = false;
+    if (serverProcess === child) {
+      serverProcess = null;
+    }
+    launchAbort.abort(reason);
+    scheduleServerRestart(reason);
+  };
 
-    app.show();
-    app.focus({ steal: true });
-    const detail =
-      signal === null
-        ? `server exited with code ${code ?? "unknown"}`
-        : `server exited via signal ${signal}`;
-    dialog.showErrorBox("Echoform stopped", detail);
+  child.once("error", (error) => {
+    handleServerStop(error);
   });
 
-  await waitForServer();
+  child.once("exit", (code, signal) => {
+    handleServerStop(new Error(describeServerStop(code, signal)));
+  });
+
+  try {
+    await waitForServer(launchAbort.signal);
+    if (stopped || serverProcess !== child) {
+      return waitForHealthyServer();
+    }
+    serverReady = true;
+    serverRestartAttempt = 0;
+    notifyServerReady();
+  } catch (error) {
+    if (!stopped && !isQuitting) {
+      serverReady = false;
+      if (serverProcess === child) {
+        serverProcess = null;
+      }
+      child.kill("SIGTERM");
+      scheduleServerRestart(error);
+    }
+  } finally {
+    serverLaunchInFlight = false;
+  }
+
+  return waitForHealthyServer();
 }
 
 function createWindow() {
@@ -152,6 +263,7 @@ function createWindow() {
 async function showWindow() {
   const window = createWindow();
   if (window.webContents.getURL() !== `${baseUrl}/`) {
+    await startServer();
     await window.loadURL(baseUrl);
   }
 
@@ -239,6 +351,7 @@ app.on("activate", () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  clearServerRestartTimer();
   if (!serverProcess) {
     return;
   }
