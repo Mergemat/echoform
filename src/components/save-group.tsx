@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
-import type { Save } from '@/lib/types';
-import { CaretDown, CaretRight } from '@phosphor-icons/react';
-import { formatSizeDelta } from './timeline-utils';
+import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import type { Save } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { formatSizeDelta } from "./timeline-utils";
 
 export function GroupCard({
   saves,
@@ -15,29 +15,29 @@ export function GroupCard({
 }) {
   const totalDelta = saves.reduce(
     (sum, s) => sum + (s.changes?.sizeDelta ?? 0),
-    0,
+    0
   );
   return (
     <button
-      type="button"
-      onClick={onToggle}
       className={cn(
-        'w-full text-left py-3 pr-4 pl-3 flex items-center gap-2 hover:bg-white/[0.02] transition-all duration-150 border-l-2 border-transparent',
+        "flex w-full items-center gap-2 border-transparent border-l-2 py-3 pr-4 pl-3 text-left transition-all duration-150 hover:bg-white/[0.02]"
       )}
+      onClick={onToggle}
+      type="button"
     >
       {expanded ? (
-        <CaretDown size={10} className="text-white/25 shrink-0" />
+        <CaretDown className="shrink-0 text-white/25" size={10} />
       ) : (
-        <CaretRight size={10} className="text-white/25 shrink-0" />
+        <CaretRight className="shrink-0 text-white/25" size={10} />
       )}
-      <span className="text-[11px] text-white/25 uppercase tracking-wider font-medium">
+      <span className="font-medium text-[11px] text-white/25 uppercase tracking-wider">
         {saves.length} auto saves
       </span>
       {totalDelta !== 0 && (
         <span
           className={cn(
-            'text-[11px] font-mono tabular-nums',
-            totalDelta > 0 ? 'text-emerald-400/35' : 'text-red-400/35',
+            "font-mono text-[11px] tabular-nums",
+            totalDelta > 0 ? "text-emerald-400/35" : "text-red-400/35"
           )}
         >
           {formatSizeDelta(totalDelta)}

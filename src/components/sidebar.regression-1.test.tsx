@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
-import { JSDOM } from 'jsdom';
-import type { Project, Idea, Save } from '@/lib/types';
+import { fireEvent, render } from "@testing-library/react";
+import { JSDOM } from "jsdom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Idea, Project, Save } from "@/lib/types";
 
-vi.mock('sonner', () => ({
+vi.mock("sonner", () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-import { ProjectItem } from '@/components/sidebar';
-import { useConnectionStore } from '@/lib/connection-store';
-import { useStore } from '@/lib/store';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { ProjectItem } from "@/components/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useConnectionStore } from "@/lib/connection-store";
+import { useStore } from "@/lib/store";
 
-const dom = new JSDOM('<!doctype html><html><body></body></html>');
+const dom = new JSDOM("<!doctype html><html><body></body></html>");
 Object.assign(globalThis, {
   window: dom.window,
   document: dom.window.document,
@@ -23,35 +23,35 @@ Object.assign(globalThis, {
 
 const makeIdea = (id: string): Idea => ({
   id,
-  name: 'Main',
-  createdAt: '2024-01-01T00:00:00Z',
-  setPath: 'project.als',
-  baseSaveId: 'save-1',
-  headSaveId: 'save-1',
+  name: "Main",
+  createdAt: "2024-01-01T00:00:00Z",
+  setPath: "project.als",
+  baseSaveId: "save-1",
+  headSaveId: "save-1",
   parentIdeaId: null,
   forkedFromSaveId: null,
 });
 
 const makeSave = (id: string, ideaId: string): Save => ({
   id,
-  label: 'Initial save',
-  note: '',
-  createdAt: '2024-01-01T00:00:00Z',
+  label: "Initial save",
+  note: "",
+  createdAt: "2024-01-01T00:00:00Z",
   ideaId,
   previewRefs: [],
-  previewStatus: 'none',
+  previewStatus: "none",
   previewMime: null,
   previewRequestedAt: null,
   previewUpdatedAt: null,
-  projectHash: 'abc123',
+  projectHash: "abc123",
   auto: false,
   metadata: {
-    activeSetPath: '/projects/test/project.als',
+    activeSetPath: "/projects/test/project.als",
     setFiles: [],
     audioFiles: 0,
     fileCount: 1,
     sizeBytes: 1024,
-    modifiedAt: '2024-01-01T00:00:00Z',
+    modifiedAt: "2024-01-01T00:00:00Z",
   },
 });
 
@@ -61,14 +61,14 @@ const makeProject = (id: string, name: string): Project => {
   return {
     id,
     name,
-    adapter: 'ableton',
+    adapter: "ableton",
     projectPath: `/projects/${id}`,
     rootIds: [],
-    presence: 'active',
+    presence: "active",
     watchError: null,
-    lastSeenAt: '2024-01-01T00:00:00Z',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
+    lastSeenAt: "2024-01-01T00:00:00Z",
+    createdAt: "2024-01-01T00:00:00Z",
+    updatedAt: "2024-01-01T00:00:00Z",
     currentIdeaId: idea.id,
     pendingOpen: null,
     driftStatus: null,
@@ -78,11 +78,11 @@ const makeProject = (id: string, name: string): Project => {
   };
 };
 
-describe('ProjectItem keyboard support', () => {
+describe("ProjectItem keyboard support", () => {
   beforeEach(() => {
     useStore.setState({
       projects: [],
-      selectedProjectId: 'proj-1',
+      selectedProjectId: "proj-1",
       selectedSaveId: null,
       activeIdeaId: null,
       roots: [],
@@ -94,22 +94,22 @@ describe('ProjectItem keyboard support', () => {
     useConnectionStore.setState({ connected: false });
   });
 
-  it('selects a project when Space is pressed on its row', () => {
+  it("selects a project when Space is pressed on its row", () => {
     // Regression: ISSUE-002 — project rows ignored Space key activation.
     // Found by /qa on 2026-03-21
     // Report: .gstack/qa-reports/qa-report-localhost-5173-2026-03-21.md
-    const project = makeProject('proj-2', 'Keyboard Project');
+    const project = makeProject("proj-2", "Keyboard Project");
 
     const view = render(
       <TooltipProvider>
         <ProjectItem project={project} selected={false} />
-      </TooltipProvider>,
+      </TooltipProvider>
     );
 
-    const row = view.getByRole('button', { name: /Keyboard Project/i });
+    const row = view.getByRole("button", { name: /Keyboard Project/i });
     row.focus();
-    fireEvent.keyDown(row, { key: ' ' });
+    fireEvent.keyDown(row, { key: " " });
 
-    expect(useStore.getState().selectedProjectId).toBe('proj-2');
+    expect(useStore.getState().selectedProjectId).toBe("proj-2");
   });
 });

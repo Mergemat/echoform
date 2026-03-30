@@ -5,8 +5,8 @@
  * musically-meaningful changes: tracks, devices, clips, tempo, time sig, mixer.
  */
 
-import type { SetSnapshot, TrackSnapshot, DeviceSnapshot } from './als-parser';
-import type { SetDiff, TrackDiff } from './types';
+import type { DeviceSnapshot, SetSnapshot, TrackSnapshot } from "./als-parser";
+import type { SetDiff, TrackDiff } from "./types";
 
 export type { SetDiff, TrackDiff };
 
@@ -19,7 +19,7 @@ function fuzzyEq(a: number, b: number, epsilon = 0.0001): boolean {
 
 function diffDevices(
   prev: DeviceSnapshot[],
-  curr: DeviceSnapshot[],
+  curr: DeviceSnapshot[]
 ): { added: string[]; removed: string[] } {
   const prevMap = new Map(prev.map((d) => [d.id, d]));
   const currMap = new Map(curr.map((d) => [d.id, d]));
@@ -28,10 +28,14 @@ function diffDevices(
   const removed: string[] = [];
 
   for (const [id, device] of currMap) {
-    if (!prevMap.has(id)) added.push(device.name);
+    if (!prevMap.has(id)) {
+      added.push(device.name);
+    }
   }
   for (const [id, device] of prevMap) {
-    if (!currMap.has(id)) removed.push(device.name);
+    if (!currMap.has(id)) {
+      removed.push(device.name);
+    }
   }
 
   return { added, removed };
@@ -39,24 +43,32 @@ function diffDevices(
 
 function diffClips(
   prev: string[],
-  curr: string[],
+  curr: string[]
 ): { added: string[]; removed: string[] } {
   // Clips don't have stable IDs, so we diff by name using multiset comparison
   const prevCounts = new Map<string, number>();
   const currCounts = new Map<string, number>();
-  for (const n of prev) prevCounts.set(n, (prevCounts.get(n) ?? 0) + 1);
-  for (const n of curr) currCounts.set(n, (currCounts.get(n) ?? 0) + 1);
+  for (const n of prev) {
+    prevCounts.set(n, (prevCounts.get(n) ?? 0) + 1);
+  }
+  for (const n of curr) {
+    currCounts.set(n, (currCounts.get(n) ?? 0) + 1);
+  }
 
   const added: string[] = [];
   const removed: string[] = [];
 
   for (const [name, count] of currCounts) {
     const prevCount = prevCounts.get(name) ?? 0;
-    for (let i = 0; i < count - prevCount; i++) added.push(name);
+    for (let i = 0; i < count - prevCount; i++) {
+      added.push(name);
+    }
   }
   for (const [name, count] of prevCounts) {
     const currCount = currCounts.get(name) ?? 0;
-    for (let i = 0; i < count - currCount; i++) removed.push(name);
+    for (let i = 0; i < count - currCount; i++) {
+      removed.push(name);
+    }
   }
 
   return { added, removed };
@@ -64,11 +76,18 @@ function diffClips(
 
 function diffMixer(prev: TrackSnapshot, curr: TrackSnapshot): string[] {
   const changes: string[] = [];
-  if (!fuzzyEq(prev.volume, curr.volume)) changes.push('volume');
-  if (!fuzzyEq(prev.pan, curr.pan)) changes.push('pan');
-  if (prev.muted !== curr.muted) changes.push(curr.muted ? 'muted' : 'unmuted');
-  if (prev.soloed !== curr.soloed)
-    changes.push(curr.soloed ? 'soloed' : 'unsoloed');
+  if (!fuzzyEq(prev.volume, curr.volume)) {
+    changes.push("volume");
+  }
+  if (!fuzzyEq(prev.pan, curr.pan)) {
+    changes.push("pan");
+  }
+  if (prev.muted !== curr.muted) {
+    changes.push(curr.muted ? "muted" : "unmuted");
+  }
+  if (prev.soloed !== curr.soloed) {
+    changes.push(curr.soloed ? "soloed" : "unsoloed");
+  }
   return changes;
 }
 
@@ -77,20 +96,20 @@ function diffMixer(prev: TrackSnapshot, curr: TrackSnapshot): string[] {
 export function diffSets(prev: SetSnapshot, curr: SetSnapshot): SetDiff {
   // Tempo
   const tempoChange =
-    prev.tempo !== curr.tempo ? { from: prev.tempo, to: curr.tempo } : null;
+    prev.tempo === curr.tempo ? null : { from: prev.tempo, to: curr.tempo };
 
   // Time signature
   const timeSignatureChange =
-    prev.timeSignature !== curr.timeSignature
-      ? { from: prev.timeSignature, to: curr.timeSignature }
-      : null;
+    prev.timeSignature === curr.timeSignature
+      ? null
+      : { from: prev.timeSignature, to: curr.timeSignature };
 
   // Build track maps keyed by stable XML Id
   const prevTracks = new Map(prev.tracks.map((t) => [t.id, t]));
   const currTracks = new Map(curr.tracks.map((t) => [t.id, t]));
 
-  const addedTracks: SetDiff['addedTracks'] = [];
-  const removedTracks: SetDiff['removedTracks'] = [];
+  const addedTracks: SetDiff["addedTracks"] = [];
+  const removedTracks: SetDiff["removedTracks"] = [];
   const modifiedTracks: TrackDiff[] = [];
 
   // Detect added tracks
@@ -110,18 +129,20 @@ export function diffSets(prev: SetSnapshot, curr: SetSnapshot): SetDiff {
   // Detect modified tracks (present in both)
   for (const [id, currTrack] of currTracks) {
     const prevTrack = prevTracks.get(id);
-    if (!prevTrack) continue;
+    if (!prevTrack) {
+      continue;
+    }
 
     const renamedFrom =
-      prevTrack.name !== currTrack.name ? prevTrack.name : undefined;
+      prevTrack.name === currTrack.name ? undefined : prevTrack.name;
     const { added: addedDevices, removed: removedDevices } = diffDevices(
       prevTrack.devices,
-      currTrack.devices,
+      currTrack.devices
     );
     const clipCountDelta = currTrack.clipCount - prevTrack.clipCount;
     const { added: addedClips, removed: removedClips } = diffClips(
       prevTrack.clipNames,
-      currTrack.clipNames,
+      currTrack.clipNames
     );
     const mixerChanges = diffMixer(prevTrack, currTrack);
 

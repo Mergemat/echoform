@@ -1,24 +1,24 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
-import type { SetSnapshot, TrackSnapshot } from './als-parser';
-import { extractTrackSummary, parseAlsFile } from './als-parser';
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+import type { SetSnapshot, TrackSnapshot } from "./als-parser";
+import { extractTrackSummary, parseAlsFile } from "./als-parser";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
   );
 });
 
 function makeTrack(
   id: string,
-  type: TrackSnapshot['type'],
+  type: TrackSnapshot["type"],
   name: string,
-  fields: Partial<TrackSnapshot> = {},
+  fields: Partial<TrackSnapshot> = {}
 ): TrackSnapshot {
   return {
     id,
@@ -38,18 +38,18 @@ function makeTrack(
 }
 
 async function writeAlsFile(xml: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'echoform-als-parser-'));
+  const dir = await mkdtemp(join(tmpdir(), "echoform-als-parser-"));
   tempDirs.push(dir);
-  const filePath = join(dir, 'test.als');
+  const filePath = join(dir, "test.als");
   await writeFile(filePath, gzipSync(xml));
   return filePath;
 }
 
 function trackXml(
-  tag: 'AudioTrack' | 'MidiTrack' | 'ReturnTrack' | 'GroupTrack',
+  tag: "AudioTrack" | "MidiTrack" | "ReturnTrack" | "GroupTrack",
   id: string,
   name: string,
-  groupId = -1,
+  groupId = -1
 ): string {
   return `
     <${tag} Id="${id}">
@@ -70,28 +70,28 @@ function trackXml(
   `.trim();
 }
 
-describe('extractTrackSummary', () => {
-  test('aggregates nested groups and keeps orphaned tracks visible', () => {
+describe("extractTrackSummary", () => {
+  test("aggregates nested groups and keeps orphaned tracks visible", () => {
     const snapshot: SetSnapshot = {
       tempo: 120,
-      timeSignature: '4/4',
+      timeSignature: "4/4",
       tracks: [
-        makeTrack('group-1', 'group', 'Drums', { clipCount: 1 }),
-        makeTrack('audio-1', 'audio', 'Kick', {
-          groupId: 'group-1',
+        makeTrack("group-1", "group", "Drums", { clipCount: 1 }),
+        makeTrack("audio-1", "audio", "Kick", {
+          groupId: "group-1",
           clipCount: 2,
         }),
-        makeTrack('group-2', 'group', 'Perc', {
-          groupId: 'group-1',
+        makeTrack("group-2", "group", "Perc", {
+          groupId: "group-1",
           clipCount: 0,
         }),
-        makeTrack('midi-1', 'midi', 'Hat', {
-          groupId: 'group-2',
+        makeTrack("midi-1", "midi", "Hat", {
+          groupId: "group-2",
           clipCount: 4,
         }),
-        makeTrack('return-1', 'return', 'Reverb', { clipCount: 1 }),
-        makeTrack('audio-2', 'audio', 'Loose Audio', {
-          groupId: 'missing-group',
+        makeTrack("return-1", "return", "Reverb", { clipCount: 1 }),
+        makeTrack("audio-2", "audio", "Loose Audio", {
+          groupId: "missing-group",
           clipCount: 3,
         }),
       ],
@@ -99,30 +99,30 @@ describe('extractTrackSummary', () => {
 
     expect(extractTrackSummary(snapshot)).toEqual([
       {
-        name: 'Drums',
-        type: 'group',
+        name: "Drums",
+        type: "group",
         color: 0,
         clipCount: 7,
         trackCount: 4,
         children: [
           {
-            name: 'Kick',
-            type: 'audio',
+            name: "Kick",
+            type: "audio",
             color: 0,
             clipCount: 2,
             trackCount: 1,
             children: undefined,
           },
           {
-            name: 'Perc',
-            type: 'group',
+            name: "Perc",
+            type: "group",
             color: 0,
             clipCount: 4,
             trackCount: 2,
             children: [
               {
-                name: 'Hat',
-                type: 'midi',
+                name: "Hat",
+                type: "midi",
                 color: 0,
                 clipCount: 4,
                 trackCount: 1,
@@ -133,16 +133,16 @@ describe('extractTrackSummary', () => {
         ],
       },
       {
-        name: 'Reverb',
-        type: 'return',
+        name: "Reverb",
+        type: "return",
         color: 0,
         clipCount: 1,
         trackCount: 1,
         children: undefined,
       },
       {
-        name: 'Loose Audio',
-        type: 'audio',
+        name: "Loose Audio",
+        type: "audio",
         color: 0,
         clipCount: 3,
         trackCount: 1,
@@ -152,16 +152,16 @@ describe('extractTrackSummary', () => {
   });
 });
 
-describe('parseAlsFile', () => {
-  test('preserves mixed track order from the XML', async () => {
+describe("parseAlsFile", () => {
+  test("preserves mixed track order from the XML", async () => {
     const xml = `
       <Ableton>
         <LiveSet>
           <Tracks>
-            ${trackXml('AudioTrack', '1', 'Audio First')}
-            ${trackXml('GroupTrack', '2', 'Band Bus')}
-            ${trackXml('MidiTrack', '3', 'Bass MIDI', 2)}
-            ${trackXml('AudioTrack', '4', 'Audio Last')}
+            ${trackXml("AudioTrack", "1", "Audio First")}
+            ${trackXml("GroupTrack", "2", "Band Bus")}
+            ${trackXml("MidiTrack", "3", "Bass MIDI", 2)}
+            ${trackXml("AudioTrack", "4", "Audio Last")}
           </Tracks>
           <MainTrack>
             <DeviceChain>
@@ -179,16 +179,16 @@ describe('parseAlsFile', () => {
     const snapshot = await parseAlsFile(filePath);
 
     expect(snapshot.tracks.map((track) => track.name)).toEqual([
-      'Audio First',
-      'Band Bus',
-      'Bass MIDI',
-      'Audio Last',
+      "Audio First",
+      "Band Bus",
+      "Bass MIDI",
+      "Audio Last",
     ]);
     expect(snapshot.tracks.map((track) => track.type)).toEqual([
-      'audio',
-      'group',
-      'midi',
-      'audio',
+      "audio",
+      "group",
+      "midi",
+      "audio",
     ]);
   });
 });

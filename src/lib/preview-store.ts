@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import type { Project, Save } from '@/lib/types';
+import { create } from "zustand";
+import type { Project, Save } from "@/lib/types";
 
 /** Find the nearest previous save (by date) that has a ready preview. */
 function findPreviousPreviewSave(project: Project, save: Save): Save | null {
@@ -8,25 +8,25 @@ function findPreviousPreviewSave(project: Project, save: Save): Save | null {
       .filter(
         (s) =>
           s.id !== save.id &&
-          s.previewStatus === 'ready' &&
+          s.previewStatus === "ready" &&
           s.previewRefs.length > 0 &&
-          s.createdAt < save.createdAt,
+          s.createdAt < save.createdAt
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
   );
 }
 
-type PreviewStore = {
-  previewPlayerSaveId: string | null;
+interface PreviewStore {
+  closePreviewPlayer: () => void;
   compareSaveId: string | null;
   openPreviewPlayer: (saveId: string, project?: Project) => void;
-  closePreviewPlayer: () => void;
-  setCompareSaveId: (id: string | null) => void;
+  previewPlayerSaveId: string | null;
   reconcilePreviewPlayer: (
     projects: Project[],
-    selectedProjectId: string | null,
+    selectedProjectId: string | null
   ) => void;
-};
+  setCompareSaveId: (id: string | null) => void;
+}
 
 export const usePreviewStore = create<PreviewStore>((set) => ({
   previewPlayerSaveId: null,
@@ -50,15 +50,15 @@ export const usePreviewStore = create<PreviewStore>((set) => ({
 
   reconcilePreviewPlayer: (projects, selectedProjectId) =>
     set((state) => {
-      if (!state.previewPlayerSaveId || !selectedProjectId) {
+      if (!(state.previewPlayerSaveId && selectedProjectId)) {
         return { previewPlayerSaveId: null, compareSaveId: null };
       }
 
       const selectedProject = projects.find(
-        (project) => project.id === selectedProjectId,
+        (project) => project.id === selectedProjectId
       );
       const previewStillExists = selectedProject?.saves.some(
-        (save) => save.id === state.previewPlayerSaveId,
+        (save) => save.id === state.previewPlayerSaveId
       );
 
       return previewStillExists

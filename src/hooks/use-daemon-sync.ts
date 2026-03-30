@@ -1,14 +1,14 @@
-import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { useConnectionStore } from "@/lib/connection-store";
 import {
   startDaemonClient,
   stopDaemonClient,
   subscribeConnection,
   subscribeDaemonEvents,
-} from '@/lib/daemon-client';
-import { useConnectionStore } from '@/lib/connection-store';
-import { usePreviewStore } from '@/lib/preview-store';
-import { useStore } from '@/lib/store';
+} from "@/lib/daemon-client";
+import { usePreviewStore } from "@/lib/preview-store";
+import { useStore } from "@/lib/store";
 
 export function useDaemonSync() {
   useEffect(() => {
@@ -16,25 +16,25 @@ export function useDaemonSync() {
       const store = useStore.getState();
 
       switch (event.type) {
-        case 'snapshot':
+        case "snapshot":
           store.applySnapshot(event.projects, event.roots, event.activity);
           break;
-        case 'project-updated':
+        case "project-updated":
           store.applyProjectUpdate(event.project);
           break;
-        case 'auto-saved':
+        case "auto-saved":
           toast.success(`Auto-saved ${event.save.label}`);
           return;
-        case 'change-detected':
+        case "change-detected":
           toast.info(`Changes detected in ${event.projectName}`);
           return;
-        case 'discovered-projects':
+        case "discovered-projects":
           store.setDiscoveredProjects(event.paths);
           return;
-        case 'root-suggestions':
+        case "root-suggestions":
           store.setRootSuggestions(event.suggestions);
           return;
-        case 'error':
+        case "error":
           toast.error(event.message);
           return;
       }
@@ -42,7 +42,10 @@ export function useDaemonSync() {
       const nextState = useStore.getState();
       usePreviewStore
         .getState()
-        .reconcilePreviewPlayer(nextState.projects, nextState.selectedProjectId);
+        .reconcilePreviewPlayer(
+          nextState.projects,
+          nextState.selectedProjectId
+        );
     });
 
     const unsubscribeConnection = subscribeConnection((connected) => {

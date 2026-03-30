@@ -1,4 +1,14 @@
+.DS_Store
+*.log
+.env
+.env.*
+.idea/
+.vscode/
+.turbo/
+coverage/
+*.tsbuildinfo
 node_modules
+server/node_modules
 .echoform-state
 .ablegit-state
 dist

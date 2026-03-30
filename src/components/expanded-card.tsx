@@ -1,39 +1,39 @@
-import { sendDaemonCommand } from '@/lib/daemon-client';
-import { usePreviewStore } from '@/lib/preview-store';
-import { cn } from '@/lib/utils';
-import { basename } from '@/lib/path';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import type { Save, Idea, Project } from '@/lib/types';
-import { useState } from 'react';
-import { TrashSimple, GitFork, X } from '@phosphor-icons/react';
-import { toast } from 'sonner';
+import { GitFork, TrashSimple, X } from "@phosphor-icons/react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { sendDaemonCommand } from "@/lib/daemon-client";
+import { basename } from "@/lib/path";
+import { usePreviewStore } from "@/lib/preview-store";
+import type { Idea, Project, Save } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { PreviewRequestDialog } from "./preview-request-dialog";
+import { SmartRestoreDialog } from "./smart-restore-dialog";
 import {
   formatDateTime,
   formatSize,
   getSaveDisplayTitle,
-  isAudio,
   isAls,
-} from './timeline-utils';
-import { TrackThumbnail } from './track-thumbnail';
-import { SmartRestoreDialog } from './smart-restore-dialog';
-import { PreviewRequestDialog } from './preview-request-dialog';
+  isAudio,
+} from "./timeline-utils";
+import { TrackThumbnail } from "./track-thumbnail";
 
 const TTRACK: Record<string, string> = {
-  midi: 'MIDI',
-  audio: 'Audio',
-  return: 'Return',
-  group: 'Group',
+  midi: "MIDI",
+  audio: "Audio",
+  return: "Return",
+  group: "Group",
 };
 
-type ExpandedCardProps = {
-  save: Save;
+interface ExpandedCardProps {
   idea: Idea | undefined;
   isHead: boolean;
-  project: Project;
   onClose: () => void;
-};
+  project: Project;
+  save: Save;
+}
 
 export function ExpandedCard(props: ExpandedCardProps) {
   return useExpandedCardView(props);
@@ -50,8 +50,8 @@ function useExpandedCardView({
   const projectId = project.id;
   const [state, setState] = useState({
     computing: false,
-    fileName: '',
-    ideaName: '',
+    fileName: "",
+    ideaName: "",
     labelVal: save.label,
     noteVal: save.note,
     showIdeaForm: false,
@@ -72,21 +72,25 @@ function useExpandedCardView({
   const commitEdit = () => {
     const nextLabel = labelVal.trim();
     const nextNote = noteVal;
-    if (nextLabel === save.label && nextNote === save.note) return;
+    if (nextLabel === save.label && nextNote === save.note) {
+      return;
+    }
     sendDaemonCommand({
-      type: 'update-save',
+      type: "update-save",
       projectId,
       saveId: save.id,
-      ...(nextNote !== save.note ? { note: nextNote } : {}),
-      ...(nextLabel !== save.label ? { label: nextLabel } : {}),
+      ...(nextNote === save.note ? {} : { note: nextNote }),
+      ...(nextLabel === save.label ? {} : { label: nextLabel }),
     });
   };
   const handleDelete = () =>
-    sendDaemonCommand({ type: 'delete-save', projectId, saveId: save.id });
+    sendDaemonCommand({ type: "delete-save", projectId, saveId: save.id });
   const handleCreateIdea = () => {
-    if (!ideaName.trim()) return;
+    if (!ideaName.trim()) {
+      return;
+    }
     sendDaemonCommand({
-      type: 'branch-from-save',
+      type: "branch-from-save",
       projectId,
       saveId: save.id,
       name: ideaName.trim(),
@@ -94,8 +98,8 @@ function useExpandedCardView({
     });
     setState((current) => ({
       ...current,
-      fileName: '',
-      ideaName: '',
+      fileName: "",
+      ideaName: "",
       showIdeaForm: false,
     }));
   };
@@ -118,7 +122,7 @@ function useExpandedCardView({
   const handleCompute = async () => {
     setState((current) => ({ ...current, computing: true }));
     void fetch(`/api/projects/${projectId}/saves/${save.id}/changes`, {
-      method: 'POST',
+      method: "POST",
     }).finally(() => {
       setState((current) => ({ ...current, computing: false }));
     });
@@ -130,45 +134,45 @@ function useExpandedCardView({
   const removedAudio =
     changes?.removedFiles.filter((f) => !isAls(f) && isAudio(f)) ?? [];
   const addedOther =
-    changes?.addedFiles.filter((f) => !isAls(f) && !isAudio(f)) ?? [];
+    changes?.addedFiles.filter((f) => !(isAls(f) || isAudio(f))) ?? [];
   const removedOther =
-    changes?.removedFiles.filter((f) => !isAls(f) && !isAudio(f)) ?? [];
+    changes?.removedFiles.filter((f) => !(isAls(f) || isAudio(f))) ?? [];
   const modifiedOther =
-    changes?.modifiedFiles.filter((f) => !isAls(f) && !isAudio(f)) ?? [];
+    changes?.modifiedFiles.filter((f) => !(isAls(f) || isAudio(f))) ?? [];
   const sd = save.setDiff;
   const needsAnalysis =
     changes === undefined || sd === undefined || !save.trackSummary;
   const summarizedTrackCount = save.trackSummary?.reduce(
     (sum, track) => sum + (track.trackCount ?? 1),
-    0,
+    0
   );
   const previewButtonLabel =
-    save.previewStatus === 'ready' ? 'Preview' : 'Add preview';
+    save.previewStatus === "ready" ? "Preview" : "Add preview";
   const previewStatusText =
-    save.previewStatus === 'ready'
-      ? 'Audio preview attached'
-      : save.previewStatus === 'missing'
-        ? 'Preview file is missing'
-        : save.previewStatus === 'error'
-          ? 'Preview import needs attention'
+    save.previewStatus === "ready"
+      ? "Audio preview attached"
+      : save.previewStatus === "missing"
+        ? "Preview file is missing"
+        : save.previewStatus === "error"
+          ? "Preview import needs attention"
           : null;
 
   return (
-    <div className="pb-4 pt-3 pr-5 pl-4 space-y-2 border-l-2 border-white/50 bg-white/[0.04]">
+    <div className="space-y-2 border-white/50 border-l-2 bg-white/[0.04] pt-3 pr-5 pb-4 pl-4">
       <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <Input
-            value={labelVal}
+            className="h-auto w-full rounded-none border-0 border-white/[0.08] border-b bg-transparent px-0 pb-1 font-medium text-sm text-white/90 focus-visible:border-white/25 focus-visible:ring-0"
+            onBlur={commitEdit}
             onChange={(e) =>
               setState((current) => ({
                 ...current,
                 labelVal: e.target.value,
               }))
             }
-            onBlur={commitEdit}
-            className="bg-transparent border-0 border-b border-white/[0.08] focus-visible:border-white/25 focus-visible:ring-0 rounded-none text-sm text-white/90 font-medium w-full px-0 pb-1 h-auto"
+            value={labelVal}
           />
-          <div className="text-xs text-white/25 mt-1.5 flex items-center gap-1.5">
+          <div className="mt-1.5 flex items-center gap-1.5 text-white/25 text-xs">
             <span>{formatDateTime(save.createdAt)}</span>
             {idea && (
               <>
@@ -185,30 +189,30 @@ function useExpandedCardView({
           </div>
         </div>
         <Button
+          className="text-white/20 hover:text-white/50"
+          onClick={onClose}
+          size="icon-sm"
           type="button"
           variant="ghost"
-          size="icon-sm"
-          onClick={onClose}
-          className="text-white/20 hover:text-white/50"
         >
           <X size={12} />
         </Button>
       </div>
 
       <Textarea
-        value={noteVal}
+        className="min-h-[36px] w-full resize-none rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/55 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
+        onBlur={commitEdit}
         onChange={(e) =>
           setState((current) => ({
             ...current,
             noteVal: e.target.value,
           }))
         }
-        onBlur={commitEdit}
         placeholder="Add a note about this save..."
-        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-white/55 resize-none focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 min-h-[36px]"
+        value={noteVal}
       />
 
-      <div className="text-[11px] text-white/30 tabular-nums flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 text-[11px] text-white/30 tabular-nums">
         <span>{save.metadata.fileCount} files</span>
         <span className="text-white/10">·</span>
         <span>{save.metadata.audioFiles} audio</span>
@@ -218,7 +222,7 @@ function useExpandedCardView({
 
       {save.trackSummary && save.trackSummary.length > 0 && (
         <div>
-          <div className="text-[11px] text-white/20 uppercase tracking-wider font-medium mb-1.5">
+          <div className="mb-1.5 font-medium text-[11px] text-white/20 uppercase tracking-wider">
             Tracks ({summarizedTrackCount ?? save.trackSummary.length})
           </div>
           <TrackThumbnail tracks={save.trackSummary} variant="detail" />
@@ -229,7 +233,7 @@ function useExpandedCardView({
         <div className="space-y-1 text-xs">
           {sd.tempoChange && (
             <div className="flex items-center gap-1 text-[11px]">
-              <span className="text-white/20 uppercase tracking-wider w-10 shrink-0">
+              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
                 Tempo
               </span>
               <span className="font-mono text-white/35 tabular-nums">
@@ -244,7 +248,7 @@ function useExpandedCardView({
           )}
           {sd.timeSignatureChange && (
             <div className="flex items-center gap-1 text-[11px]">
-              <span className="text-white/20 uppercase tracking-wider w-10 shrink-0">
+              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
                 Time
               </span>
               <span className="font-mono text-white/35 tabular-nums">
@@ -260,11 +264,11 @@ function useExpandedCardView({
             <div className="space-y-px">
               {sd.addedTracks.map((t) => (
                 <div
-                  key={`add-${t.type}-${t.name}`}
                   className="flex items-center gap-1 text-[11px] text-emerald-400/50"
+                  key={`add-${t.type}-${t.name}`}
                 >
                   <span className="shrink-0">+</span>
-                  <span className="text-white/15 uppercase text-[9px] tracking-wider shrink-0">
+                  <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
                     {TTRACK[t.type] ?? t.type}
                   </span>
                   <span className="truncate text-white/40">{t.name}</span>
@@ -276,11 +280,11 @@ function useExpandedCardView({
             <div className="space-y-px">
               {sd.removedTracks.map((t) => (
                 <div
-                  key={`rem-${t.type}-${t.name}`}
                   className="flex items-center gap-1 text-[11px] text-red-400/50"
+                  key={`rem-${t.type}-${t.name}`}
                 >
                   <span className="shrink-0">−</span>
-                  <span className="text-white/10 uppercase text-[9px] tracking-wider shrink-0">
+                  <span className="shrink-0 text-[9px] text-white/10 uppercase tracking-wider">
                     {TTRACK[t.type] ?? t.type}
                   </span>
                   <span className="truncate text-white/25 line-through">
@@ -292,16 +296,16 @@ function useExpandedCardView({
           )}
           {sd.modifiedTracks.map((t) => (
             <div
+              className="space-y-px text-[11px]"
               key={`mod-${t.type}-${t.name}`}
-              className="text-[11px] space-y-px"
             >
               <div className="flex items-center gap-1 text-white/40">
-                <span className="text-white/15 uppercase text-[9px] tracking-wider shrink-0">
+                <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
                   {TTRACK[t.type] ?? t.type}
                 </span>
                 <span className="truncate">{t.name}</span>
                 {t.renamedFrom && (
-                  <span className="text-white/15 text-[10px]">
+                  <span className="text-[10px] text-white/15">
                     ← {t.renamedFrom}
                   </span>
                 )}
@@ -310,31 +314,31 @@ function useExpandedCardView({
                 t.removedDevices.length > 0 ||
                 t.clipCountDelta !== 0 ||
                 t.mixerChanges.length > 0) && (
-                <div className="pl-3 text-[10px] text-white/20 flex flex-wrap gap-x-2">
+                <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
                   {t.addedDevices.length > 0 && (
                     <span className="text-emerald-400/40">
-                      +{t.addedDevices.join(', ')}
+                      +{t.addedDevices.join(", ")}
                     </span>
                   )}
                   {t.removedDevices.length > 0 && (
                     <span className="text-red-400/40">
-                      −{t.removedDevices.join(', ')}
+                      −{t.removedDevices.join(", ")}
                     </span>
                   )}
                   {t.clipCountDelta !== 0 && (
                     <span
                       className={
                         t.clipCountDelta > 0
-                          ? 'text-emerald-400/40'
-                          : 'text-red-400/40'
+                          ? "text-emerald-400/40"
+                          : "text-red-400/40"
                       }
                     >
-                      {t.clipCountDelta > 0 ? '+' : ''}
+                      {t.clipCountDelta > 0 ? "+" : ""}
                       {t.clipCountDelta} clips
                     </span>
                   )}
                   {t.mixerChanges.length > 0 && (
-                    <span>{t.mixerChanges.join(', ')}</span>
+                    <span>{t.mixerChanges.join(", ")}</span>
                   )}
                 </div>
               )}
@@ -345,18 +349,18 @@ function useExpandedCardView({
 
       {needsAnalysis ? (
         <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-          <div className="text-xs text-white/25 mb-2">
+          <div className="mb-2 text-white/25 text-xs">
             {changes === undefined
-              ? 'No change data available'
-              : 'Detailed set analysis pending'}
+              ? "No change data available"
+              : "Detailed set analysis pending"}
           </div>
           <Button
-            variant="outline"
-            size="sm"
-            onClick={handleCompute}
             disabled={computing}
+            onClick={handleCompute}
+            size="sm"
+            variant="outline"
           >
-            {computing ? 'Analyzing...' : 'Analyze save'}
+            {computing ? "Analyzing..." : "Analyze save"}
           </Button>
         </div>
       ) : addedAudio.length +
@@ -368,13 +372,13 @@ function useExpandedCardView({
         <div className="space-y-2 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
           {addedAudio.length > 0 && (
             <div>
-              <div className="text-[11px] text-emerald-400/60 uppercase tracking-wider font-medium mb-1">
+              <div className="mb-1 font-medium text-[11px] text-emerald-400/60 uppercase tracking-wider">
                 New audio
               </div>
               {addedAudio.map((f) => (
                 <div
+                  className="truncate pl-2 font-mono text-white/45 text-xs"
                   key={f}
-                  className="text-xs font-mono text-white/45 pl-2 truncate"
                 >
                   {basename(f)}
                 </div>
@@ -383,13 +387,13 @@ function useExpandedCardView({
           )}
           {removedAudio.length > 0 && (
             <div>
-              <div className="text-[11px] text-red-400/60 uppercase tracking-wider font-medium mb-1">
+              <div className="mb-1 font-medium text-[11px] text-red-400/60 uppercase tracking-wider">
                 Removed audio
               </div>
               {removedAudio.map((f) => (
                 <div
+                  className="truncate pl-2 font-mono text-white/30 text-xs line-through"
                   key={f}
-                  className="text-xs font-mono text-white/30 pl-2 truncate line-through"
                 >
                   {basename(f)}
                 </div>
@@ -398,34 +402,34 @@ function useExpandedCardView({
           )}
           {addedOther.length + removedOther.length + modifiedOther.length >
             0 && (
-            <div className="text-xs text-white/20">
+            <div className="text-white/20 text-xs">
               {[
                 addedOther.length > 0 && `+${addedOther.length} files`,
                 removedOther.length > 0 && `−${removedOther.length} files`,
                 modifiedOther.length > 0 && `~${modifiedOther.length} modified`,
               ]
                 .filter(Boolean)
-                .join(', ')}
+                .join(", ")}
             </div>
           )}
         </div>
       ) : null}
 
       {save.metadata.setFiles.length > 1 && (
-        <div className="text-[11px] space-y-px">
+        <div className="space-y-px text-[11px]">
           {save.metadata.setFiles.map((f) => (
             <div
-              key={f}
               className={cn(
-                'font-mono truncate px-1.5 py-0.5 rounded',
+                "truncate rounded px-1.5 py-0.5 font-mono",
                 f === save.metadata.activeSetPath
-                  ? 'text-white/50 bg-white/[0.04]'
-                  : 'text-white/20',
+                  ? "bg-white/[0.04] text-white/50"
+                  : "text-white/20"
               )}
+              key={f}
             >
               {f}
               {f === save.metadata.activeSetPath && (
-                <span className="text-emerald-400/50 ml-1 font-sans text-[10px] uppercase tracking-wider">
+                <span className="ml-1 font-sans text-[10px] text-emerald-400/50 uppercase tracking-wider">
                   active
                 </span>
               )}
@@ -436,47 +440,47 @@ function useExpandedCardView({
 
       <div className="flex items-center gap-1 pt-0.5">
         <Button
-          variant="outline"
-          size="sm"
           onClick={() => {
-            if (save.previewStatus === 'ready') {
+            if (save.previewStatus === "ready") {
               openPreviewPlayer(save.id, project);
               return;
             }
             setState((current) => ({ ...current, showPreviewDialog: true }));
           }}
+          size="sm"
+          variant="outline"
         >
           {previewButtonLabel}
         </Button>
-        {save.previewStatus === 'ready' && (
+        {save.previewStatus === "ready" && (
           <Button
-            variant="ghost"
-            size="sm"
             onClick={() =>
               setState((current) => ({ ...current, showPreviewDialog: true }))
             }
+            size="sm"
+            variant="ghost"
           >
             Replace
           </Button>
         )}
         <Button
-          variant="outline"
-          size="sm"
           onClick={() =>
             setState((current) => ({ ...current, showSmartRestore: true }))
           }
+          size="sm"
+          variant="outline"
         >
           Smart restore
         </Button>
-        <Button variant="ghost" size="sm" onClick={toggleBranchForm}>
-          <GitFork size={13} data-icon="inline-start" /> Branch
+        <Button onClick={toggleBranchForm} size="sm" variant="ghost">
+          <GitFork data-icon="inline-start" size={13} /> Branch
         </Button>
         <div className="flex-1" />
         <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleDelete}
           className="text-white/15 hover:text-red-400/70"
+          onClick={handleDelete}
+          size="icon-sm"
+          variant="ghost"
         >
           <TrashSimple size={13} />
         </Button>
@@ -487,43 +491,47 @@ function useExpandedCardView({
       )}
 
       {showIdeaForm && (
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-3 space-y-2.5">
-          <div className="text-[11px] text-white/25 uppercase tracking-wider font-medium">
+        <div className="space-y-2.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-3">
+          <div className="font-medium text-[11px] text-white/25 uppercase tracking-wider">
             New branch
           </div>
           <Input
-            value={ideaName}
+            className="h-auto w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-white/70 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
             onChange={(e) =>
               setState((current) => ({
                 ...current,
                 ideaName: e.target.value,
               }))
             }
-            placeholder="Branch name..."
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateIdea();
+              if (e.key === "Enter") {
+                handleCreateIdea();
+              }
             }}
-            className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-2.5 py-2 text-xs text-white/70 w-full focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 h-auto"
+            placeholder="Branch name..."
+            value={ideaName}
           />
           <Input
-            value={fileName}
+            className="h-auto w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-white/70 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
             onChange={(e) =>
               setState((current) => ({
                 ...current,
                 fileName: e.target.value,
               }))
             }
-            placeholder="Branch file name (.als)..."
             onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateIdea();
+              if (e.key === "Enter") {
+                handleCreateIdea();
+              }
             }}
-            className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-2.5 py-2 text-xs text-white/70 w-full focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 h-auto"
+            placeholder="Branch file name (.als)..."
+            value={fileName}
           />
           <Button
-            variant="outline"
-            size="sm"
+            disabled={!(ideaName.trim() && fileName.trim())}
             onClick={handleCreateIdea}
-            disabled={!ideaName.trim() || !fileName.trim()}
+            size="sm"
+            variant="outline"
           >
             Create branch file
           </Button>
@@ -531,28 +539,28 @@ function useExpandedCardView({
       )}
 
       <SmartRestoreDialog
-        open={showSmartRestore}
-        projectId={projectId}
-        saveId={save.id}
         onClose={() =>
           setState((current) => ({ ...current, showSmartRestore: false }))
         }
         onSuccess={(result) => {
           toast.success(
             result.insertedReturnCount > 0
-              ? `Restored ${result.restoredTrackNames.join(', ')} with ${result.insertedReturnCount} return${result.insertedReturnCount !== 1 ? 's' : ''}`
-              : `Restored ${result.restoredTrackNames.join(', ')}`,
+              ? `Restored ${result.restoredTrackNames.join(", ")} with ${result.insertedReturnCount} return${result.insertedReturnCount === 1 ? "" : "s"}`
+              : `Restored ${result.restoredTrackNames.join(", ")}`
           );
         }}
+        open={showSmartRestore}
+        projectId={projectId}
+        saveId={save.id}
       />
       <PreviewRequestDialog
-        open={showPreviewDialog}
-        projectId={projectId}
-        save={save}
         idea={idea}
         onClose={() =>
           setState((current) => ({ ...current, showPreviewDialog: false }))
         }
+        open={showPreviewDialog}
+        projectId={projectId}
+        save={save}
       />
     </div>
   );

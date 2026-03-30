@@ -1,15 +1,15 @@
-import { useStore } from '@/lib/store';
-import { useConnectionStore } from '@/lib/connection-store';
-import { usePreviewStore } from '@/lib/preview-store';
-import { AppSidebar } from '@/components/sidebar';
-import { Timeline } from '@/components/timeline';
-import { ProjectHeader } from '@/components/project-header';
-import { PreviewPlayer } from '@/components/preview-player';
-import { Toaster } from '@/components/ui/sonner';
-import { cn } from '@/lib/utils';
-import { useDaemonSync } from '@/hooks/use-daemon-sync';
-import { usePreviewStatusToasts } from '@/hooks/use-preview-status-toasts';
-import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
+import { PreviewPlayer } from "@/components/preview-player";
+import { ProjectHeader } from "@/components/project-header";
+import { AppSidebar } from "@/components/sidebar";
+import { Timeline } from "@/components/timeline";
+import { Toaster } from "@/components/ui/sonner";
+import { useDaemonSync } from "@/hooks/use-daemon-sync";
+import { usePreviewStatusToasts } from "@/hooks/use-preview-status-toasts";
+import { useSidebarLayout } from "@/hooks/use-sidebar-layout";
+import { useConnectionStore } from "@/lib/connection-store";
+import { usePreviewStore } from "@/lib/preview-store";
+import { useStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 function App() {
   useDaemonSync();
@@ -30,17 +30,17 @@ function App() {
   return (
     <div
       className={cn(
-        'h-screen w-screen overflow-hidden bg-background text-foreground flex',
-        isMobile ? 'flex-col' : 'flex-row',
+        "flex h-screen w-screen overflow-hidden bg-background text-foreground",
+        isMobile ? "flex-col" : "flex-row"
       )}
     >
       {/* Sidebar */}
       <div
         className={cn(
-          'relative flex min-w-0',
+          "relative flex min-w-0",
           isMobile
-            ? 'h-[38vh] min-h-[240px] max-h-[360px] w-full shrink-0'
-            : 'shrink-0',
+            ? "h-[38vh] max-h-[360px] min-h-[240px] w-full shrink-0"
+            : "shrink-0"
         )}
         style={isMobile ? undefined : { width: sidebarWidth }}
       >
@@ -49,30 +49,30 @@ function App() {
         {/* Drag handle */}
         {!isMobile && (
           <div
+            className="group absolute top-0 right-0 bottom-0 z-20 w-[5px] cursor-col-resize"
+            onPointerCancel={onDragEnd}
             onPointerDown={onDragStart}
             onPointerMove={onDragMove}
             onPointerUp={onDragEnd}
-            onPointerCancel={onDragEnd}
-            className="absolute right-0 top-0 bottom-0 w-[5px] cursor-col-resize z-20 group"
           >
-            <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-border group-hover:bg-white/25 transition-colors duration-150" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors duration-150 group-hover:bg-white/25" />
           </div>
         )}
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex min-w-0 min-h-0">
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ProjectHeader />
-          <div className="flex-1 min-h-0">
+          <div className="min-h-0 flex-1">
             <Timeline />
           </div>
           {selectedProject && previewSave && (
             <PreviewPlayer
               key={previewSave.id}
+              onClose={closePreviewPlayer}
               project={selectedProject}
               save={previewSave}
-              onClose={closePreviewPlayer}
             />
           )}
         </div>
@@ -80,7 +80,7 @@ function App() {
 
       {/* Connection indicator */}
       {!connected && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 bg-red-500/10 text-red-300 text-xs font-medium px-5 py-2.5 rounded-full border border-red-500/20 backdrop-blur-md z-50 shadow-lg shadow-red-500/5">
+        <div className="fixed top-3 left-1/2 z-50 -translate-x-1/2 rounded-full border border-red-500/20 bg-red-500/10 px-5 py-2.5 font-medium text-red-300 text-xs shadow-lg shadow-red-500/5 backdrop-blur-md">
           Connecting to daemon...
         </div>
       )}

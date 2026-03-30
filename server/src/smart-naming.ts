@@ -6,12 +6,12 @@
  * Fallback: "Auto-save {timestamp}" when no meaningful diff.
  */
 
-import type { ChangeSummary, SetDiff } from './types';
+import type { ChangeSummary, SetDiff } from "./types";
 
 /** Build a concise label from a semantic diff and file changes. */
 export function formatDiffAsLabel(
   setDiff?: SetDiff,
-  changes?: ChangeSummary,
+  changes?: ChangeSummary
 ): string {
   const parts: string[] = [];
 
@@ -23,7 +23,7 @@ export function formatDiffAsLabel(
     // Time signature
     if (setDiff.timeSignatureChange) {
       parts.push(
-        `time sig ${setDiff.timeSignatureChange.from}→${setDiff.timeSignatureChange.to}`,
+        `time sig ${setDiff.timeSignatureChange.from}→${setDiff.timeSignatureChange.to}`
       );
     }
     // Added tracks
@@ -46,8 +46,8 @@ export function formatDiffAsLabel(
       const suffix =
         setDiff.modifiedTracks.length > 2
           ? ` +${setDiff.modifiedTracks.length - 2} more`
-          : '';
-      parts.push(`edited ${names.join(', ')}${suffix}`);
+          : "";
+      parts.push(`edited ${names.join(", ")}${suffix}`);
     }
   }
 
@@ -58,18 +58,20 @@ export function formatDiffAsLabel(
       changes.removedFiles.length +
       changes.modifiedFiles.length;
     if (total > 0) {
-      parts.push(`${total} file${total !== 1 ? 's' : ''} changed`);
+      parts.push(`${total} file${total === 1 ? "" : "s"} changed`);
     }
   }
 
-  if (parts.length === 0) return autoTimestamp();
+  if (parts.length === 0) {
+    return autoTimestamp();
+  }
   // Capitalize first part, join with ", "
-  const label = parts.join(', ');
+  const label = parts.join(", ");
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function autoTimestamp(): string {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const pad = (n: number) => String(n).padStart(2, "0");
   return `Auto-save ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

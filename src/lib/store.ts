@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 import type {
   ActivityItem,
   CompareResult,
@@ -7,47 +7,47 @@ import type {
   RootSuggestion,
   Save,
   TrackedRoot,
-} from '@/lib/types';
+} from "@/lib/types";
 
-type Store = {
-  projects: Project[];
-  roots: TrackedRoot[];
-  activity: ActivityItem[];
-  rootSuggestions: RootSuggestion[];
-  rootSuggestionsLoaded: boolean;
-  selectedProjectId: string | null;
-  selectedSaveId: string | null;
+interface Store {
   activeIdeaId: string | null;
-  collapsedBranches: Set<string>;
-  discoveredProjects: DiscoveredProject[];
-  compare: CompareResult | null;
-
-  selectedProject: () => Project | null;
-  selectedSave: () => Save | null;
+  activity: ActivityItem[];
+  applyProjectUpdate: (project: Project) => void;
 
   applySnapshot: (
     projects: Project[],
     roots: TrackedRoot[],
-    activity: ActivityItem[],
+    activity: ActivityItem[]
   ) => void;
-  applyProjectUpdate: (project: Project) => void;
+  collapsedBranches: Set<string>;
+  compare: CompareResult | null;
+  discoveredProjects: DiscoveredProject[];
+  projects: Project[];
+  rootSuggestions: RootSuggestion[];
+  rootSuggestionsLoaded: boolean;
+  roots: TrackedRoot[];
+
+  selectedProject: () => Project | null;
+  selectedProjectId: string | null;
+  selectedSave: () => Save | null;
+  selectedSaveId: string | null;
+  selectProject: (id: string | null) => void;
+  setActiveIdea: (id: string) => void;
+  setCompare: (compare: CompareResult | null) => void;
   setDiscoveredProjects: (projects: DiscoveredProject[]) => void;
   setRootSuggestions: (suggestions: RootSuggestion[]) => void;
-  setCompare: (compare: CompareResult | null) => void;
-  selectProject: (id: string | null) => void;
-  toggleSave: (id: string) => void;
-  setActiveIdea: (id: string) => void;
   toggleBranchCollapse: (ideaId: string) => void;
-};
+  toggleSave: (id: string) => void;
+}
 
 function applySnapshotSelection(
   projects: Project[],
   selectedProjectId: string | null,
   selectedSaveId: string | null,
-  activeIdeaId: string | null,
+  activeIdeaId: string | null
 ) {
   const nextSelectedProjectId = projects.some(
-    (project) => project.id === selectedProjectId,
+    (project) => project.id === selectedProjectId
   )
     ? selectedProjectId
     : (projects[0]?.id ?? null);
@@ -92,7 +92,9 @@ export const useStore = create<Store>((set, get) => ({
   selectedSave: () => {
     const project = get().selectedProject();
     const { selectedSaveId } = get();
-    if (!project || !selectedSaveId) return null;
+    if (!(project && selectedSaveId)) {
+      return null;
+    }
     return project.saves.find((save) => save.id === selectedSaveId) ?? null;
   },
 
@@ -105,14 +107,14 @@ export const useStore = create<Store>((set, get) => ({
         projects,
         state.selectedProjectId,
         state.selectedSaveId,
-        state.activeIdeaId,
+        state.activeIdeaId
       ),
     })),
 
   applyProjectUpdate: (nextProject) =>
     set((state) => {
       const prevProject = state.projects.find(
-        (project) => project.id === nextProject.id,
+        (project) => project.id === nextProject.id
       );
       const followCurrentIdea =
         state.selectedProjectId === nextProject.id &&
@@ -121,7 +123,7 @@ export const useStore = create<Store>((set, get) => ({
 
       return {
         projects: state.projects.map((project) =>
-          project.id === nextProject.id ? nextProject : project,
+          project.id === nextProject.id ? nextProject : project
         ),
         selectedSaveId:
           state.selectedProjectId === nextProject.id &&
@@ -167,8 +169,11 @@ export const useStore = create<Store>((set, get) => ({
   toggleBranchCollapse: (ideaId) =>
     set((state) => {
       const next = new Set(state.collapsedBranches);
-      if (next.has(ideaId)) next.delete(ideaId);
-      else next.add(ideaId);
+      if (next.has(ideaId)) {
+        next.delete(ideaId);
+      } else {
+        next.add(ideaId);
+      }
       return { collapsedBranches: next };
     }),
 }));

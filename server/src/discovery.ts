@@ -1,22 +1,22 @@
-import { readdir, stat } from 'node:fs/promises';
-import { basename, extname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { readdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, extname, join, resolve } from "node:path";
+import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from "./paths";
 import type {
   DiscoveredProject,
   Project,
   RootSuggestion,
   TrackedRoot,
-} from './types';
-import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from './paths';
+} from "./types";
 
 const COMMON_ROOT_DIRS = [
-  'Music/Ableton',
-  'Documents/Ableton',
-  'Library/Mobile Documents/com~apple~CloudDocs/ableton',
-  'Library/Mobile Documents/com~apple~CloudDocs/ableton/projects',
+  "Music/Ableton",
+  "Documents/Ableton",
+  "Library/Mobile Documents/com~apple~CloudDocs/ableton",
+  "Library/Mobile Documents/com~apple~CloudDocs/ableton/projects",
 ];
 
-const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, 'Backup']);
+const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, "Backup"]);
 
 async function dirExists(p: string): Promise<boolean> {
   try {
@@ -28,23 +28,23 @@ async function dirExists(p: string): Promise<boolean> {
 }
 
 function isIgnoredDir(name: string): boolean {
-  return name.startsWith('.') || IGNORED_DIRS.has(name);
+  return name.startsWith(".") || IGNORED_DIRS.has(name);
 }
 
 function isRealAlsFile(name: string): boolean {
-  return !name.startsWith('._') && extname(name).toLowerCase() === '.als';
+  return !name.startsWith("._") && extname(name).toLowerCase() === ".als";
 }
 
 async function walkForProjects(
   rootPath: string,
   currentPath: string,
-  results: Array<{ path: string; name: string; setFiles: string[] }>,
+  results: Array<{ path: string; name: string; setFiles: string[] }>
 ): Promise<void> {
   let entries;
   try {
     entries = await readdir(currentPath, {
       withFileTypes: true,
-      encoding: 'utf8',
+      encoding: "utf8",
     });
   } catch {
     return;
@@ -75,10 +75,12 @@ async function walkForProjects(
 }
 
 export async function discoverProjectsInRoot(
-  rootPath: string,
+  rootPath: string
 ): Promise<Array<{ path: string; name: string; setFiles: string[] }>> {
   const resolvedRoot = resolve(rootPath);
-  if (!(await dirExists(resolvedRoot))) return [];
+  if (!(await dirExists(resolvedRoot))) {
+    return [];
+  }
   const results: Array<{ path: string; name: string; setFiles: string[] }> = [];
   await walkForProjects(resolvedRoot, resolvedRoot, results);
   return results;
@@ -86,15 +88,13 @@ export async function discoverProjectsInRoot(
 
 export async function discoverProjects(
   tracked: Project[],
-  roots?: TrackedRoot[],
+  roots?: TrackedRoot[]
 ): Promise<DiscoveredProject[]> {
   const trackedPaths = new Set(tracked.map((project) => project.projectPath));
   const rootPaths =
     roots && roots.length > 0
       ? roots.map((root) => root.path)
-      : (
-          await discoverRootSuggestions()
-        ).map((suggestion) => suggestion.path);
+      : (await discoverRootSuggestions()).map((suggestion) => suggestion.path);
 
   const all: DiscoveredProject[] = [];
   for (const rootPath of rootPaths) {
@@ -104,13 +104,15 @@ export async function discoverProjects(
         ...project,
         tracked: trackedPaths.has(project.path),
         rootPath,
-      })),
+      }))
     );
   }
 
   const seen = new Set<string>();
   return all.filter((project) => {
-    if (seen.has(project.path)) return false;
+    if (seen.has(project.path)) {
+      return false;
+    }
     seen.add(project.path);
     return true;
   });
@@ -122,11 +124,17 @@ export async function discoverRootSuggestions(): Promise<RootSuggestion[]> {
 
   for (const relativeDir of COMMON_ROOT_DIRS) {
     const path = resolve(homedir(), relativeDir);
-    if (seen.has(path)) continue;
+    if (seen.has(path)) {
+      continue;
+    }
     seen.add(path);
-    if (!(await dirExists(path))) continue;
+    if (!(await dirExists(path))) {
+      continue;
+    }
     const projects = await discoverProjectsInRoot(path);
-    if (projects.length === 0) continue;
+    if (projects.length === 0) {
+      continue;
+    }
     suggestions.push({
       path,
       name: basename(path),

@@ -1,21 +1,21 @@
 // Re-export types used by the frontend from the server
 // This avoids duplication while keeping a single source of truth
 export type {
-  Project,
-  Save,
-  Idea,
-  TrackSummaryItem,
-  TrackedRoot,
-  RootSuggestion,
   ActivityItem,
+  CompareResult,
+  DiscoveredProject,
   DiskUsage,
   DiskUsageSave,
-  SmartRestoreTrack,
-  SmartRestoreResult,
-  CompareResult,
+  Idea,
   PreviewRequestResult,
   PreviewStatus,
-  WsEvent,
+  Project,
+  RootSuggestion,
+  Save,
+  SmartRestoreResult,
+  SmartRestoreTrack,
+  TrackedRoot,
+  TrackSummaryItem,
   WsCommand,
-  DiscoveredProject,
-} from '../../server/src/types';
+  WsEvent,
+} from "../../server/src/types";

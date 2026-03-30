@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 500;
 const DEFAULT_WIDTH = 300;
-const STORAGE_KEY = 'echoform:sidebar-width';
-const LEGACY_STORAGE_KEY = 'ablegit:sidebar-width';
+const STORAGE_KEY = "echoform:sidebar-width";
+const LEGACY_STORAGE_KEY = "ablegit:sidebar-width";
 const MOBILE_BREAKPOINT = 768;
 
 function readStoredWidth(): number {
@@ -14,7 +14,9 @@ function readStoredWidth(): number {
       localStorage.getItem(LEGACY_STORAGE_KEY);
     if (v) {
       const n = Number(v);
-      if (n >= MIN_WIDTH && n <= MAX_WIDTH) return n;
+      if (n >= MIN_WIDTH && n <= MAX_WIDTH) {
+        return n;
+      }
     }
   } catch {
     // Ignore storage access errors and fall back to the default width.
@@ -34,8 +36,8 @@ export function useSidebarLayout() {
   useEffect(() => {
     const handleResize = () => setIsMobile(readIsMobile());
     handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const onDragStart = useCallback((e: React.PointerEvent) => {
@@ -45,7 +47,9 @@ export function useSidebarLayout() {
   }, []);
 
   const onDragMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
+    if (!dragging.current) {
+      return;
+    }
     const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX));
     setSidebarWidth(next);
     try {

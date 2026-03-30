@@ -1,76 +1,76 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
-import { ExpandedCard } from '@/components/expanded-card';
-import { usePreviewStore } from '@/lib/preview-store';
-import type { Idea, Project, Save } from '@/lib/types';
+import { fireEvent, render } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ExpandedCard } from "@/components/expanded-card";
+import { usePreviewStore } from "@/lib/preview-store";
+import type { Idea, Project, Save } from "@/lib/types";
 
-vi.mock('sonner', () => ({
+vi.mock("sonner", () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@/components/smart-restore-dialog', () => ({
+vi.mock("@/components/smart-restore-dialog", () => ({
   SmartRestoreDialog: () => null,
 }));
 
-vi.mock('@/components/preview-request-dialog', () => ({
+vi.mock("@/components/preview-request-dialog", () => ({
   PreviewRequestDialog: () => null,
 }));
 
-vi.mock('@/lib/daemon-client', () => ({
+vi.mock("@/lib/daemon-client", () => ({
   sendDaemonCommand: vi.fn(),
 }));
 
 function makeIdea(): Idea {
   return {
-    id: 'idea-1',
-    name: 'Main',
-    createdAt: '2024-01-01T00:00:00Z',
-    setPath: 'song.als',
-    baseSaveId: 'save-1',
-    headSaveId: 'save-1',
+    id: "idea-1",
+    name: "Main",
+    createdAt: "2024-01-01T00:00:00Z",
+    setPath: "song.als",
+    baseSaveId: "save-1",
+    headSaveId: "save-1",
     parentIdeaId: null,
     forkedFromSaveId: null,
   };
 }
 
-function makeSave(status: Save['previewStatus']): Save {
+function makeSave(status: Save["previewStatus"]): Save {
   return {
-    id: 'save-1',
-    label: 'Initial save',
-    note: '',
-    createdAt: '2024-01-01T00:00:00Z',
-    ideaId: 'idea-1',
-    previewRefs: status === 'ready' ? ['/tmp/preview.wav'] : [],
+    id: "save-1",
+    label: "Initial save",
+    note: "",
+    createdAt: "2024-01-01T00:00:00Z",
+    ideaId: "idea-1",
+    previewRefs: status === "ready" ? ["/tmp/preview.wav"] : [],
     previewStatus: status,
-    previewMime: status === 'ready' ? 'audio/wav' : null,
-    previewRequestedAt: status === 'pending' ? '2024-01-01T00:00:00Z' : null,
+    previewMime: status === "ready" ? "audio/wav" : null,
+    previewRequestedAt: status === "pending" ? "2024-01-01T00:00:00Z" : null,
     previewUpdatedAt: null,
-    projectHash: 'hash',
+    projectHash: "hash",
     auto: false,
     metadata: {
-      activeSetPath: 'song.als',
-      setFiles: ['song.als'],
+      activeSetPath: "song.als",
+      setFiles: ["song.als"],
       audioFiles: 0,
       fileCount: 1,
       sizeBytes: 100,
-      modifiedAt: '2024-01-01T00:00:00Z',
+      modifiedAt: "2024-01-01T00:00:00Z",
     },
   };
 }
 
 function makeProject(save: Save): Project {
   return {
-    id: 'proj-1',
-    name: 'Test Project',
-    projectPath: '/tmp/test',
-    adapter: 'ableton',
-    presence: 'active',
+    id: "proj-1",
+    name: "Test Project",
+    projectPath: "/tmp/test",
+    adapter: "ableton",
+    presence: "active",
     watching: true,
     watchError: null,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-01T00:00:00Z',
-    lastSeenAt: '2024-01-01T00:00:00Z',
-    currentIdeaId: 'idea-1',
+    createdAt: "2024-01-01T00:00:00Z",
+    updatedAt: "2024-01-01T00:00:00Z",
+    lastSeenAt: "2024-01-01T00:00:00Z",
+    currentIdeaId: "idea-1",
     pendingOpen: null,
     driftStatus: null,
     rootIds: [],
@@ -79,7 +79,7 @@ function makeProject(save: Save): Project {
   };
 }
 
-describe('ExpandedCard preview actions', () => {
+describe("ExpandedCard preview actions", () => {
   const openPreviewPlayer = vi.fn();
 
   beforeEach(() => {
@@ -94,53 +94,53 @@ describe('ExpandedCard preview actions', () => {
     });
   });
 
-  it('shows Add preview when no preview exists', () => {
-    const save = makeSave('none');
+  it("shows Add preview when no preview exists", () => {
+    const save = makeSave("none");
     const view = render(
       <ExpandedCard
-        save={save}
         idea={makeIdea()}
         isHead={false}
-        project={makeProject(save)}
         onClose={vi.fn()}
-      />,
+        project={makeProject(save)}
+        save={save}
+      />
     );
 
-    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(1);
+    expect(view.getAllByRole("button", { name: "Add preview" }).length).toBe(1);
   });
 
-  it('shows Add preview when preview is pending (no waiting state)', () => {
-    const save = makeSave('pending');
+  it("shows Add preview when preview is pending (no waiting state)", () => {
+    const save = makeSave("pending");
     const view = render(
       <ExpandedCard
-        save={save}
         idea={makeIdea()}
         isHead={false}
-        project={makeProject(save)}
         onClose={vi.fn()}
-      />,
+        project={makeProject(save)}
+        save={save}
+      />
     );
 
-    expect(view.getAllByRole('button', { name: 'Add preview' }).length).toBe(1);
+    expect(view.getAllByRole("button", { name: "Add preview" }).length).toBe(1);
   });
 
-  it('opens the preview player when the preview is ready', () => {
-    const save = makeSave('ready');
+  it("opens the preview player when the preview is ready", () => {
+    const save = makeSave("ready");
     const view = render(
       <ExpandedCard
-        save={save}
         idea={makeIdea()}
         isHead={false}
-        project={makeProject(save)}
         onClose={vi.fn()}
-      />,
+        project={makeProject(save)}
+        save={save}
+      />
     );
 
-    fireEvent.click(view.getByRole('button', { name: 'Preview' }));
+    fireEvent.click(view.getByRole("button", { name: "Preview" }));
 
     expect(openPreviewPlayer).toHaveBeenCalledWith(
-      'save-1',
-      expect.objectContaining({ id: 'proj-1' }),
+      "save-1",
+      expect.objectContaining({ id: "proj-1" })
     );
   });
 });

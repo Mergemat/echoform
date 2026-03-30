@@ -1,19 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import type { Idea, Project, Save } from '@/lib/types';
+import { describe, expect, it } from "vitest";
+import type { Idea, Project, Save } from "@/lib/types";
 import {
   buildTimelineDisplayItems,
   getRootFileGroups,
   getSaveDisplayTitle,
-} from './timeline-utils';
+} from "./timeline-utils";
 
 function makeIdea(id: string, fields: Partial<Idea> = {}): Idea {
   return {
     id,
     name: id,
-    createdAt: '2024-01-01T00:00:00Z',
-    setPath: 'song.als',
-    baseSaveId: '',
-    headSaveId: '',
+    createdAt: "2024-01-01T00:00:00Z",
+    setPath: "song.als",
+    baseSaveId: "",
+    headSaveId: "",
     parentIdeaId: null,
     forkedFromSaveId: null,
     ...fields,
@@ -24,19 +24,19 @@ function makeSave(id: string, ideaId: string, createdAt: string): Save {
   return {
     id,
     label: id,
-    note: '',
+    note: "",
     createdAt,
     ideaId,
     previewRefs: [],
-    previewStatus: 'none',
+    previewStatus: "none",
     previewMime: null,
     previewRequestedAt: null,
     previewUpdatedAt: null,
     projectHash: id,
     auto: false,
     metadata: {
-      activeSetPath: 'song.als',
-      setFiles: ['song.als'],
+      activeSetPath: "song.als",
+      setFiles: ["song.als"],
       audioFiles: 0,
       fileCount: 1,
       sizeBytes: 100,
@@ -45,37 +45,37 @@ function makeSave(id: string, ideaId: string, createdAt: string): Save {
   };
 }
 
-describe('buildTimelineDisplayItems', () => {
-  it('inserts child branches directly after their fork save', () => {
-    const mainIdea = makeIdea('idea-main', {
-      name: 'Main',
-      baseSaveId: 'save-1',
-      headSaveId: 'save-2',
+describe("buildTimelineDisplayItems", () => {
+  it("inserts child branches directly after their fork save", () => {
+    const mainIdea = makeIdea("idea-main", {
+      name: "Main",
+      baseSaveId: "save-1",
+      headSaveId: "save-2",
     });
-    const childIdea = makeIdea('idea-child', {
-      name: 'Recovered bass',
-      baseSaveId: 'save-1',
-      headSaveId: 'save-3',
-      parentIdeaId: 'idea-main',
-      forkedFromSaveId: 'save-1',
+    const childIdea = makeIdea("idea-child", {
+      name: "Recovered bass",
+      baseSaveId: "save-1",
+      headSaveId: "save-3",
+      parentIdeaId: "idea-main",
+      forkedFromSaveId: "save-1",
     });
     const saves = [
-      makeSave('save-1', 'idea-main', '2024-01-01T00:00:00Z'),
-      makeSave('save-2', 'idea-main', '2024-01-02T00:00:00Z'),
-      makeSave('save-3', 'idea-child', '2024-01-03T00:00:00Z'),
+      makeSave("save-1", "idea-main", "2024-01-01T00:00:00Z"),
+      makeSave("save-2", "idea-main", "2024-01-02T00:00:00Z"),
+      makeSave("save-3", "idea-child", "2024-01-03T00:00:00Z"),
     ];
     const project: Project = {
-      id: 'proj-1',
-      name: 'Demo',
-      adapter: 'ableton',
-      projectPath: '/tmp/demo',
+      id: "proj-1",
+      name: "Demo",
+      adapter: "ableton",
+      projectPath: "/tmp/demo",
       rootIds: [],
-      presence: 'active',
+      presence: "active",
       watchError: null,
-      lastSeenAt: '2024-01-03T00:00:00Z',
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-03T00:00:00Z',
-      currentIdeaId: 'idea-child',
+      lastSeenAt: "2024-01-03T00:00:00Z",
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-03T00:00:00Z",
+      currentIdeaId: "idea-child",
       pendingOpen: null,
       driftStatus: null,
       ideas: [mainIdea, childIdea],
@@ -85,51 +85,63 @@ describe('buildTimelineDisplayItems', () => {
 
     const items = buildTimelineDisplayItems(project, null, new Set());
     expect(items.map((item) => item.type)).toEqual([
-      'branch',
-      'save',
-      'save',
-      'branch',
-      'save',
+      "branch",
+      "save",
+      "save",
+      "branch",
+      "save",
     ]);
 
     const [rootBranch, newestMainSave, forkSave, childBranch, childSave] =
       items;
-    expect(rootBranch.type === 'branch' && rootBranch.idea.id).toBe(
-      'idea-main',
+    expect(rootBranch.type === "branch" && rootBranch.idea.id).toBe(
+      "idea-main"
     );
-    expect(newestMainSave.type === 'save' && newestMainSave.save.id).toBe(
-      'save-2',
+    expect(newestMainSave.type === "save" && newestMainSave.save.id).toBe(
+      "save-2"
     );
-    expect(forkSave.type === 'save' && forkSave.save.id).toBe('save-1');
-    expect(childBranch.type === 'branch' && childBranch.idea.id).toBe(
-      'idea-child',
+    expect(forkSave.type === "save" && forkSave.save.id).toBe("save-1");
+    expect(childBranch.type === "branch" && childBranch.idea.id).toBe(
+      "idea-child"
     );
-    expect(childBranch.type === 'branch' && childBranch.depth).toBe(1);
-    expect(childSave.type === 'save' && childSave.save.id).toBe('save-3');
+    expect(childBranch.type === "branch" && childBranch.depth).toBe(1);
+    expect(childSave.type === "save" && childSave.save.id).toBe("save-3");
   });
 });
 
-describe('getRootFileGroups', () => {
-  it('dedupes duplicate root ideas that point at the same set file', () => {
+describe("getRootFileGroups", () => {
+  it("dedupes duplicate root ideas that point at the same set file", () => {
     const project: Project = {
-      id: 'proj-1',
-      name: 'Demo',
-      adapter: 'ableton',
-      projectPath: '/tmp/demo',
+      id: "proj-1",
+      name: "Demo",
+      adapter: "ableton",
+      projectPath: "/tmp/demo",
       rootIds: [],
-      presence: 'active',
+      presence: "active",
       watchError: null,
-      lastSeenAt: '2024-01-03T00:00:00Z',
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-03T00:00:00Z',
-      currentIdeaId: 'idea-main',
+      lastSeenAt: "2024-01-03T00:00:00Z",
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-03T00:00:00Z",
+      currentIdeaId: "idea-main",
       pendingOpen: null,
       driftStatus: null,
       ideas: [
-        makeIdea('idea-main', { name: 'quick night', setPath: 'quick-night-vocal.als' }),
-        makeIdea('idea-dup-1', { name: 'quick night 2', setPath: 'quick-night-vocal.als' }),
-        makeIdea('idea-dup-2', { name: 'quick night 3', setPath: 'quick-night-vocal.als' }),
-        makeIdea('idea-other', { name: 'quick night 4', setPath: 'quick night.als' }),
+        makeIdea("idea-main", {
+          name: "quick night",
+          setPath: "quick-night-vocal.als",
+        }),
+        makeIdea("idea-dup-1", {
+          name: "quick night 2",
+          setPath: "quick-night-vocal.als",
+        }),
+        makeIdea("idea-dup-2", {
+          name: "quick night 3",
+          setPath: "quick-night-vocal.als",
+        }),
+        makeIdea("idea-other", {
+          name: "quick night 4",
+          setPath: "quick night.als",
+        }),
       ],
       saves: [],
       watching: true,
@@ -138,30 +150,33 @@ describe('getRootFileGroups', () => {
     const groups = getRootFileGroups(project);
 
     expect(groups).toHaveLength(2);
-    expect(groups.find((group) => group.setPath === 'quick-night-vocal.als')?.rootIdeas)
-      .toHaveLength(3);
-    expect(groups.find((group) => group.setPath === 'quick night.als')?.rootIdeas)
-      .toHaveLength(1);
+    expect(
+      groups.find((group) => group.setPath === "quick-night-vocal.als")
+        ?.rootIdeas
+    ).toHaveLength(3);
+    expect(
+      groups.find((group) => group.setPath === "quick night.als")?.rootIdeas
+    ).toHaveLength(1);
   });
 });
 
-describe('getSaveDisplayTitle', () => {
-  it('prefers a custom label when present', () => {
+describe("getSaveDisplayTitle", () => {
+  it("prefers a custom label when present", () => {
     expect(
       getSaveDisplayTitle({
-        label: 'Chorus bounce',
+        label: "Chorus bounce",
         customLabel: true,
-        createdAt: '2024-01-03T14:45:00Z',
-      }),
-    ).toBe('Chorus bounce');
+        createdAt: "2024-01-03T14:45:00Z",
+      })
+    ).toBe("Chorus bounce");
   });
 
-  it('falls back to a timestamp when the label is not custom', () => {
+  it("falls back to a timestamp when the label is not custom", () => {
     expect(
       getSaveDisplayTitle({
-        label: '3 files changed',
-        createdAt: '2024-01-03T14:45:00Z',
-      }),
-    ).not.toBe('3 files changed');
+        label: "3 files changed",
+        createdAt: "2024-01-03T14:45:00Z",
+      })
+    ).not.toBe("3 files changed");
   });
 });

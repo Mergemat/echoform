@@ -1,8 +1,13 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '@/lib/store';
-import { sendDaemonCommand } from '@/lib/daemon-client';
-import { usePreviewStore } from '@/lib/preview-store';
-import type { Project, DiscoveredProject } from '@/lib/types';
+import {
+  CheckCircle,
+  Circle,
+  CircleNotch,
+  Clock,
+  Pause,
+  Plus,
+  Warning,
+} from "@phosphor-icons/react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Command,
   CommandDialog,
@@ -12,17 +17,12 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from '@/components/ui/command';
-import {
-  Clock,
-  Plus,
-  Circle,
-  CircleNotch,
-  Warning,
-  Pause,
-  CheckCircle,
-} from '@phosphor-icons/react';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/command";
+import { sendDaemonCommand } from "@/lib/daemon-client";
+import { usePreviewStore } from "@/lib/preview-store";
+import { useStore } from "@/lib/store";
+import type { DiscoveredProject, Project } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -35,12 +35,20 @@ const DISCOVER_DELAY_MS = 0;
 function formatRelative(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.floor(ms / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) {
+    return "just now";
+  }
+  if (m < 60) {
+    return `${m}m ago`;
+  }
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) {
+    return `${h}h ago`;
+  }
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) {
+    return `${d}d ago`;
+  }
   return new Date(iso).toLocaleDateString();
 }
 
@@ -53,7 +61,9 @@ function normalizeSearch(value: string) {
  * "my track" matches "My Track v2" and "/music/my-track/..."
  */
 function matchesSearch(name: string, search: string, path?: string): boolean {
-  if (search.length === 0) return true;
+  if (search.length === 0) {
+    return true;
+  }
   const haystack = path ? `${name}\0${path}`.toLowerCase() : name.toLowerCase();
   return haystack.includes(search);
 }
@@ -72,49 +82,51 @@ function buildNameCounts(projects: Project[]): Map<string, number> {
 
 /** Returns the last N path segments as a disambiguator, e.g. "~/Music/Projects" */
 function shortenPath(fullPath: string, segments = 2): string {
-  const parts = fullPath.replace(/\/+$/, '').split('/');
-  const tail = parts.slice(-segments).join('/');
+  const parts = fullPath.replace(/\/+$/, "").split("/");
+  const tail = parts.slice(-segments).join("/");
   return parts.length > segments ? `~/${tail}` : tail;
 }
 
-type HealthInfo = {
-  label: string;
-  icon: React.ReactNode;
+interface HealthInfo {
   className: string;
-};
+  icon: React.ReactNode;
+  label: string;
+}
 
 function projectHealth(project: Project): HealthInfo {
-  if (project.presence === 'missing') {
+  if (project.presence === "missing") {
     return {
-      label: 'Missing',
-      icon: <Warning weight="fill" className="size-3" />,
-      className: 'text-amber-400',
+      label: "Missing",
+      icon: <Warning className="size-3" weight="fill" />,
+      className: "text-amber-400",
     };
   }
   if (project.watchError) {
     return {
-      label: 'Error',
-      icon: <Warning weight="fill" className="size-3" />,
-      className: 'text-red-400',
+      label: "Error",
+      icon: <Warning className="size-3" weight="fill" />,
+      className: "text-red-400",
     };
   }
   if (!project.watching) {
     return {
-      label: 'Paused',
-      icon: <Pause weight="fill" className="size-3" />,
-      className: 'text-white/30',
+      label: "Paused",
+      icon: <Pause className="size-3" weight="fill" />,
+      className: "text-white/30",
     };
   }
   return {
-    label: 'Watching',
-    icon: <Circle weight="fill" className="size-2" />,
-    className: 'text-emerald-400',
+    label: "Watching",
+    icon: <Circle className="size-2" weight="fill" />,
+    className: "text-emerald-400",
   };
 }
 
 function savesLabel(count: number): string {
-  if (count === 0) return 'No saves';
-  return `${count} save${count === 1 ? '' : 's'}`;
+  if (count === 0) {
+    return "No saves";
+  }
+  return `${count} save${count === 1 ? "" : "s"}`;
 }
 
 // ── Subcomponents ────────────────────────────────────────────────────
@@ -133,7 +145,7 @@ function TrackedProjectRow({
   return (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className={cn('shrink-0', health.className)}>{health.icon}</span>
+        <span className={cn("shrink-0", health.className)}>{health.icon}</span>
         <div className="min-w-0 flex-1">
           <span className="block truncate">{project.name}</span>
           {showPath && (
@@ -145,9 +157,9 @@ function TrackedProjectRow({
       </div>
       <div className="flex shrink-0 items-center gap-2.5">
         {isActive && (
-          <CheckCircle weight="fill" className="size-3.5 text-white/50" />
+          <CheckCircle className="size-3.5 text-white/50" weight="fill" />
         )}
-        <span className="flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
           {savesLabel(project.saves.length)}
         </span>
         <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -166,7 +178,7 @@ function DiscoveredProjectRow({ project }: { project: DiscoveredProject }) {
         <Plus className="size-3.5 shrink-0 text-emerald-400" />
         <span className="truncate">{project.name}</span>
       </span>
-      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
         {project.setFiles.length} .als
       </span>
     </>
@@ -175,7 +187,7 @@ function DiscoveredProjectRow({ project }: { project: DiscoveredProject }) {
 
 function DiscoveringIndicator() {
   return (
-    <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+    <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground text-xs">
       <CircleNotch className="size-3.5 animate-spin" />
       <span>Discovering projects...</span>
     </div>
@@ -197,9 +209,9 @@ export function ProjectSearchCommand({
   const selectProject = useStore((s) => s.selectProject);
   const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [discoveryStartedAt, setDiscoveryStartedAt] = useState<number | null>(
-    null,
+    null
   );
   const deferredSearch = useDeferredValue(search);
   const normalizedSearch = normalizeSearch(deferredSearch);
@@ -214,7 +226,7 @@ export function ProjectSearchCommand({
     if (!hasTriggeredDiscoverRef.current) {
       const timer = window.setTimeout(() => {
         setDiscoveryStartedAt(Date.now());
-        sendDaemonCommand({ type: 'discover-projects' });
+        sendDaemonCommand({ type: "discover-projects" });
       }, DISCOVER_DELAY_MS);
       hasTriggeredDiscoverRef.current = true;
       return () => window.clearTimeout(timer);
@@ -228,19 +240,19 @@ export function ProjectSearchCommand({
     () =>
       [...projects].sort(
         (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       ),
-    [projects],
+    [projects]
   );
 
   const nameCounts = useMemo(
     () => buildNameCounts(sortedProjects),
-    [sortedProjects],
+    [sortedProjects]
   );
 
   const trackedResults = useMemo(() => {
     const filtered = sortedProjects.filter((project) =>
-      matchesSearch(project.name, normalizedSearch, project.projectPath),
+      matchesSearch(project.name, normalizedSearch, project.projectPath)
     );
     return normalizedSearch.length === 0
       ? filtered.slice(0, MAX_RECENT_TRACKED)
@@ -248,12 +260,14 @@ export function ProjectSearchCommand({
   }, [normalizedSearch, sortedProjects]);
 
   const untrackedResults = useMemo(() => {
-    if (normalizedSearch.length === 0) return [];
+    if (normalizedSearch.length === 0) {
+      return [];
+    }
 
     return discoveredProjects
       .filter((project) => !project.tracked)
       .filter((project) =>
-        matchesSearch(project.name, normalizedSearch, project.path),
+        matchesSearch(project.name, normalizedSearch, project.path)
       )
       .slice(0, MAX_SEARCH_RESULTS);
   }, [discoveredProjects, normalizedSearch]);
@@ -261,21 +275,21 @@ export function ProjectSearchCommand({
   function handleSelect(id: string) {
     closePreviewPlayer();
     selectProject(id);
-    setSearch('');
+    setSearch("");
     setDiscoveryStartedAt(null);
     onOpenChange(false);
   }
 
   function handleTrack(path: string, name: string) {
-    sendDaemonCommand({ type: 'track-project', projectPath: path, name });
-    setSearch('');
+    sendDaemonCommand({ type: "track-project", projectPath: path, name });
+    setSearch("");
     setDiscoveryStartedAt(null);
     onOpenChange(false);
   }
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
-      setSearch('');
+      setSearch("");
       setDiscoveryStartedAt(null);
       hasTriggeredDiscoverRef.current = false;
     }
@@ -288,24 +302,24 @@ export function ProjectSearchCommand({
 
   return (
     <CommandDialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title="Project search"
-      description="Search and switch between projects"
       className="sm:max-w-2xl"
+      description="Search and switch between projects"
+      onOpenChange={handleOpenChange}
+      open={open}
+      title="Project search"
     >
-      <Command shouldFilter={false} disablePointerSelection>
+      <Command disablePointerSelection shouldFilter={false}>
         <CommandInput
-          value={search}
           onValueChange={setSearch}
           placeholder="Search projects..."
+          value={search}
         />
         <CommandList>
           {hasNoResults && !discovering && (
             <CommandEmpty>
               {isSearching
-                ? 'No matching projects found.'
-                : 'No projects yet. Watch a folder to get started.'}
+                ? "No matching projects found."
+                : "No projects yet. Watch a folder to get started."}
             </CommandEmpty>
           )}
 
@@ -315,22 +329,22 @@ export function ProjectSearchCommand({
 
           {trackedResults.length > 0 && (
             <CommandGroup
-              heading={isSearching ? 'Projects' : 'Recent projects'}
+              heading={isSearching ? "Projects" : "Recent projects"}
             >
               {trackedResults.map((project) => {
                 const isDuplicate =
                   (nameCounts.get(project.name.toLowerCase()) ?? 0) > 1;
                 return (
                   <CommandItem
+                    className="flex items-center justify-between gap-3"
                     key={project.id}
-                    value={project.id}
                     keywords={[project.name, project.projectPath]}
                     onSelect={() => handleSelect(project.id)}
-                    className="flex items-center justify-between gap-3"
+                    value={project.id}
                   >
                     <TrackedProjectRow
-                      project={project}
                       isActive={project.id === selectedProjectId}
+                      project={project}
                       showPath={isDuplicate || isSearching}
                     />
                   </CommandItem>
@@ -345,11 +359,11 @@ export function ProjectSearchCommand({
               <CommandGroup heading="Discovered — not tracked">
                 {untrackedResults.map((project) => (
                   <CommandItem
+                    className="flex items-center justify-between gap-3"
                     key={project.path}
-                    value={project.path}
                     keywords={[project.name, project.path]}
                     onSelect={() => handleTrack(project.path, project.name)}
-                    className="flex items-center justify-between gap-3"
+                    value={project.path}
                   >
                     <DiscoveredProjectRow project={project} />
                   </CommandItem>
