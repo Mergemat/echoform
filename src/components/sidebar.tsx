@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Logo } from "@/components/logo";
 import { ProjectSearchCommand } from "@/components/project-search-command";
 import { RootManagerDialog } from "@/components/root-manager-dialog";
 import { Button } from "@/components/ui/button";
@@ -294,18 +295,21 @@ export function AppSidebar() {
   return (
     <TooltipProvider>
       <div className="flex h-full w-full flex-col overflow-hidden border-border border-r bg-white/[0.015]">
-        {/* Header */}
-        <div className="shrink-0 px-4 pt-5 pb-3">
-          <div className="flex items-center justify-between">
-            <div>
+        {/* Header – padded below macOS traffic lights */}
+        <div className="shrink-0 px-4 pt-10 pb-3">
+          <div
+            className="flex items-center justify-between"
+            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+          >
+            <div className="flex items-center gap-2">
+              <Logo className="size-4 text-white/90" />
               <h1 className="font-semibold text-base text-white/90 tracking-tight">
                 Echoform
               </h1>
-              <p className="mt-0.5 text-white/25 text-xs leading-tight">
-                protecting your sessions
-              </p>
             </div>
-            <FolderManagerButton />
+            <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+              <FolderManagerButton />
+            </div>
           </div>
 
           <button

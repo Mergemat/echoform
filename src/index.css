@@ -125,6 +125,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    -webkit-app-region: no-drag;
     @apply bg-background text-foreground;
   }
   html {
