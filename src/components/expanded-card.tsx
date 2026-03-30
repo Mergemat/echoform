@@ -1,16 +1,20 @@
 import { GitFork, TrashSimple, X } from "@phosphor-icons/react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { basename } from "@/lib/path";
 import { usePreviewStore } from "@/lib/preview-store";
 import type { Idea, Project, Save } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PreviewRequestDialog } from "./preview-request-dialog";
-import { SmartRestoreDialog } from "./smart-restore-dialog";
 import {
   formatDateTime,
   formatSize,
@@ -56,7 +60,6 @@ function useExpandedCardView({
     noteVal: save.note,
     showIdeaForm: false,
     showPreviewDialog: false,
-    showSmartRestore: false,
   });
   const {
     computing,
@@ -66,7 +69,6 @@ function useExpandedCardView({
     noteVal,
     showIdeaForm,
     showPreviewDialog,
-    showSmartRestore,
   } = state;
 
   const commitEdit = () => {
@@ -183,7 +185,7 @@ function useExpandedCardView({
             {isHead && (
               <>
                 <span className="text-white/10">·</span>
-                <span className="text-emerald-400/60">head</span>
+                <span className="text-emerald-400/60">latest</span>
               </>
             )}
           </div>
@@ -438,53 +440,71 @@ function useExpandedCardView({
         </div>
       )}
 
-      <div className="flex items-center gap-1 pt-0.5">
-        <Button
-          onClick={() => {
-            if (save.previewStatus === "ready") {
-              openPreviewPlayer(save.id, project);
-              return;
-            }
-            setState((current) => ({ ...current, showPreviewDialog: true }));
-          }}
-          size="sm"
-          variant="outline"
-        >
-          {previewButtonLabel}
-        </Button>
-        {save.previewStatus === "ready" && (
-          <Button
-            onClick={() =>
-              setState((current) => ({ ...current, showPreviewDialog: true }))
-            }
-            size="sm"
-            variant="ghost"
-          >
-            Replace
-          </Button>
-        )}
-        <Button
-          onClick={() =>
-            setState((current) => ({ ...current, showSmartRestore: true }))
-          }
-          size="sm"
-          variant="outline"
-        >
-          Smart restore
-        </Button>
-        <Button onClick={toggleBranchForm} size="sm" variant="ghost">
-          <GitFork data-icon="inline-start" size={13} /> Branch
-        </Button>
-        <div className="flex-1" />
-        <Button
-          className="text-white/15 hover:text-red-400/70"
-          onClick={handleDelete}
-          size="icon-sm"
-          variant="ghost"
-        >
-          <TrashSimple size={13} />
-        </Button>
-      </div>
+      <TooltipProvider>
+        <div className="flex items-center gap-1 pt-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => {
+                  if (save.previewStatus === "ready") {
+                    openPreviewPlayer(save.id, project);
+                    return;
+                  }
+                  setState((current) => ({
+                    ...current,
+                    showPreviewDialog: true,
+                  }));
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {previewButtonLabel}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {save.previewStatus === "ready"
+                ? "Listen to how your track sounded at this point"
+                : "Attach an audio bounce to this save for playback"}
+            </TooltipContent>
+          </Tooltip>
+          {save.previewStatus === "ready" && (
+            <Button
+              onClick={() =>
+                setState((current) => ({ ...current, showPreviewDialog: true }))
+              }
+              size="sm"
+              variant="ghost"
+            >
+              Replace
+            </Button>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={toggleBranchForm} size="sm" variant="ghost">
+                <GitFork data-icon="inline-start" size={13} /> New version
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Create a new .als file from this point to try a different
+              direction
+            </TooltipContent>
+          </Tooltip>
+          <div className="flex-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                className="text-white/15 hover:text-red-400/70"
+                onClick={handleDelete}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <TrashSimple size={13} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Delete this save</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
 
       {previewStatusText && (
         <div className="text-[11px] text-white/20">{previewStatusText}</div>
@@ -493,7 +513,11 @@ function useExpandedCardView({
       {showIdeaForm && (
         <div className="space-y-2.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-3">
           <div className="font-medium text-[11px] text-white/25 uppercase tracking-wider">
-            New branch
+            New version
+          </div>
+          <div className="text-[11px] text-white/15 leading-snug">
+            Creates a new .als file starting from this save, so you can explore
+            a different direction without losing your current work.
           </div>
           <Input
             className="h-auto w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-white/70 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
@@ -508,7 +532,7 @@ function useExpandedCardView({
                 handleCreateIdea();
               }
             }}
-            placeholder="Branch name..."
+            placeholder="Version name..."
             value={ideaName}
           />
           <Input
@@ -524,7 +548,7 @@ function useExpandedCardView({
                 handleCreateIdea();
               }
             }}
-            placeholder="Branch file name (.als)..."
+            placeholder="File name (.als)..."
             value={fileName}
           />
           <Button
@@ -533,26 +557,11 @@ function useExpandedCardView({
             size="sm"
             variant="outline"
           >
-            Create branch file
+            Create version
           </Button>
         </div>
       )}
 
-      <SmartRestoreDialog
-        onClose={() =>
-          setState((current) => ({ ...current, showSmartRestore: false }))
-        }
-        onSuccess={(result) => {
-          toast.success(
-            result.insertedReturnCount > 0
-              ? `Restored ${result.restoredTrackNames.join(", ")} with ${result.insertedReturnCount} return${result.insertedReturnCount === 1 ? "" : "s"}`
-              : `Restored ${result.restoredTrackNames.join(", ")}`
-          );
-        }}
-        open={showSmartRestore}
-        projectId={projectId}
-        saveId={save.id}
-      />
       <PreviewRequestDialog
         idea={idea}
         onClose={() =>

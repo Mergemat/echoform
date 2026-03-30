@@ -601,60 +601,6 @@ Bun.serve({
       }
     }
 
-    // REST: list smart-restore track candidates for a save
-    // GET /api/projects/:id/saves/:saveId/smart-restore/tracks
-    if (
-      url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore\/tracks$/
-      ) &&
-      req.method === "GET"
-    ) {
-      const parts = url.pathname.split("/");
-      const projectId = parts[3]!;
-      const saveId = parts[5]!;
-      try {
-        const tracks = await service.listSmartRestoreTracks(projectId, saveId);
-        return jsonResponse(req, { tracks });
-      } catch (err) {
-        const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return jsonResponse(req, { error: message }, status);
-      }
-    }
-
-    // REST: smart-restore selected tracks from a save into active set
-    // POST /api/projects/:id/saves/:saveId/smart-restore  body: { trackIds: string[] }
-    if (
-      url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore$/
-      ) &&
-      req.method === "POST"
-    ) {
-      const parts = url.pathname.split("/");
-      const projectId = parts[3]!;
-      const saveId = parts[5]!;
-      try {
-        const body = (await req.json()) as { trackIds?: string[] };
-        if (!Array.isArray(body.trackIds) || body.trackIds.length === 0) {
-          return jsonResponse(
-            req,
-            { error: "trackIds must be a non-empty array" },
-            400
-          );
-        }
-        const result = await service.smartRestore(
-          projectId,
-          saveId,
-          body.trackIds
-        );
-        return jsonResponse(req, { result });
-      } catch (err) {
-        const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return jsonResponse(req, { error: message }, status);
-      }
-    }
-
     // REST: list projects
     if (url.pathname === "/api/projects" && req.method === "GET") {
       const projects = await service.listProjects();

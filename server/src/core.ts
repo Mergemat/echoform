@@ -46,7 +46,6 @@ import {
   STATE_DIRNAME,
 } from "./paths";
 import { formatDiffAsLabel } from "./smart-naming";
-import { listRestorableTracks, smartRestoreTracks } from "./smart-restore";
 import type {
   ActivityItem,
   AppState,
@@ -63,8 +62,6 @@ import type {
   RootSuggestion,
   Save,
   SetDiff,
-  SmartRestoreResult,
-  SmartRestoreTrack,
   TrackedRoot,
   TrackSummaryItem,
 } from "./types";
@@ -2330,45 +2327,6 @@ export class EchoformService {
         },
       },
     };
-  }
-
-  async listSmartRestoreTracks(
-    projectId: string,
-    saveId: string
-  ): Promise<SmartRestoreTrack[]> {
-    const state = await this.loadState();
-    const project = requireProject(state, projectId);
-    const save = requireSave(project, saveId);
-    const alsPath = await getSaveAlsPath(project.projectPath, save);
-    return listRestorableTracks(alsPath);
-  }
-
-  async smartRestore(
-    projectId: string,
-    saveId: string,
-    trackIds: string[]
-  ): Promise<SmartRestoreResult> {
-    if (trackIds.length === 0) {
-      throw new AppError("Select at least one track to restore.");
-    }
-
-    return this.withLock(async () => {
-      const state = await this.loadState();
-      const project = requireProject(state, projectId);
-      const save = requireSave(project, saveId);
-      const sourceAlsPath = await getSaveAlsPath(project.projectPath, save);
-      const currentIdea = requireIdea(project, project.currentIdeaId);
-      const targetAlsPath = resolveProjectFilePath(
-        project.projectPath,
-        currentIdea.setPath
-      );
-
-      return smartRestoreTracks({
-        sourceAlsPath,
-        targetAlsPath,
-        selectedTrackIds: trackIds,
-      });
-    });
   }
 
   async updateSave(

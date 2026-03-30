@@ -262,21 +262,3 @@ export interface DiskUsageSave {
   label: string;
   snapshotBytes: number;
 }
-
-export interface SmartRestoreTrack {
-  dependencyReturnIds: string[];
-  dependencyTrackIds: string[];
-  groupId: string | null;
-  id: string;
-  name: string;
-  type: "audio" | "midi" | "group";
-}
-
-export interface SmartRestoreResult {
-  backupPath: string;
-  insertedReturnCount: number;
-  insertedReturnNames: string[];
-  restoredTrackCount: number;
-  restoredTrackNames: string[];
-  targetSetPath: string;
-}

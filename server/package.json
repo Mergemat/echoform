@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
-    "test": "bun test",
-    "smart-restore:check": "bun src/smart-restore-feasibility.ts"
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
