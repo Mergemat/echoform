@@ -198,23 +198,22 @@ export function ProjectSearchCommand({
   const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
 
   const [search, setSearch] = useState('');
-  const [discovering, setDiscovering] = useState(false);
+  const [discoveryStartedAt, setDiscoveryStartedAt] = useState<number | null>(
+    null,
+  );
   const deferredSearch = useDeferredValue(search);
   const normalizedSearch = normalizeSearch(deferredSearch);
   const hasTriggeredDiscoverRef = useRef(false);
 
-  // Trigger project discovery on open
   useEffect(() => {
     if (!open) {
-      setSearch('');
-      setDiscovering(false);
       hasTriggeredDiscoverRef.current = false;
       return;
     }
 
     if (!hasTriggeredDiscoverRef.current) {
-      setDiscovering(true);
       const timer = window.setTimeout(() => {
+        setDiscoveryStartedAt(Date.now());
         sendDaemonCommand({ type: 'discover-projects' });
       }, DISCOVER_DELAY_MS);
       hasTriggeredDiscoverRef.current = true;
@@ -222,12 +221,8 @@ export function ProjectSearchCommand({
     }
   }, [open]);
 
-  // Clear discovering state once results arrive
-  useEffect(() => {
-    if (discovering && discoveredProjects.length > 0) {
-      setDiscovering(false);
-    }
-  }, [discovering, discoveredProjects]);
+  const discovering =
+    open && discoveryStartedAt !== null && discoveredProjects.length === 0;
 
   const sortedProjects = useMemo(
     () =>
@@ -266,12 +261,25 @@ export function ProjectSearchCommand({
   function handleSelect(id: string) {
     closePreviewPlayer();
     selectProject(id);
+    setSearch('');
+    setDiscoveryStartedAt(null);
     onOpenChange(false);
   }
 
   function handleTrack(path: string, name: string) {
     sendDaemonCommand({ type: 'track-project', projectPath: path, name });
+    setSearch('');
+    setDiscoveryStartedAt(null);
     onOpenChange(false);
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setSearch('');
+      setDiscoveryStartedAt(null);
+      hasTriggeredDiscoverRef.current = false;
+    }
+    onOpenChange(nextOpen);
   }
 
   const isSearching = normalizedSearch.length > 0;
@@ -281,7 +289,7 @@ export function ProjectSearchCommand({
   return (
     <CommandDialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Project search"
       description="Search and switch between projects"
       className="sm:max-w-2xl"

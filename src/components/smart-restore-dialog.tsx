@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -21,6 +22,18 @@ function trackTypeLabel(type: SmartRestoreTrack['type']): string {
   return 'Group';
 }
 
+async function requestSmartRestoreTracks(
+  projectId: string,
+  saveId: string,
+): Promise<SmartRestoreTrack[]> {
+  const res = await fetch(`/api/projects/${projectId}/saves/${saveId}/smart-restore/tracks`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to load tracks');
+  }
+  return data.tracks as SmartRestoreTrack[];
+}
+
 export function SmartRestoreDialog({
   open,
   projectId,
@@ -34,40 +47,23 @@ export function SmartRestoreDialog({
   onClose: () => void;
   onSuccess: (result: SmartRestoreResult) => void;
 }) {
-  const [tracks, setTracks] = useState<SmartRestoreTrack[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setSelectedIds([]);
-
-    fetch(`/api/projects/${projectId}/saves/${saveId}/smart-restore/tracks`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Failed to load tracks');
-        if (!cancelled) setTracks(data.tracks as SmartRestoreTrack[]);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Failed to load tracks',
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, projectId, saveId]);
+  const [ui, setUi] = useState({
+    error: null as string | null,
+    submitting: false,
+  });
+  const tracksQuery = useQuery({
+    queryKey: ['smart-restore-tracks', projectId, saveId],
+    queryFn: () => requestSmartRestoreTracks(projectId, saveId),
+    enabled: open,
+    gcTime: 0,
+    staleTime: 0,
+  });
+  const tracks = tracksQuery.data ?? [];
+  const loading = tracksQuery.isPending;
+  const submitting = ui.submitting;
+  const error =
+    ui.error ?? (tracksQuery.error instanceof Error ? tracksQuery.error.message : null);
 
   const selectedCount = selectedIds.length;
   const selectedLabel = useMemo(() => {
@@ -84,32 +80,40 @@ export function SmartRestoreDialog({
     );
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (selectedIds.length === 0) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/saves/${saveId}/smart-restore`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackIds: selectedIds }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Smart Restore failed');
-      onSuccess(data.result as SmartRestoreResult);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Smart Restore failed');
-    } finally {
-      setSubmitting(false);
-    }
+    setUi({ error: null, submitting: true });
+    void fetch(`/api/projects/${projectId}/saves/${saveId}/smart-restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackIds: selectedIds }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Smart Restore failed');
+        onSuccess(data.result as SmartRestoreResult);
+        onClose();
+      })
+      .catch((err) => {
+        setUi({
+          error: err instanceof Error ? err.message : 'Smart Restore failed',
+          submitting: false,
+        });
+      })
+      .finally(() => {
+        setUi((current) => ({ ...current, submitting: false }));
+      });
+  };
+
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen) return;
+    setSelectedIds([]);
+    setUi({ error: null, submitting: false });
+    onClose();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[640px] p-0 gap-0 bg-[#111215] border-white/[0.08] rounded-xl">
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/[0.06]">
           <DialogTitle className="text-[13px] font-semibold text-white/90">

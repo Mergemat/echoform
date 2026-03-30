@@ -1,7 +1,6 @@
 import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
-import { useRef, useState, useMemo, useCallback } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MusicNotes } from '@phosphor-icons/react';
@@ -22,6 +21,10 @@ import { BranchCard } from './branch-card';
 import type { Project } from '@/lib/types';
 
 export function Timeline() {
+  return useTimelineView();
+}
+
+function useTimelineView() {
   const project = useStore((s) => s.selectedProject());
   const selectedSaveId = useStore((s) => s.selectedSaveId);
   const activeIdeaId = useStore((s) => s.activeIdeaId);
@@ -31,7 +34,6 @@ export function Timeline() {
   const toggleBranchCollapse = useStore((s) => s.toggleBranchCollapse);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Derive file tabs and active tab from project data
   const rootIdeas = useMemo(
@@ -113,14 +115,6 @@ export function Timeline() {
       return true;
     });
   }, [displayItems, previewSaveIds]);
-
-  const virtualizer = useVirtualizer({
-    count: visibleItems.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: useCallback(() => 56, []),
-    overscan: 8,
-    measureElement: (el) => el.getBoundingClientRect().height,
-  });
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups((prev) => {
@@ -317,93 +311,81 @@ export function Timeline() {
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
-        <div
-          style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
-        >
-          {virtualizer.getVirtualItems().map((vItem) => {
-            const item = visibleItems[vItem.index]!;
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        {visibleItems.map((item) => {
+          if (item.type === 'branch') {
             return (
-              <div
-                key={vItem.key}
-                data-index={vItem.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  transform: `translateY(${vItem.start}px)`,
-                }}
-              >
-                {item.type === 'branch' ? (
-                  <BranchCard
-                    idea={item.idea}
-                    fromSave={item.fromSave}
-                    depth={item.depth}
-                    isCurrent={item.isCurrent}
-                    isFocused={item.isFocused}
-                    isCollapsed={item.isCollapsed}
-                    saveCount={item.saveCount}
-                    onToggleCollapse={() => toggleBranchCollapse(item.idea.id)}
-                  />
-                ) : item.type === 'group' ? (
-                  <BranchLine depth={item.depth} isFocused={item.isFocused}>
-                    <GroupCard
-                      saves={item.saves}
-                      groupKey={item.key}
-                      expanded={expandedGroups.has(item.key)}
-                      onToggle={() => toggleGroup(item.key)}
-                    />
-                  </BranchLine>
-                ) : (
-                  (() => {
-                    const save = item.save;
-                    const idea = item.idea;
-                    const isHead = idea.headSaveId === save.id;
-                    const isSelected = save.id === selectedSaveId;
-                    if (isSelected) {
-                      return (
-                        <BranchLine
-                          depth={item.depth}
-                          isFocused={item.isFocused}
-                        >
-                          <div>
-                            <CollapsedCard
-                              save={save}
-                              isSelected
-                              isHead={isHead}
-                              project={project}
-                              onClick={() => toggleSave(save.id)}
-                            />
-                            <ExpandedCard
-                              save={save}
-                              idea={idea}
-                              isHead={isHead}
-                              project={project}
-                              onClose={() => toggleSave(save.id)}
-                            />
-                          </div>
-                        </BranchLine>
-                      );
-                    }
-                    return (
-                      <BranchLine depth={item.depth} isFocused={item.isFocused}>
-                        <CollapsedCard
-                          save={save}
-                          isSelected={false}
-                          isHead={isHead}
-                          project={project}
-                          onClick={() => toggleSave(save.id)}
-                        />
-                      </BranchLine>
-                    );
-                  })()
-                )}
-              </div>
+              <BranchCard
+                key={`branch-${item.idea.id}`}
+                idea={item.idea}
+                fromSave={item.fromSave}
+                depth={item.depth}
+                isCurrent={item.isCurrent}
+                isFocused={item.isFocused}
+                isCollapsed={item.isCollapsed}
+                saveCount={item.saveCount}
+                onToggleCollapse={() => toggleBranchCollapse(item.idea.id)}
+              />
             );
-          })}
-        </div>
+          }
+
+          if (item.type === 'group') {
+            return (
+              <BranchLine
+                key={`group-${item.key}`}
+                depth={item.depth}
+                isFocused={item.isFocused}
+              >
+                <GroupCard
+                  saves={item.saves}
+                  groupKey={item.key}
+                  expanded={expandedGroups.has(item.key)}
+                  onToggle={() => toggleGroup(item.key)}
+                />
+              </BranchLine>
+            );
+          }
+
+          const save = item.save;
+          const idea = item.idea;
+          const isHead = idea.headSaveId === save.id;
+          const isSelected = save.id === selectedSaveId;
+
+          return (
+            <BranchLine
+              key={`save-${save.id}`}
+              depth={item.depth}
+              isFocused={item.isFocused}
+            >
+              {isSelected ? (
+                <div>
+                  <CollapsedCard
+                    save={save}
+                    isSelected
+                    isHead={isHead}
+                    project={project}
+                    onClick={() => toggleSave(save.id)}
+                  />
+                  <ExpandedCard
+                    save={save}
+                    idea={idea}
+                    isHead={isHead}
+                    project={project}
+                    onClose={() => toggleSave(save.id)}
+                  />
+                </div>
+              ) : (
+                <CollapsedCard
+                  save={save}
+                  isSelected={false}
+                  isHead={isHead}
+                  project={project}
+                  onClick={() => toggleSave(save.id)}
+                />
+              )}
+            </BranchLine>
+          );
+        })}
       </div>
     </div>
   );

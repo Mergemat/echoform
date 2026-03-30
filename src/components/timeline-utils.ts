@@ -75,7 +75,7 @@ export function fileTabName(idea: Idea): string {
 }
 
 // ── Formatters ───────────────────────────────────────────────────────
-export function formatTime(iso: string): string {
+function formatTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
@@ -122,7 +122,7 @@ export function formatDateTime(iso: string): string {
   );
 }
 
-export function formatSaveTitle(
+function formatSaveTitle(
   iso: string,
   options?: { compact?: boolean },
 ): string {
@@ -247,11 +247,11 @@ export function buildChips(save: Save): Chip[] {
 }
 
 // ── Auto-save grouping ───────────────────────────────────────────────
-export type DisplayItem =
+type DisplayItem =
   | { type: 'save'; save: Save }
   | { type: 'group'; saves: Save[]; key: string };
 
-export function isTrivialAutoSave(save: Save): boolean {
+function isTrivialAutoSave(save: Save): boolean {
   if (!save.auto) return false;
   const sd = save.setDiff;
   if (sd) {
@@ -270,7 +270,7 @@ export function isTrivialAutoSave(save: Save): boolean {
   return true;
 }
 
-export function buildDisplayItems(
+function buildDisplayItems(
   saves: Save[],
   expandedGroups: Set<string>,
   ungroupableSaveIds: Set<string> = new Set(),
@@ -305,7 +305,7 @@ export function buildDisplayItems(
   return items;
 }
 
-export type TimelineDisplayItem =
+type TimelineDisplayItem =
   | {
       type: 'branch';
       idea: Idea;

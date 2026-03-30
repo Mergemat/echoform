@@ -66,5 +66,3 @@ export const usePreviewStore = create<PreviewStore>((set) => ({
         : { previewPlayerSaveId: null, compareSaveId: null };
     }),
 }));
-
-export { findPreviousPreviewSave };

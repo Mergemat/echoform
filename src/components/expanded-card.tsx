@@ -27,29 +27,47 @@ const TTRACK: Record<string, string> = {
   group: 'Group',
 };
 
-export function ExpandedCard({
-  save,
-  idea,
-  isHead,
-  project,
-  onClose,
-}: {
+type ExpandedCardProps = {
   save: Save;
   idea: Idea | undefined;
   isHead: boolean;
   project: Project;
   onClose: () => void;
-}) {
+};
+
+export function ExpandedCard(props: ExpandedCardProps) {
+  return useExpandedCardView(props);
+}
+
+function useExpandedCardView({
+  save,
+  idea,
+  isHead,
+  project,
+  onClose,
+}: ExpandedCardProps) {
   const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
   const projectId = project.id;
-  const [labelVal, setLabelVal] = useState(save.label);
-  const [noteVal, setNoteVal] = useState(save.note);
-  const [showIdeaForm, setShowIdeaForm] = useState(false);
-  const [showSmartRestore, setShowSmartRestore] = useState(false);
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
-  const [ideaName, setIdeaName] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [computing, setComputing] = useState(false);
+  const [state, setState] = useState({
+    computing: false,
+    fileName: '',
+    ideaName: '',
+    labelVal: save.label,
+    noteVal: save.note,
+    showIdeaForm: false,
+    showPreviewDialog: false,
+    showSmartRestore: false,
+  });
+  const {
+    computing,
+    fileName,
+    ideaName,
+    labelVal,
+    noteVal,
+    showIdeaForm,
+    showPreviewDialog,
+    showSmartRestore,
+  } = state;
 
   const commitEdit = () => {
     const nextLabel = labelVal.trim();
@@ -74,31 +92,36 @@ export function ExpandedCard({
       name: ideaName.trim(),
       fileName: fileName.trim() || `${ideaName.trim()}.als`,
     });
-    setIdeaName('');
-    setFileName('');
-    setShowIdeaForm(false);
+    setState((current) => ({
+      ...current,
+      fileName: '',
+      ideaName: '',
+      showIdeaForm: false,
+    }));
   };
   const toggleBranchForm = () => {
-    setShowIdeaForm((prev) => {
-      const next = !prev;
+    setState((current) => {
+      const next = !current.showIdeaForm;
       if (next) {
         const defaultBranchName =
-          ideaName.trim() || `Recovered ${getSaveDisplayTitle(save)}`;
-        setIdeaName(defaultBranchName);
-        setFileName(fileName.trim() || `${defaultBranchName}.als`);
+          current.ideaName.trim() || `Recovered ${getSaveDisplayTitle(save)}`;
+        return {
+          ...current,
+          fileName: current.fileName.trim() || `${defaultBranchName}.als`,
+          ideaName: defaultBranchName,
+          showIdeaForm: true,
+        };
       }
-      return next;
+      return { ...current, showIdeaForm: false };
     });
   };
   const handleCompute = async () => {
-    setComputing(true);
-    try {
-      await fetch(`/api/projects/${projectId}/saves/${save.id}/changes`, {
-        method: 'POST',
-      });
-    } finally {
-      setComputing(false);
-    }
+    setState((current) => ({ ...current, computing: true }));
+    void fetch(`/api/projects/${projectId}/saves/${save.id}/changes`, {
+      method: 'POST',
+    }).finally(() => {
+      setState((current) => ({ ...current, computing: false }));
+    });
   };
 
   const changes = save.changes;
@@ -136,7 +159,12 @@ export function ExpandedCard({
         <div className="flex-1 min-w-0">
           <Input
             value={labelVal}
-            onChange={(e) => setLabelVal(e.target.value)}
+            onChange={(e) =>
+              setState((current) => ({
+                ...current,
+                labelVal: e.target.value,
+              }))
+            }
             onBlur={commitEdit}
             className="bg-transparent border-0 border-b border-white/[0.08] focus-visible:border-white/25 focus-visible:ring-0 rounded-none text-sm text-white/90 font-medium w-full px-0 pb-1 h-auto"
           />
@@ -169,7 +197,12 @@ export function ExpandedCard({
 
       <Textarea
         value={noteVal}
-        onChange={(e) => setNoteVal(e.target.value)}
+        onChange={(e) =>
+          setState((current) => ({
+            ...current,
+            noteVal: e.target.value,
+          }))
+        }
         onBlur={commitEdit}
         placeholder="Add a note about this save..."
         className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-white/55 resize-none focus-visible:ring-0 focus-visible:border-white/15 placeholder:text-white/15 min-h-[36px]"
@@ -410,7 +443,7 @@ export function ExpandedCard({
               openPreviewPlayer(save.id, project);
               return;
             }
-            setShowPreviewDialog(true);
+            setState((current) => ({ ...current, showPreviewDialog: true }));
           }}
         >
           {previewButtonLabel}
@@ -419,7 +452,9 @@ export function ExpandedCard({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowPreviewDialog(true)}
+            onClick={() =>
+              setState((current) => ({ ...current, showPreviewDialog: true }))
+            }
           >
             Replace
           </Button>
@@ -427,7 +462,9 @@ export function ExpandedCard({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setShowSmartRestore(true)}
+          onClick={() =>
+            setState((current) => ({ ...current, showSmartRestore: true }))
+          }
         >
           Smart restore
         </Button>
@@ -456,7 +493,12 @@ export function ExpandedCard({
           </div>
           <Input
             value={ideaName}
-            onChange={(e) => setIdeaName(e.target.value)}
+            onChange={(e) =>
+              setState((current) => ({
+                ...current,
+                ideaName: e.target.value,
+              }))
+            }
             placeholder="Branch name..."
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleCreateIdea();
@@ -465,7 +507,12 @@ export function ExpandedCard({
           />
           <Input
             value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
+            onChange={(e) =>
+              setState((current) => ({
+                ...current,
+                fileName: e.target.value,
+              }))
+            }
             placeholder="Branch file name (.als)..."
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleCreateIdea();
@@ -487,7 +534,9 @@ export function ExpandedCard({
         open={showSmartRestore}
         projectId={projectId}
         saveId={save.id}
-        onClose={() => setShowSmartRestore(false)}
+        onClose={() =>
+          setState((current) => ({ ...current, showSmartRestore: false }))
+        }
         onSuccess={(result) => {
           toast.success(
             result.insertedReturnCount > 0
@@ -501,7 +550,9 @@ export function ExpandedCard({
         projectId={projectId}
         save={save}
         idea={idea}
-        onClose={() => setShowPreviewDialog(false)}
+        onClose={() =>
+          setState((current) => ({ ...current, showPreviewDialog: false }))
+        }
       />
     </div>
   );

@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "main": "electron/main.mjs",
+  "workspaces": [
+    "server"
+  ],
   "scripts": {
     "dev": "bun run dev:daemon & bun run dev:client",
     "dev:client": "vite",
@@ -15,6 +18,7 @@
     "app:dist": "bun run build && bun run build:server:bin && bunx electron-builder --mac dir --publish never",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "test": "vitest",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
@@ -99,6 +103,7 @@
     "zustand": "^5.0.12"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.95.2",
     "wavesurfer.js": "^7.12.5"
   }
 }

@@ -7,7 +7,6 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useStore } from '@/lib/store';
 import { sendDaemonCommand } from '@/lib/daemon-client';
 import { usePreviewStore } from '@/lib/preview-store';
@@ -205,8 +204,6 @@ function FolderManagerButton() {
   );
 }
 
-const GAP = 2; // matches the previous space-y-0.5 (0.125rem = 2px)
-
 const VirtualizedProjectList = memo(function VirtualizedProjectList({
   projects,
   selectedProjectId,
@@ -216,16 +213,6 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
   selectedProjectId: string | null;
   isEmpty: boolean;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
-    count: projects.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 56,
-    gap: GAP,
-    overscan: 5,
-  });
-
   if (isEmpty) {
     return (
       <div className="flex-1 min-h-0 px-2 py-1">
@@ -243,31 +230,15 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-2 py-1"
-    >
-      <div
-        className="relative w-full"
-        style={{ height: virtualizer.getTotalSize() }}
-      >
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const project = projects[virtualItem.index];
-          return (
-            <div
-              key={project.id}
-              data-index={virtualItem.index}
-              ref={virtualizer.measureElement}
-              className="absolute left-0 w-full"
-              style={{ top: virtualItem.start }}
-            >
-              <ProjectItem
-                project={project}
-                selected={project.id === selectedProjectId}
-              />
-            </div>
-          );
-        })}
+    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-2 py-1">
+      <div className="space-y-0.5">
+        {projects.map((project) => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            selected={project.id === selectedProjectId}
+          />
+        ))}
       </div>
     </div>
   );

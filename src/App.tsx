@@ -11,7 +11,7 @@ import { useDaemonSync } from '@/hooks/use-daemon-sync';
 import { usePreviewStatusToasts } from '@/hooks/use-preview-status-toasts';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
 
-export function App() {
+function App() {
   useDaemonSync();
 
   const connected = useConnectionStore((s) => s.connected);

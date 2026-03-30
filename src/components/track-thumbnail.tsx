@@ -93,12 +93,16 @@ function trackColor(track: TrackSummaryItem): string {
 
 function flattenTracks(
   tracks: TrackSummaryItem[],
+  parentKey = 'root',
   depth = 0,
-): Array<{ track: TrackSummaryItem; depth: number }> {
-  return tracks.flatMap((track) => [
-    { track, depth },
-    ...flattenTracks(track.children ?? [], depth + 1),
-  ]);
+): Array<{ key: string; track: TrackSummaryItem; depth: number }> {
+  return tracks.flatMap((track, index) => {
+    const key = `${parentKey}/${track.type}:${track.name}:${index}`;
+    return [
+      { key, track, depth },
+      ...flattenTracks(track.children ?? [], key, depth + 1),
+    ];
+  });
 }
 
 function trackTitle(track: TrackSummaryItem): string {
@@ -117,14 +121,18 @@ function trackTitle(track: TrackSummaryItem): string {
 function flattenTracksShallow(
   tracks: TrackSummaryItem[],
   maxDepth: number,
+  parentKey = 'root',
   depth = 0,
-): Array<{ track: TrackSummaryItem; depth: number }> {
-  return tracks.flatMap((track) => [
-    { track, depth },
-    ...(depth < maxDepth
-      ? flattenTracksShallow(track.children ?? [], maxDepth, depth + 1)
-      : []),
-  ]);
+): Array<{ key: string; track: TrackSummaryItem; depth: number }> {
+  return tracks.flatMap((track, index) => {
+    const key = `${parentKey}/${track.type}:${track.name}:${index}`;
+    return [
+      { key, track, depth },
+      ...(depth < maxDepth
+        ? flattenTracksShallow(track.children ?? [], maxDepth, key, depth + 1)
+        : []),
+    ];
+  });
 }
 
 /**
@@ -164,11 +172,11 @@ export function TrackThumbnail({
         aria-label={`${rows.length} tracks`}
       >
         <div className="flex flex-col gap-[1px] w-[80px]">
-          {visible.map(({ track, depth }, i) => {
+          {visible.map(({ key, track, depth }) => {
             const indent = Math.min(depth, 4) * 4;
             return (
               <div
-                key={`${track.type}-${track.name}-${i}`}
+                key={key}
                 className="rounded-full"
                 title={trackTitle(track)}
                 style={{
@@ -188,12 +196,12 @@ export function TrackThumbnail({
   return (
     <div className={className} role="img" aria-label={`${rows.length} tracks`}>
       <div className="space-y-px rounded bg-white/[0.03] p-0.5 border border-white/[0.04]">
-        {visible.map(({ track, depth }, i) => {
+        {visible.map(({ key, track, depth }) => {
           const indent = Math.min(depth, 4) * indentPx;
           const guideOffset = Math.max(indent - 3, 0);
           return (
             <div
-              key={`${track.type}-${track.name}-${i}`}
+              key={key}
               className="relative h-[2px] overflow-hidden rounded-[1px] bg-white/[0.05]"
               title={trackTitle(track)}
             >

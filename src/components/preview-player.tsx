@@ -58,15 +58,21 @@ const WS_OPTS = {
 
 // ── Component ────────────────────────────────────────────────────────
 
-export function PreviewPlayer({
-  project,
-  save,
-  onClose,
-}: {
+type PreviewPlayerProps = {
   project: Project;
   save: Save;
   onClose: () => void;
-}) {
+};
+
+export function PreviewPlayer(props: PreviewPlayerProps) {
+  return usePreviewPlayerView(props);
+}
+
+function usePreviewPlayerView({
+  project,
+  save,
+  onClose,
+}: PreviewPlayerProps) {
   const waveformRefs = useRef<Record<Lane, HTMLDivElement | null>>({
     a: null,
     b: null,
@@ -84,11 +90,15 @@ export function PreviewPlayer({
 
   const storeCompareSaveId = usePreviewStore((s) => s.compareSaveId);
   const setStoreCompareSaveId = usePreviewStore((s) => s.setCompareSaveId);
-  const [activeLane, setActiveLane] = useState<Lane>('a');
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [playError, setPlayError] = useState<string | null>(null);
+  const [playerState, setPlayerState] = useState({
+    activeLane: 'a' as Lane,
+    currentTime: 0,
+    duration: 0,
+    playError: null as string | null,
+    playing: false,
+  });
+  const { activeLane, currentTime, duration, playError, playing } =
+    playerState;
 
   const compareOptions = useMemo(
     () =>
@@ -156,7 +166,7 @@ export function PreviewPlayer({
       instancesRef.current[lane]?.pause();
     }
     playingRef.current = false;
-    setPlaying(false);
+    setPlayerState((current) => ({ ...current, playing: false }));
   }, []);
 
   const disposeAllPlayers = useCallback(() => {
@@ -188,12 +198,12 @@ export function PreviewPlayer({
       }),
     );
     playingRef.current = true;
-    setPlaying(true);
+    setPlayerState((current) => ({ ...current, playing: true }));
     syncAllVolumes();
   }, [syncAllVolumes]);
 
   const handleTogglePlayback = useCallback(async () => {
-    setPlayError(null);
+    setPlayerState((current) => ({ ...current, playError: null }));
     try {
       if (playingRef.current) {
         pauseAll();
@@ -201,18 +211,24 @@ export function PreviewPlayer({
       }
       await playAllReady();
     } catch (err) {
-      setPlaying(false);
-      setPlayError(
-        err instanceof Error ? err.message : 'Could not play preview',
-      );
+      setPlayerState((current) => ({
+        ...current,
+        playError: err instanceof Error ? err.message : 'Could not play preview',
+        playing: false,
+      }));
     }
   }, [pauseAll, playAllReady]);
 
   const switchLane = useCallback(
     (lane: Lane) => {
-      setPlayError(null);
+      const nextLane = lane === 'b' && !hasCompare ? 'a' : lane;
       activeLaneRef.current = lane === 'b' && !hasCompare ? 'a' : lane;
-      setActiveLane(lane === 'b' && !hasCompare ? 'a' : lane);
+      setPlayerState((current) => ({
+        ...current,
+        activeLane: nextLane,
+        duration: durationRef.current[nextLane] ?? 0,
+        playError: null,
+      }));
       syncAllVolumes();
     },
     [hasCompare, syncAllVolumes],
@@ -220,13 +236,16 @@ export function PreviewPlayer({
 
   // Stable refs so setupWs never changes identity
   const pauseAllRef = useRef(pauseAll);
-  pauseAllRef.current = pauseAll;
   const playAllReadyRef = useRef(playAllReady);
-  playAllReadyRef.current = playAllReady;
   const syncPlaybackTimesRef = useRef(syncPlaybackTimes);
-  syncPlaybackTimesRef.current = syncPlaybackTimes;
   const syncVolumesRef = useRef(syncVolumes);
-  syncVolumesRef.current = syncVolumes;
+
+  useEffect(() => {
+    pauseAllRef.current = pauseAll;
+    playAllReadyRef.current = playAllReady;
+    syncPlaybackTimesRef.current = syncPlaybackTimes;
+    syncVolumesRef.current = syncVolumes;
+  }, [pauseAll, playAllReady, syncPlaybackTimes, syncVolumes]);
 
   // Shared WaveSurfer factory — stable identity (no callback deps)
   const setupWs = useCallback(
@@ -235,7 +254,7 @@ export function PreviewPlayer({
 
       ws.on('play', () => {
         playingRef.current = true;
-        setPlaying(true);
+        setPlayerState((current) => ({ ...current, playing: true }));
       });
       ws.on('pause', () => {
         if (
@@ -244,18 +263,18 @@ export function PreviewPlayer({
           )
         ) {
           playingRef.current = false;
-          setPlaying(false);
+          setPlayerState((current) => ({ ...current, playing: false }));
         }
       });
       ws.on('finish', () => {
         pauseAllRef.current();
         currentTimeRef.current = 0;
-        setCurrentTime(0);
+        setPlayerState((current) => ({ ...current, currentTime: 0 }));
       });
       ws.on('timeupdate', (time) => {
         currentTimeRef.current = time;
         if (activeLaneRef.current === lane) {
-          setCurrentTime(time);
+          setPlayerState((current) => ({ ...current, currentTime: time }));
         }
         // Only sync from the active lane to avoid ping-pong loop
         if (activeLaneRef.current === lane) {
@@ -268,11 +287,14 @@ export function PreviewPlayer({
       ws.on('decode', (dur) => {
         durationRef.current[lane] = dur;
         if (activeLaneRef.current === lane) {
-          setDuration(dur);
+          setPlayerState((current) => ({ ...current, duration: dur }));
         }
       });
       ws.on('error', () => {
-        setPlayError('Preview file is missing or unreadable.');
+        setPlayerState((current) => ({
+          ...current,
+          playError: 'Preview file is missing or unreadable.',
+        }));
         pauseAllRef.current();
       });
       ws.on('ready', () => {
@@ -280,8 +302,11 @@ export function PreviewPlayer({
         ws.setTime(currentTimeRef.current);
         syncVolumesRef.current(lane, ws);
         if (activeLaneRef.current === lane) {
-          setCurrentTime(currentTimeRef.current);
-          setDuration(durationRef.current[lane] ?? 0);
+          setPlayerState((current) => ({
+            ...current,
+            currentTime: currentTimeRef.current,
+            duration: durationRef.current[lane] ?? 0,
+          }));
         }
         // Sync to other lane's time if it's already playing
         const other: Lane = lane === 'a' ? 'b' : 'a';
@@ -291,10 +316,12 @@ export function PreviewPlayer({
         }
         if (playingRef.current) {
           void playAllReadyRef.current().catch((err) => {
-            setPlaying(false);
-            setPlayError(
-              err instanceof Error ? err.message : 'Could not play preview',
-            );
+            setPlayerState((current) => ({
+              ...current,
+              playError:
+                err instanceof Error ? err.message : 'Could not play preview',
+              playing: false,
+            }));
           });
         }
       });
@@ -308,18 +335,21 @@ export function PreviewPlayer({
   useEffect(() => {
     const container = waveformRefs.current.a;
     const url = laneUrls.a;
+    const readyState = readyRef.current;
+    const durationState = durationRef.current;
+    const instances = instancesRef.current;
     if (!container || !url) return;
 
     const ws = setupWs('a', container, url);
-    instancesRef.current.a = ws;
-    readyRef.current.a = false;
-    durationRef.current.a = 0;
+    instances.a = ws;
+    readyState.a = false;
+    durationState.a = 0;
 
     return () => {
-      readyRef.current.a = false;
-      durationRef.current.a = 0;
-      if (instancesRef.current.a === ws) {
-        instancesRef.current.a = null;
+      readyState.a = false;
+      durationState.a = 0;
+      if (instances.a === ws) {
+        instances.a = null;
         ws.pause();
         ws.destroy();
       }
@@ -330,28 +360,31 @@ export function PreviewPlayer({
   useEffect(() => {
     const container = waveformRefs.current.b;
     const url = laneUrls.b;
+    const readyState = readyRef.current;
+    const durationState = durationRef.current;
+    const instances = instancesRef.current;
 
     if (!container || !url || !laneSaves.b) {
-      readyRef.current.b = false;
-      durationRef.current.b = 0;
-      if (instancesRef.current.b) {
-        const existing = instancesRef.current.b;
-        instancesRef.current.b = null;
+      readyState.b = false;
+      durationState.b = 0;
+      if (instances.b) {
+        const existing = instances.b;
+        instances.b = null;
         existing.destroy();
       }
       return;
     }
 
     const ws = setupWs('b', container, url);
-    instancesRef.current.b = ws;
-    readyRef.current.b = false;
-    durationRef.current.b = 0;
+    instances.b = ws;
+    readyState.b = false;
+    durationState.b = 0;
 
     return () => {
-      readyRef.current.b = false;
-      durationRef.current.b = 0;
-      if (instancesRef.current.b === ws) {
-        instancesRef.current.b = null;
+      readyState.b = false;
+      durationState.b = 0;
+      if (instances.b === ws) {
+        instances.b = null;
         ws.pause();
         ws.destroy();
       }
@@ -362,15 +395,15 @@ export function PreviewPlayer({
   useEffect(() => {
     activeLaneRef.current = effectiveLane;
     hasCompareRef.current = hasCompare;
-    setDuration(durationRef.current[effectiveLane] ?? 0);
     syncAllVolumes();
+    const timer = window.setTimeout(() => {
+      setPlayerState((current) => ({
+        ...current,
+        duration: durationRef.current[effectiveLane] ?? 0,
+      }));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [effectiveLane, hasCompare, syncAllVolumes]);
-
-  useEffect(() => {
-    if (!hasCompare && activeLane === 'b') {
-      setActiveLane('a');
-    }
-  }, [activeLane, hasCompare]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -406,7 +439,7 @@ export function PreviewPlayer({
 
   const handleClose = useCallback(() => {
     disposeAllPlayers();
-    setPlaying(false);
+    setPlayerState((current) => ({ ...current, playing: false }));
     onClose();
   }, [disposeAllPlayers, onClose]);
 
@@ -504,10 +537,15 @@ export function PreviewPlayer({
                 const nextId = event.target.value;
                 pauseAll();
                 currentTimeRef.current = 0;
-                setCurrentTime(0);
+                const nextLane = nextId ? 'b' : 'a';
                 setStoreCompareSaveId(nextId || null);
-                setPlayError(null);
-                setActiveLane(nextId ? 'b' : 'a');
+                setPlayerState((current) => ({
+                  ...current,
+                  activeLane: nextLane,
+                  currentTime: 0,
+                  duration: durationRef.current[nextLane] ?? 0,
+                  playError: null,
+                }));
               }}
               className="max-w-[260px] flex-1 rounded-lg text-xs"
               aria-label="Compare with another save"
