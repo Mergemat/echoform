@@ -169,69 +169,102 @@ const PRUNE_OPTIONS = [
 ];
 
 export function DiskUsagePanel({ projectId }: { projectId: string }) {
-  const [usage, setUsage] = useState<DiskUsage | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [pruning, setPruning] = useState(false);
-  const [compacting, setCompacting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [actionMsg, setActionMsg] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [state, setState] = useState({
+    actionMsg: null as string | null,
+    compacting: false,
+    error: null as string | null,
+    loading: false,
+    open: false,
+    pruning: false,
+    usage: null as DiskUsage | null,
+  });
+  const { actionMsg, compacting, error, loading, open, pruning, usage } =
+    state;
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchDiskUsage(projectId);
-      setUsage(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed');
-    } finally {
-      setLoading(false);
-    }
+    setState((current) => ({ ...current, error: null, loading: true }));
+    void fetchDiskUsage(projectId)
+      .then((data) => {
+        setState((current) => ({ ...current, usage: data }));
+      })
+      .catch((err) => {
+        setState((current) => ({
+          ...current,
+          error: err instanceof Error ? err.message : 'Failed',
+        }));
+      })
+      .finally(() => {
+        setState((current) => ({ ...current, loading: false }));
+      });
   }, [projectId]);
 
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    setState((current) => ({
+      ...current,
+      actionMsg: next ? current.actionMsg : null,
+      open: next,
+    }));
     if (next && !usage) load();
-    if (!next) setActionMsg(null);
   };
 
   const handlePrune = async (days: number) => {
-    setPruning(true);
-    setActionMsg(null);
-    try {
-      const deleted = await pruneSaves(projectId, days);
-      setActionMsg(
-        deleted === 0
-          ? `No auto-saves older than ${days}d.`
-          : `Pruned ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
-      );
-      const fresh = await fetchDiskUsage(projectId);
-      setUsage(fresh);
-    } catch (err) {
-      setActionMsg(err instanceof Error ? err.message : 'Prune failed');
-    } finally {
-      setPruning(false);
-    }
+    setState((current) => ({
+      ...current,
+      actionMsg: null,
+      pruning: true,
+    }));
+    void pruneSaves(projectId, days)
+      .then(async (deleted) => {
+        const nextActionMsg =
+          deleted === 0
+            ? `No auto-saves older than ${days}d.`
+            : `Pruned ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`;
+        const fresh = await fetchDiskUsage(projectId);
+        setState((current) => ({
+          ...current,
+          actionMsg: nextActionMsg,
+          usage: fresh,
+        }));
+      })
+      .catch((err) => {
+        setState((current) => ({
+          ...current,
+          actionMsg: err instanceof Error ? err.message : 'Prune failed',
+        }));
+      })
+      .finally(() => {
+        setState((current) => ({ ...current, pruning: false }));
+      });
   };
 
   const handleCompact = async () => {
-    setCompacting(true);
-    setActionMsg(null);
-    try {
-      const deleted = await compactStorage(projectId);
-      setActionMsg(
-        deleted === 0
-          ? 'No auto-saves were eligible for compaction.'
-          : `Compacted ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`,
-      );
-      const fresh = await fetchDiskUsage(projectId);
-      setUsage(fresh);
-    } catch (err) {
-      setActionMsg(err instanceof Error ? err.message : 'Compaction failed');
-    } finally {
-      setCompacting(false);
-    }
+    setState((current) => ({
+      ...current,
+      actionMsg: null,
+      compacting: true,
+    }));
+    void compactStorage(projectId)
+      .then(async (deleted) => {
+        const nextActionMsg =
+          deleted === 0
+            ? 'No auto-saves were eligible for compaction.'
+            : `Compacted ${deleted} auto-save${deleted !== 1 ? 's' : ''}.`;
+        const fresh = await fetchDiskUsage(projectId);
+        setState((current) => ({
+          ...current,
+          actionMsg: nextActionMsg,
+          usage: fresh,
+        }));
+      })
+      .catch((err) => {
+        setState((current) => ({
+          ...current,
+          actionMsg: err instanceof Error ? err.message : 'Compaction failed',
+        }));
+      })
+      .finally(() => {
+        setState((current) => ({ ...current, compacting: false }));
+      });
   };
 
   const dedupPct =

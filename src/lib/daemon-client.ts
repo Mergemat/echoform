@@ -45,7 +45,7 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY_MS);
 }
 
-export async function connectDaemonClient() {
+async function connectDaemonClient() {
   if (
     socket &&
     (socket.readyState === WebSocket.OPEN ||

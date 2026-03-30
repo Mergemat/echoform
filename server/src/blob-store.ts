@@ -151,7 +151,7 @@ export async function deleteManifest(
 // ── Restore ─────────────────────────────────────────────────────────
 
 /** Reconstruct a directory from a manifest by copying blobs to their original relative paths. */
-export async function reconstructFromManifest(
+async function reconstructFromManifest(
   projectPath: string,
   manifest: Manifest,
   targetDir: string,

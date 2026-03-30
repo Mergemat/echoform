@@ -64,7 +64,7 @@ export function resolveProjectFilePath(
   return resolved;
 }
 
-export function sanitizeAlsFileName(
+function sanitizeAlsFileName(
   input: string,
   fallback = 'Recovered version',
 ): string {

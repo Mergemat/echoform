@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,10 +21,26 @@ import { getSaveDisplayTitle } from './timeline-utils';
 
 const ACCEPTED_EXTENSIONS = ['.wav', '.aif', '.aiff', '.mp3', '.m4a'];
 const ACCEPT_STRING = ACCEPTED_EXTENSIONS.map((e) => `audio/*,${e}`).join(',');
+const previewRequestQueryKey = (projectId: string, saveId: string) =>
+  ['preview-request', projectId, saveId] as const;
 
 function isAcceptedFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+async function requestPreview(
+  projectId: string,
+  saveId: string,
+): Promise<PreviewRequestResult> {
+  const res = await fetch(`/api/projects/${projectId}/saves/${saveId}/preview/request`, {
+    method: 'POST',
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to request preview');
+  }
+  return data.preview as PreviewRequestResult;
 }
 
 export function PreviewRequestDialog({
@@ -39,103 +56,103 @@ export function PreviewRequestDialog({
   idea: Idea | undefined;
   onClose: () => void;
 }) {
-  const [preview, setPreview] = useState<PreviewRequestResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [revealing, setRevealing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [ui, setUi] = useState({
+    actionError: null as string | null,
+    dragOver: false,
+    revealing: false,
+    uploading: false,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryKey = previewRequestQueryKey(projectId, save.id);
+  const previewQuery = useQuery({
+    queryKey,
+    queryFn: () => requestPreview(projectId, save.id),
+    enabled: open,
+    gcTime: 0,
+    staleTime: 0,
+  });
+  const preview = previewQuery.data ?? null;
+  const loading = previewQuery.isPending;
+  const revealing = ui.revealing;
+  const uploading = ui.uploading;
+  const dragOver = ui.dragOver;
+  const error =
+    ui.actionError ??
+    (previewQuery.error instanceof Error ? previewQuery.error.message : null);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/projects/${projectId}/saves/${save.id}/preview/request`, {
+  const handleRevealFolder = () => {
+    setUi((current) => ({
+      ...current,
+      actionError: null,
+      revealing: true,
+    }));
+    void fetch(`/api/projects/${projectId}/saves/${save.id}/preview/reveal-folder`, {
       method: 'POST',
     })
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Failed to request preview');
-        if (!cancelled) setPreview(data.preview as PreviewRequestResult);
+        if (!res.ok) {
+          throw new Error(data.error ?? 'Failed to reveal preview folder');
+        }
+        queryClient.setQueryData(queryKey, data.preview as PreviewRequestResult);
       })
       .catch((err) => {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Failed to request preview',
-          );
-        }
+        const message =
+          err instanceof Error ? err.message : 'Failed to reveal preview folder';
+        setUi((current) => ({ ...current, actionError: message }));
+        toast.error(message);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        setUi((current) => ({ ...current, revealing: false }));
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, projectId, save.id]);
-
-  const handleRevealFolder = async () => {
-    setRevealing(true);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/saves/${save.id}/preview/reveal-folder`,
-        { method: 'POST' },
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Failed to reveal preview folder');
-      }
-      setPreview(data.preview as PreviewRequestResult);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to reveal preview folder';
-      setError(message);
-      toast.error(message);
-    } finally {
-      setRevealing(false);
-    }
   };
 
   const uploadFile = useCallback(
-    async (file: File) => {
+    (file: File) => {
       if (!isAcceptedFile(file)) {
-        setError(`Unsupported format. Use ${ACCEPTED_EXTENSIONS.join(', ')}`);
+        setUi((current) => ({
+          ...current,
+          actionError: `Unsupported format. Use ${ACCEPTED_EXTENSIONS.join(', ')}`,
+        }));
         return;
       }
-      setUploading(true);
-      setError(null);
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch(
-          `/api/projects/${projectId}/saves/${save.id}/preview/upload`,
-          { method: 'POST', body: formData },
-        );
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error ?? 'Upload failed');
-        }
-        toast.success('Preview attached');
-        onClose();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Upload failed';
-        setError(message);
-        toast.error(message);
-      } finally {
-        setUploading(false);
-      }
+      const formData = new FormData();
+      formData.append('file', file);
+      setUi((current) => ({
+        ...current,
+        actionError: null,
+        uploading: true,
+      }));
+      void fetch(`/api/projects/${projectId}/saves/${save.id}/preview/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error ?? 'Upload failed');
+          }
+          toast.success('Preview attached');
+          queryClient.invalidateQueries({ queryKey });
+          onClose();
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : 'Upload failed';
+          setUi((current) => ({ ...current, actionError: message }));
+          toast.error(message);
+        })
+        .finally(() => {
+          setUi((current) => ({ ...current, uploading: false }));
+        });
     },
-    [projectId, save.id, onClose],
+    [onClose, projectId, queryClient, queryKey, save.id],
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      setDragOver(false);
+      setUi((current) => ({ ...current, dragOver: false }));
       const file = e.dataTransfer.files[0];
       if (file) void uploadFile(file);
     },
@@ -169,8 +186,19 @@ export function PreviewRequestDialog({
     onClose();
   }, [projectId, save.id, save.previewStatus, onClose]);
 
+  const handleDialogOpenChange = (isOpen: boolean) => {
+    if (isOpen) return;
+    setUi({
+      actionError: null,
+      dragOver: false,
+      revealing: false,
+      uploading: false,
+    });
+    handleClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-[480px] p-0 gap-0 bg-[#111215] text-white border border-white/[0.08] rounded-xl overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle className="text-base font-semibold text-white/90">
@@ -213,9 +241,11 @@ export function PreviewRequestDialog({
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => {
               e.preventDefault();
-              setDragOver(true);
+              setUi((current) => ({ ...current, dragOver: true }));
             }}
-            onDragLeave={() => setDragOver(false)}
+            onDragLeave={() =>
+              setUi((current) => ({ ...current, dragOver: false }))
+            }
             onDrop={handleDrop}
             disabled={uploading}
             className={`w-full rounded-lg border-2 border-dashed transition-colors p-6 flex flex-col items-center gap-2 cursor-pointer disabled:cursor-default disabled:opacity-60 ${

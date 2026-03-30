@@ -55,44 +55,12 @@ export function RootManagerDialog({
   );
   const projects = useStore((state) => state.projects);
   const [path, setPath] = useState('');
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [bodyReady, setBodyReady] = useState(false);
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bodyFrameRef = useRef<ReturnType<typeof setTimeout> | number | null>(
-    null,
-  );
-
-  useEffect(() => {
-    if (!open) {
-      setBodyReady(false);
-      return;
-    }
-    const schedule =
-      typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame
-        : (callback: FrameRequestCallback) =>
-            setTimeout(() => callback(Date.now()), 0);
-    bodyFrameRef.current = schedule(() => {
-      setBodyReady(true);
-      bodyFrameRef.current = null;
-    });
-
-    return () => {
-      if (bodyFrameRef.current !== null) {
-        if (typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(bodyFrameRef.current as number);
-        } else {
-          clearTimeout(bodyFrameRef.current as ReturnType<typeof setTimeout>);
-        }
-        bodyFrameRef.current = null;
-      }
-    };
-  }, [open]);
+  const suggestionsLoading = open && !rootSuggestionsLoaded;
 
   useEffect(() => {
     if (!open) return;
     if (rootSuggestionsLoaded) return;
-    setSuggestionsLoading(true);
     fetchTimerRef.current = setTimeout(() => {
       sendDaemonCommand({ type: 'discover-root-suggestions' });
     }, 150);
@@ -105,16 +73,6 @@ export function RootManagerDialog({
     };
   }, [open, rootSuggestionsLoaded]);
 
-  useEffect(() => {
-    if (!open) {
-      setSuggestionsLoading(false);
-      return;
-    }
-    if (rootSuggestionsLoaded) {
-      setSuggestionsLoading(false);
-    }
-  }, [open, rootSuggestionsLoaded]);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl p-0 gap-0 bg-[#111215] border-white/[0.08]">
@@ -125,13 +83,7 @@ export function RootManagerDialog({
         </DialogHeader>
 
         <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] p-5">
-          {!bodyReady ? (
-            <div className="md:col-span-2 grid gap-5 md:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 h-44 animate-pulse" />
-              <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 h-44 animate-pulse" />
-            </div>
-          ) : (
-            <>
+          <>
               <div className="space-y-5">
                 <section className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -172,7 +124,6 @@ export function RootManagerDialog({
                         sendDaemonCommand({
                           type: 'discover-root-suggestions',
                         });
-                        setSuggestionsLoading(true);
                         setPath('');
                       }}
                     >
@@ -230,7 +181,6 @@ export function RootManagerDialog({
                               sendDaemonCommand({
                                 type: 'discover-root-suggestions',
                               });
-                              setSuggestionsLoading(true);
                             }}
                           >
                             <FolderSimple size={14} />
@@ -304,7 +254,6 @@ export function RootManagerDialog({
                               sendDaemonCommand({
                                 type: 'discover-root-suggestions',
                               });
-                              setSuggestionsLoading(true);
                             }}
                             aria-label={`Remove ${root.name}`}
                           >
@@ -316,8 +265,7 @@ export function RootManagerDialog({
                   )}
                 </div>
               </section>
-            </>
-          )}
+          </>
         </div>
       </DialogContent>
     </Dialog>
