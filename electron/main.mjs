@@ -5,6 +5,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  ipcMain,
   Menu,
   nativeImage,
   shell,
@@ -15,7 +16,9 @@ import { getServerRestartDelayMs } from "./server-supervisor.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
 const port = Number(process.env.PORT || 3001);
-const baseUrl = `http://127.0.0.1:${port}`;
+const rendererUrl = process.env.ECHOFORM_RENDERER_URL?.trim() || null;
+const useExternalServer = rendererUrl !== null;
+const baseUrl = rendererUrl ?? `http://127.0.0.1:${port}`;
 
 let mainWindow = null;
 let tray = null;
@@ -147,6 +150,10 @@ function scheduleServerRestart(reason) {
 }
 
 async function startServer() {
+  if (useExternalServer) {
+    return waitForServer();
+  }
+
   if (serverReady || serverProcess || serverLaunchInFlight) {
     return waitForHealthyServer();
   }
@@ -203,7 +210,7 @@ async function startServer() {
     serverRestartAttempt = 0;
     notifyServerReady();
   } catch (error) {
-    if (!stopped && !isQuitting) {
+    if (!(stopped || isQuitting)) {
       serverReady = false;
       if (serverProcess === child) {
         serverProcess = null;
@@ -236,7 +243,8 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      preload: join(__dirname, "preload.cjs"),
+      sandbox: false,
     },
   });
 
@@ -314,6 +322,22 @@ function createTray() {
   return tray;
 }
 
+ipcMain.handle("echoform:pick-folder", async () => {
+  const parentWindow = mainWindow ?? BrowserWindow.getFocusedWindow() ?? null;
+  const result = await dialog.showOpenDialog(parentWindow, {
+    title: "Choose a folder for Echoform to watch",
+    buttonLabel: "Watch Folder",
+    defaultPath: app.getPath("music"),
+    properties: ["openDirectory", "createDirectory"],
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePaths[0] ?? null;
+});
+
 async function bootstrap() {
   if (process.platform === "darwin") {
     app.dock?.hide();
@@ -352,7 +376,7 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   isQuitting = true;
   clearServerRestartTimer();
-  if (!serverProcess) {
+  if (useExternalServer || !serverProcess) {
     return;
   }
 

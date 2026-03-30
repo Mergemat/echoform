@@ -5,6 +5,7 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +69,37 @@ export function RootManagerDialog({
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionsLoading = open && !rootSuggestionsLoaded;
 
+  const watchPath = (value: string) => {
+    const nextPath = value.trim();
+    if (!nextPath) {
+      return;
+    }
+    sendDaemonCommand({ type: "add-root", path: nextPath });
+    sendDaemonCommand({
+      type: "discover-root-suggestions",
+    });
+    setPath("");
+  };
+
+  const handlePickFolder = async () => {
+    if (!window.echoform?.pickFolder) {
+      toast.error("Folder picker is only available in the desktop app.");
+      return;
+    }
+
+    try {
+      const selectedPath = await window.echoform.pickFolder();
+      if (!selectedPath) {
+        return;
+      }
+      watchPath(selectedPath);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to open folder picker";
+      toast.error(message);
+    }
+  };
+
   useEffect(() => {
     if (!open) {
       return;
@@ -130,16 +162,17 @@ export function RootManagerDialog({
                 <Button
                   className="rounded-lg"
                   onClick={() => {
-                    const nextPath = path.trim();
-                    if (!nextPath) {
-                      return;
-                    }
-                    sendDaemonCommand({ type: "add-root", path: nextPath });
-                    sendDaemonCommand({
-                      type: "discover-root-suggestions",
-                    });
-                    setPath("");
+                    void handlePickFolder();
                   }}
+                  type="button"
+                  variant="secondary"
+                >
+                  <FolderSimple size={14} />
+                  Choose folder
+                </Button>
+                <Button
+                  className="rounded-lg"
+                  onClick={() => watchPath(path)}
                   type="button"
                 >
                   <Plus size={14} />

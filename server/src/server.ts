@@ -111,7 +111,12 @@ function createSessionCookie(req: Request): string {
 function responseHeaders(req: Request, extra: HeadersInit = {}): HeadersInit {
   const origin = req.headers.get("origin");
   if (isAllowedOrigin(origin)) {
-    return { ...extra, "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+    return {
+      ...extra,
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Origin": origin,
+      Vary: "Origin",
+    };
   }
   return extra;
 }

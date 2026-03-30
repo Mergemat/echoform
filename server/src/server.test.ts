@@ -117,6 +117,7 @@ describe("Origin allowlist", () => {
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN);
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
   });
 
   test("API response omits CORS header for requests without origin", async () => {
@@ -136,6 +137,7 @@ describe("Session cookie auth", () => {
       headers: { Origin: ALLOWED_ORIGIN },
     });
     expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
     const setCookie = res.headers.get("set-cookie")!;
     expect(setCookie).toContain("echoform_session=");
     expect(setCookie).toContain("HttpOnly");

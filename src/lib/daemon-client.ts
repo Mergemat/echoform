@@ -3,7 +3,8 @@ import type { WsCommand, WsEvent } from "@/lib/types";
 type EventListener = (event: WsEvent) => void;
 type ConnectionListener = (connected: boolean) => void;
 
-const API_URL = "";
+const API_URL =
+  typeof window === "undefined" ? "" : (window.echoform?.apiBaseUrl ?? "");
 const RECONNECT_DELAY_MS = 2000;
 
 let socket: WebSocket | null = null;
@@ -26,6 +27,12 @@ function emitEvent(event: WsEvent) {
 }
 
 function getWsUrl() {
+  if (API_URL) {
+    const base = new URL(API_URL);
+    const protocol = base.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${base.host}/ws`;
+  }
+
   const locationLike =
     typeof window === "undefined"
       ? { protocol: "http:", host: "localhost" }
@@ -61,7 +68,9 @@ async function connectDaemonClient() {
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/session`);
+    const res = await fetch(`${API_URL}/api/session`, {
+      credentials: API_URL ? "include" : "same-origin",
+    });
     if (!res.ok) {
       throw new Error("Session bootstrap failed");
     }
