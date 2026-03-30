@@ -1,4 +1,4 @@
-export const SERVER_RESTART_BASE_DELAY_MS = 1_000;
+export const SERVER_RESTART_BASE_DELAY_MS = 1000;
 export const SERVER_RESTART_MAX_DELAY_MS = 30_000;
 
 export function getServerRestartDelayMs(attempt) {

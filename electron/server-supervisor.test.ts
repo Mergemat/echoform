@@ -11,9 +11,9 @@ describe("getServerRestartDelayMs", () => {
   });
 
   it("doubles until it reaches the cap", () => {
-    expect(getServerRestartDelayMs(1)).toBe(2_000);
-    expect(getServerRestartDelayMs(2)).toBe(4_000);
-    expect(getServerRestartDelayMs(3)).toBe(8_000);
+    expect(getServerRestartDelayMs(1)).toBe(2000);
+    expect(getServerRestartDelayMs(2)).toBe(4000);
+    expect(getServerRestartDelayMs(3)).toBe(8000);
   });
 
   it("caps large retry counts", () => {

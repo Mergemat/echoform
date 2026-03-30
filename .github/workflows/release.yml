@@ -37,7 +37,7 @@ jobs:
         run: bun run check
 
       - name: Build release artifacts
-        run: bun run release:mac
+        run: bun run release
 
       - name: Publish GitHub release
         env:

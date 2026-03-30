@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { JSDOM } from "jsdom";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,10 +34,14 @@ Object.assign(globalThis, {
   Node: dom.window.Node,
   navigator: dom.window.navigator,
 });
+Object.assign(window, {
+  echoform: undefined,
+});
 
 describe("RootManagerDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.echoform = undefined;
     useStore.setState({
       projects: [],
       roots: [],
@@ -64,6 +68,29 @@ describe("RootManagerDialog", () => {
 
     expect(sendDaemonCommand).not.toHaveBeenCalledWith({
       type: "sync-roots",
+    });
+  });
+
+  it("adds a watched root from the native folder picker", async () => {
+    window.echoform = {
+      pickFolder: vi
+        .fn()
+        .mockResolvedValue("/Users/test/Music/Ableton/My Projects"),
+    };
+
+    const view = render(<RootManagerDialog onOpenChange={vi.fn()} open />);
+
+    fireEvent.click(view.getByText("Choose folder"));
+
+    await waitFor(() => {
+      expect(sendDaemonCommand).toHaveBeenCalledWith({
+        type: "add-root",
+        path: "/Users/test/Music/Ableton/My Projects",
+      });
+    });
+
+    expect(sendDaemonCommand).toHaveBeenCalledWith({
+      type: "discover-root-suggestions",
     });
   });
 });
