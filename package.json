@@ -1,7 +1,7 @@
 {
   "name": "echoform",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Ableton project versioning and recovery for music producers.",
   "author": "b.omarov",
   "type": "module",
