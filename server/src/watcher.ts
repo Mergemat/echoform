@@ -1,48 +1,51 @@
-import { watch, type FSWatcher } from 'node:fs';
-import type { Project, TrackedRoot } from './types';
+import { type FSWatcher, watch } from "node:fs";
+import type { Project, TrackedRoot } from "./types";
 
-type WatcherEvents = {
+interface WatcherEvents {
   onChange: (
     projectId: string,
     projectName: string,
-    changedPaths: string[],
+    changedPaths: string[]
   ) => void;
   onError: (projectId: string, projectName: string, message: string) => void;
-};
+}
 
-type RootWatcherEvents = {
+interface RootWatcherEvents {
   onChange: (rootId: string, rootName: string) => void;
   onError: (rootId: string, rootName: string, message: string) => void;
-};
+}
 
 export const DEFAULT_WATCHER_DEBOUNCE_MS = 200;
 
 function watchErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'code' in err) {
+  if (err && typeof err === "object" && "code" in err) {
     const code = (err as NodeJS.ErrnoException).code;
     switch (code) {
-      case 'EACCES':
-        return 'Permission denied — cannot watch this project folder. Check file permissions.';
-      case 'ENOENT':
-        return 'Project folder not found — it may have been moved or deleted.';
-      case 'EMFILE':
-        return 'Too many open files — close some applications or increase the system limit.';
-      case 'ENOSPC':
-        return 'No space for file watchers — too many files are being watched system-wide.';
+      case "EACCES":
+        return "Permission denied — cannot watch this project folder. Check file permissions.";
+      case "ENOENT":
+        return "Project folder not found — it may have been moved or deleted.";
+      case "EMFILE":
+        return "Too many open files — close some applications or increase the system limit.";
+      case "ENOSPC":
+        return "No space for file watchers — too many files are being watched system-wide.";
       default:
-        return `File watcher error (${code}): ${err instanceof Error ? err.message : 'unknown'}`;
+        return `File watcher error (${code}): ${err instanceof Error ? err.message : "unknown"}`;
     }
   }
-  return 'File watcher encountered an unexpected error.';
+  return "File watcher encountered an unexpected error.";
 }
 
 export class ProjectWatcher {
-  private watchers = new Map<string, FSWatcher>();
-  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pendingChangedPaths = new Map<string, Set<string>>();
-  private suppressedProjects = new Set<string>();
-  private events: WatcherEvents;
-  private debounceMs: number;
+  private readonly watchers = new Map<string, FSWatcher>();
+  private readonly debounceTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly pendingChangedPaths = new Map<string, Set<string>>();
+  private readonly suppressedProjects = new Set<string>();
+  private readonly events: WatcherEvents;
+  private readonly debounceMs: number;
 
   constructor(events: WatcherEvents, debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS) {
     this.events = events;
@@ -60,24 +63,40 @@ export class ProjectWatcher {
   }
 
   async watchProject(project: Project): Promise<void> {
-    if (this.watchers.has(project.id)) return;
-    if (!project.watching) return;
-    if (project.presence !== 'active') return;
+    if (this.watchers.has(project.id)) {
+      return;
+    }
+    if (!project.watching) {
+      return;
+    }
+    if (project.presence !== "active") {
+      return;
+    }
 
     try {
       const watcher = watch(
         project.projectPath,
         { recursive: true },
         (_event, filename) => {
-          if (!filename) return;
-          if (!filename.toLowerCase().endsWith('.als')) return;
-          if (filename.startsWith('Backup/') || filename.startsWith('Backup\\'))
+          if (!filename) {
             return;
-          if (this.suppressedProjects.has(project.id)) return;
+          }
+          if (!filename.toLowerCase().endsWith(".als")) {
+            return;
+          }
+          if (
+            filename.startsWith("Backup/") ||
+            filename.startsWith("Backup\\")
+          ) {
+            return;
+          }
+          if (this.suppressedProjects.has(project.id)) {
+            return;
+          }
           this.debouncedChange(project.id, project.name, filename);
-        },
+        }
       );
-      watcher.on('error', (err: NodeJS.ErrnoException) => {
+      watcher.on("error", (err: NodeJS.ErrnoException) => {
         const msg = watchErrorMessage(err);
         this.events.onError(project.id, project.name, msg);
         this.unwatchProject(project.id);
@@ -105,20 +124,25 @@ export class ProjectWatcher {
   }
 
   unwatchAll(): void {
-    for (const [id] of this.watchers) this.unwatchProject(id);
+    for (const [id] of this.watchers) {
+      this.unwatchProject(id);
+    }
   }
 
   private debouncedChange(
     projectId: string,
     projectName: string,
-    changedPath: string,
+    changedPath: string
   ): void {
-    const pending = this.pendingChangedPaths.get(projectId) ?? new Set<string>();
+    const pending =
+      this.pendingChangedPaths.get(projectId) ?? new Set<string>();
     pending.add(changedPath);
     this.pendingChangedPaths.set(projectId, pending);
 
     const existing = this.debounceTimers.get(projectId);
-    if (existing) clearTimeout(existing);
+    if (existing) {
+      clearTimeout(existing);
+    }
     const timer = setTimeout(() => {
       this.debounceTimers.delete(projectId);
       const changedPaths = [
@@ -136,24 +160,32 @@ export class ProjectWatcher {
 }
 
 export class RootWatcher {
-  private watchers = new Map<string, FSWatcher>();
-  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private events: RootWatcherEvents;
-  private debounceMs: number;
+  private readonly watchers = new Map<string, FSWatcher>();
+  private readonly debounceTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly events: RootWatcherEvents;
+  private readonly debounceMs: number;
 
-  constructor(events: RootWatcherEvents, debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS) {
+  constructor(
+    events: RootWatcherEvents,
+    debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS
+  ) {
     this.events = events;
     this.debounceMs = debounceMs;
   }
 
   async watchRoot(root: TrackedRoot): Promise<void> {
-    if (this.watchers.has(root.id)) return;
+    if (this.watchers.has(root.id)) {
+      return;
+    }
 
     try {
       const watcher = watch(root.path, { recursive: true }, () => {
         this.debouncedChange(root.id, root.name);
       });
-      watcher.on('error', (err: NodeJS.ErrnoException) => {
+      watcher.on("error", (err: NodeJS.ErrnoException) => {
         const msg = watchErrorMessage(err);
         this.events.onError(root.id, root.name, msg);
         this.unwatchRoot(root.id);
@@ -179,12 +211,16 @@ export class RootWatcher {
   }
 
   unwatchAll(): void {
-    for (const [id] of this.watchers) this.unwatchRoot(id);
+    for (const [id] of this.watchers) {
+      this.unwatchRoot(id);
+    }
   }
 
   private debouncedChange(rootId: string, rootName: string): void {
     const existing = this.debounceTimers.get(rootId);
-    if (existing) clearTimeout(existing);
+    if (existing) {
+      clearTimeout(existing);
+    }
     const timer = setTimeout(() => {
       this.debounceTimers.delete(rootId);
       this.events.onChange(rootId, rootName);

@@ -1,36 +1,35 @@
-import { access } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
-import { EchoformService, AppError } from './core';
-import { discoverProjects } from './discovery';
-import { resolveStateDir } from './paths';
-import { ProjectWatcher, RootWatcher } from './watcher';
-import type { WsCommand, WsEvent } from './types';
+import { access } from "node:fs/promises";
+import { extname, join, normalize, resolve, sep } from "node:path";
+import { AppError, EchoformService } from "./core";
+import { discoverProjects } from "./discovery";
+import { resolveStateDir } from "./paths";
+import type { WsCommand, WsEvent } from "./types";
+import { ProjectWatcher, RootWatcher } from "./watcher";
 
 const PORT = Number(process.env.PORT || 3001);
 const service = new EchoformService(resolveStateDir());
 const clients = new Set<{ send: (data: string) => void }>();
-const SESSION_COOKIE_NAME = 'echoform_session';
+const SESSION_COOKIE_NAME = "echoform_session";
 const SESSION_TOKEN = crypto.randomUUID();
 const STATIC_DIR = resolve(
   process.env.ECHOFORM_STATIC_DIR ??
     process.env.ABLEGIT_STATIC_DIR ??
-    join(process.cwd(), 'dist'),
+    join(process.cwd(), "dist")
 );
 const DEFAULT_ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`,
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
 ];
 const allowedOrigins = new Set([
   ...DEFAULT_ALLOWED_ORIGINS,
-  ...(
-    process.env.ECHOFORM_ALLOWED_ORIGINS ??
-    process.env.ABLEGIT_ALLOWED_ORIGINS
+  ...((
+    process.env.ECHOFORM_ALLOWED_ORIGINS ?? process.env.ABLEGIT_ALLOWED_ORIGINS
   )
-    ?.split(',')
+    ?.split(",")
     .map((origin) => origin.trim())
-    .filter(Boolean) ?? [],
+    .filter(Boolean) ?? []),
 ]);
 const PREVIEW_POLL_MS = 1500;
 
@@ -48,7 +47,7 @@ function broadcast(event: WsEvent) {
 async function buildSnapshotEvent(): Promise<WsEvent> {
   const { projects, roots, activity } = await service.getSnapshot();
   return {
-    type: 'snapshot',
+    type: "snapshot",
     projects,
     roots,
     activity,
@@ -61,15 +60,15 @@ async function broadcastSnapshot(): Promise<void> {
 
 async function backfillSaveAnalysis(
   projectId: string,
-  saveId: string,
+  saveId: string
 ): Promise<void> {
   try {
     const { project } = await service.computeChanges(projectId, saveId);
-    broadcast({ type: 'project-updated', project });
+    broadcast({ type: "project-updated", project });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Background save analysis failed';
-    broadcast({ type: 'error', message });
+      err instanceof Error ? err.message : "Background save analysis failed";
+    broadcast({ type: "error", message });
   }
 }
 
@@ -78,21 +77,25 @@ function isAllowedOrigin(origin: string | null): origin is string {
 }
 
 function parseCookies(req: Request): Map<string, string> {
-  const raw = req.headers.get('cookie');
-  if (!raw) return new Map();
+  const raw = req.headers.get("cookie");
+  if (!raw) {
+    return new Map();
+  }
   return new Map(
     raw
-      .split(';')
+      .split(";")
       .map((part) => part.trim())
       .filter(Boolean)
       .map((part) => {
-        const idx = part.indexOf('=');
-        if (idx === -1) return [part, ''] as const;
+        const idx = part.indexOf("=");
+        if (idx === -1) {
+          return [part, ""] as const;
+        }
         return [
           decodeURIComponent(part.slice(0, idx)),
           decodeURIComponent(part.slice(idx + 1)),
         ] as const;
-      }),
+      })
   );
 }
 
@@ -101,34 +104,36 @@ function isAuthorized(req: Request): boolean {
 }
 
 function createSessionCookie(req: Request): string {
-  const secure = new URL(req.url).protocol === 'https:' ? '; Secure' : '';
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
   return `${SESSION_COOKIE_NAME}=${encodeURIComponent(SESSION_TOKEN)}; Path=/; HttpOnly; SameSite=Strict${secure}`;
 }
 
 function responseHeaders(req: Request, extra: HeadersInit = {}): HeadersInit {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   if (isAllowedOrigin(origin)) {
-    return { ...extra, 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
+    return { ...extra, "Access-Control-Allow-Origin": origin, Vary: "Origin" };
   }
   return extra;
 }
 
 function corsHeaders(req: Request): HeadersInit | null {
-  const origin = req.headers.get('origin');
-  if (!isAllowedOrigin(origin)) return null;
+  const origin = req.headers.get("origin");
+  if (!isAllowedOrigin(origin)) {
+    return null;
+  }
   return responseHeaders(req, {
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   });
 }
 
 function authorizeHttp(req: Request): AppError | null {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get("origin");
   if (origin && !isAllowedOrigin(origin)) {
-    return new AppError('Forbidden', 403);
+    return new AppError("Forbidden", 403);
   }
   if (!isAuthorized(req)) {
-    return new AppError('Unauthorized', 401);
+    return new AppError("Unauthorized", 401);
   }
   return null;
 }
@@ -137,30 +142,30 @@ function authorizeHttp(req: Request): AppError | null {
 
 const watcher = new ProjectWatcher({
   onChange: async (projectId, projectName, changedPaths) => {
-    broadcast({ type: 'change-detected', projectId, projectName });
+    broadcast({ type: "change-detected", projectId, projectName });
     // suppress watcher while saving to prevent infinite loop
     watcher.suppress(projectId);
     try {
       const { project, save, stateChanged } =
         await service.handleWatchedAlsChange(projectId, changedPaths);
       if (save) {
-        broadcast({ type: 'auto-saved', projectId, save });
+        broadcast({ type: "auto-saved", projectId, save });
         void backfillSaveAnalysis(projectId, save.id);
       }
       if (save || stateChanged) {
-        broadcast({ type: 'project-updated', project });
+        broadcast({ type: "project-updated", project });
         void broadcastSnapshot();
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Auto-save failed';
-      broadcast({ type: 'error', message: msg });
+      const msg = err instanceof Error ? err.message : "Auto-save failed";
+      broadcast({ type: "error", message: msg });
     } finally {
       watcher.unsuppress(projectId);
     }
   },
   onError: async (projectId, _projectName, message) => {
     await service.setProjectWatchError(projectId, message);
-    broadcast({ type: 'error', message });
+    broadcast({ type: "error", message });
     await broadcastSnapshot();
   },
 });
@@ -172,7 +177,7 @@ const rootWatcher = new RootWatcher({
     await broadcastSnapshot();
   },
   onError: async (_rootId, _rootName, message) => {
-    broadcast({ type: 'error', message });
+    broadcast({ type: "error", message });
     await broadcastSnapshot();
   },
 });
@@ -187,7 +192,7 @@ async function reconcileWatchers(): Promise<void> {
   }
 
   for (const project of state.projects) {
-    if (project.watching && project.presence === 'active') {
+    if (project.watching && project.presence === "active") {
       await watcher.watchProject(project);
       if (project.watchError) {
         await service.clearProjectWatchError(project.id);
@@ -206,13 +211,15 @@ setInterval(() => {
   void service
     .ingestPendingPreviews()
     .then(async (changed) => {
-      if (!changed) return;
+      if (!changed) {
+        return;
+      }
       await broadcastSnapshot();
     })
     .catch((err) => {
       const message =
-        err instanceof Error ? err.message : 'Preview ingest failed';
-      broadcast({ type: 'error', message });
+        err instanceof Error ? err.message : "Preview ingest failed";
+      broadcast({ type: "error", message });
     });
 }, PREVIEW_POLL_MS);
 
@@ -220,7 +227,7 @@ setInterval(() => {
 
 async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
   switch (cmd.type) {
-    case 'track-project': {
+    case "track-project": {
       await service.trackProject({
         name: cmd.name,
         projectPath: cmd.projectPath,
@@ -228,39 +235,39 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       await reconcileWatchers();
       return await buildSnapshotEvent();
     }
-    case 'delete-project': {
+    case "delete-project": {
       watcher.unwatchProject(cmd.projectId);
       await service.deleteProject(cmd.projectId);
       await reconcileWatchers();
       return await buildSnapshotEvent();
     }
-    case 'add-root': {
+    case "add-root": {
       await service.addRoot({ path: cmd.path, name: cmd.name });
       await reconcileWatchers();
       return await buildSnapshotEvent();
     }
-    case 'remove-root': {
+    case "remove-root": {
       await service.removeRoot(cmd.rootId);
       await reconcileWatchers();
       return await buildSnapshotEvent();
     }
-    case 'sync-roots': {
+    case "sync-roots": {
       await service.syncRoots();
       await reconcileWatchers();
       return await buildSnapshotEvent();
     }
-    case 'discover-root-suggestions': {
+    case "discover-root-suggestions": {
       const suggestions = await service.listRootSuggestions();
-      return { type: 'root-suggestions', suggestions };
+      return { type: "root-suggestions", suggestions };
     }
-    case 'create-save': {
+    case "create-save": {
       await service.createSave(cmd.projectId, {
         label: cmd.label,
         note: cmd.note,
       });
       return await buildSnapshotEvent();
     }
-    case 'branch-from-save': {
+    case "branch-from-save": {
       watcher.suppress(cmd.projectId);
       try {
         const result = await service.branchFromSave(cmd.projectId, {
@@ -269,66 +276,67 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
           fileName: cmd.fileName,
         });
         if (result.openError) {
-          broadcast({ type: 'error', message: result.openError });
+          broadcast({ type: "error", message: result.openError });
         }
         return await buildSnapshotEvent();
       } finally {
         watcher.unsuppress(cmd.projectId);
       }
     }
-    case 'open-idea': {
+    case "open-idea": {
       const result = await service.openIdea(cmd.projectId, cmd.ideaId);
       if (result.openError) {
-        broadcast({ type: 'error', message: result.openError });
+        broadcast({ type: "error", message: result.openError });
       }
       return await buildSnapshotEvent();
     }
-    case 'reveal-idea-file': {
+    case "reveal-idea-file": {
       const result = await service.revealIdeaFile(cmd.projectId, cmd.ideaId);
       if (result.openError) {
-        broadcast({ type: 'error', message: result.openError });
+        broadcast({ type: "error", message: result.openError });
       }
       return await buildSnapshotEvent();
     }
-    case 'adopt-drift-file': {
+    case "adopt-drift-file": {
       await service.adoptDriftFile(cmd.projectId);
       return await buildSnapshotEvent();
     }
-    case 'compare': {
+    case "compare": {
       // compare returns via HTTP for simplicity
       return null;
     }
-    case 'update-save': {
+    case "update-save": {
       await service.updateSave(cmd.projectId, cmd.saveId, {
         note: cmd.note,
         label: cmd.label,
       });
       return await buildSnapshotEvent();
     }
-    case 'discover-projects': {
+    case "discover-projects": {
       const tracked = await service.listProjects();
       const roots = await service.listRoots();
       const paths = await discoverProjects(tracked, roots);
-      return { type: 'discovered-projects', paths };
+      return { type: "discovered-projects", paths };
     }
-    case 'toggle-watching': {
+    case "toggle-watching": {
       if (cmd.watching) {
         // Watch first — only persist if the watcher starts successfully
         const state = await service.loadState();
         const project = state.projects.find((p) => p.id === cmd.projectId);
-        if (!project) return { type: 'error', message: 'Project not found' };
+        if (!project) {
+          return { type: "error", message: "Project not found" };
+        }
         await watcher.watchProject(project);
         await service.toggleWatching(cmd.projectId, true);
         await reconcileWatchers();
         return await buildSnapshotEvent();
-      } else {
-        watcher.unwatchProject(cmd.projectId);
-        await service.toggleWatching(cmd.projectId, false);
-        await reconcileWatchers();
-        return await buildSnapshotEvent();
       }
+      watcher.unwatchProject(cmd.projectId);
+      await service.toggleWatching(cmd.projectId, false);
+      await reconcileWatchers();
+      return await buildSnapshotEvent();
     }
-    case 'delete-save': {
+    case "delete-save": {
       await service.deleteSave(cmd.projectId, cmd.saveId);
       return await buildSnapshotEvent();
     }
@@ -341,12 +349,12 @@ function jsonResponse(
   req: Request,
   data: unknown,
   status = 200,
-  extraHeaders: HeadersInit = {},
+  extraHeaders: HeadersInit = {}
 ) {
   return new Response(JSON.stringify(data), {
     status,
     headers: responseHeaders(req, {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...extraHeaders,
     }),
   });
@@ -362,9 +370,9 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 function resolveStaticPath(pathname: string): string | null {
-  const trimmed = pathname.replace(/^\/+/, '');
-  const normalized = normalize(trimmed || 'index.html');
-  if (normalized.startsWith('..') || normalized.includes(`..${sep}`)) {
+  const trimmed = pathname.replace(/^\/+/, "");
+  const normalized = normalize(trimmed || "index.html");
+  if (normalized.startsWith("..") || normalized.includes(`..${sep}`)) {
     return null;
   }
   return join(STATIC_DIR, normalized);
@@ -372,9 +380,11 @@ function resolveStaticPath(pathname: string): string | null {
 
 async function serveStatic(
   req: Request,
-  pathname: string,
+  pathname: string
 ): Promise<Response | null> {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return null;
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return null;
+  }
 
   const filePath = resolveStaticPath(pathname);
   if (filePath && (await fileExists(filePath))) {
@@ -383,10 +393,14 @@ async function serveStatic(
     });
   }
 
-  if (extname(pathname)) return null;
+  if (extname(pathname)) {
+    return null;
+  }
 
-  const indexPath = join(STATIC_DIR, 'index.html');
-  if (!(await fileExists(indexPath))) return null;
+  const indexPath = join(STATIC_DIR, "index.html");
+  if (!(await fileExists(indexPath))) {
+    return null;
+  }
 
   return new Response(Bun.file(indexPath), {
     headers: responseHeaders(req),
@@ -401,63 +415,69 @@ Bun.serve({
     const url = new URL(req.url);
 
     // CORS preflight
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
       const headers = corsHeaders(req);
-      if (!headers) return new Response('Forbidden', { status: 403 });
+      if (!headers) {
+        return new Response("Forbidden", { status: 403 });
+      }
       return new Response(null, { status: 204, headers });
     }
 
-    if (url.pathname === '/api/session' && req.method === 'GET') {
-      const origin = req.headers.get('origin');
+    if (url.pathname === "/api/session" && req.method === "GET") {
+      const origin = req.headers.get("origin");
       if (origin && !isAllowedOrigin(origin)) {
-        return new Response('Forbidden', { status: 403 });
+        return new Response("Forbidden", { status: 403 });
       }
       return jsonResponse(req, { ok: true }, 200, {
-        'Set-Cookie': createSessionCookie(req),
+        "Set-Cookie": createSessionCookie(req),
       });
     }
 
     // WebSocket upgrade
-    if (url.pathname === '/ws') {
-      const origin = req.headers.get('origin');
-      if (!isAllowedOrigin(origin))
-        return new Response('Forbidden', { status: 403 });
-      if (!isAuthorized(req))
-        return new Response('Unauthorized', { status: 401 });
+    if (url.pathname === "/ws") {
+      const origin = req.headers.get("origin");
+      if (!isAllowedOrigin(origin)) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      if (!isAuthorized(req)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
       const upgraded = server.upgrade(req);
-      if (!upgraded)
-        return new Response('WebSocket upgrade failed', { status: 400 });
+      if (!upgraded) {
+        return new Response("WebSocket upgrade failed", { status: 400 });
+      }
       return undefined as unknown as Response;
     }
 
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith("/api/")) {
       const authError = authorizeHttp(req);
       if (authError) {
         return jsonResponse(
           req,
           { error: authError.message },
-          authError.status,
+          authError.status
         );
       }
     }
 
     // REST: compare
     if (
-      url.pathname.startsWith('/api/projects/') &&
-      url.pathname.endsWith('/compare')
+      url.pathname.startsWith("/api/projects/") &&
+      url.pathname.endsWith("/compare")
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3];
-      const left = url.searchParams.get('left');
-      const right = url.searchParams.get('right');
-      if (!left || !right)
-        return jsonResponse(req, { error: 'left and right required' }, 400);
+      const left = url.searchParams.get("left");
+      const right = url.searchParams.get("right");
+      if (!(left && right)) {
+        return jsonResponse(req, { error: "left and right required" }, 400);
+      }
       try {
         const compare = await service.compareSaves(projectId!, left, right);
         return jsonResponse(req, { compare });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -466,9 +486,9 @@ Bun.serve({
     // e.g. /api/projects/:id/saves/:saveId/changes
     if (
       url.pathname.match(/^\/api\/projects\/[^/]+\/saves\/[^/]+\/changes$/) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -477,18 +497,18 @@ Bun.serve({
         return jsonResponse(req, { changes });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
 
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/request$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/request$/
       ) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -497,18 +517,18 @@ Bun.serve({
         return jsonResponse(req, { preview });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
 
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/reveal-folder$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/reveal-folder$/
       ) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -516,7 +536,7 @@ Bun.serve({
         return jsonResponse(req, { preview });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -525,31 +545,31 @@ Bun.serve({
     // POST /api/projects/:id/saves/:saveId/preview/upload (multipart)
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/upload$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/upload$/
       ) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
         const formData = await req.formData();
-        const file = formData.get('file');
-        if (!file || !(file instanceof File)) {
-          return jsonResponse(req, { error: 'file field required' }, 400);
+        const file = formData.get("file");
+        if (!(file && file instanceof File)) {
+          return jsonResponse(req, { error: "file field required" }, 400);
         }
         const fileData = await file.arrayBuffer();
         const preview = await service.uploadPreview(
           projectId,
           saveId,
           fileData,
-          file.name,
+          file.name
         );
         await broadcastSnapshot();
         return jsonResponse(req, { preview });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -558,11 +578,11 @@ Bun.serve({
     // POST /api/projects/:id/saves/:saveId/preview/cancel
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/cancel$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/cancel$/
       ) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -571,7 +591,7 @@ Bun.serve({
         return jsonResponse(req, { ok: true });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -580,11 +600,11 @@ Bun.serve({
     // GET /api/projects/:id/saves/:saveId/smart-restore/tracks
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore\/tracks$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore\/tracks$/
       ) &&
-      req.method === 'GET'
+      req.method === "GET"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -592,7 +612,7 @@ Bun.serve({
         return jsonResponse(req, { tracks });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -601,11 +621,11 @@ Bun.serve({
     // POST /api/projects/:id/saves/:saveId/smart-restore  body: { trackIds: string[] }
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore$/,
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/smart-restore$/
       ) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
@@ -613,25 +633,25 @@ Bun.serve({
         if (!Array.isArray(body.trackIds) || body.trackIds.length === 0) {
           return jsonResponse(
             req,
-            { error: 'trackIds must be a non-empty array' },
-            400,
+            { error: "trackIds must be a non-empty array" },
+            400
           );
         }
         const result = await service.smartRestore(
           projectId,
           saveId,
-          body.trackIds,
+          body.trackIds
         );
         return jsonResponse(req, { result });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
 
     // REST: list projects
-    if (url.pathname === '/api/projects' && req.method === 'GET') {
+    if (url.pathname === "/api/projects" && req.method === "GET") {
       const projects = await service.listProjects();
       return jsonResponse(req, { projects });
     }
@@ -640,16 +660,16 @@ Bun.serve({
     // GET /api/projects/:id/disk-usage
     if (
       url.pathname.match(/^\/api\/projects\/[^/]+\/disk-usage$/) &&
-      req.method === 'GET'
+      req.method === "GET"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       try {
         const usage = await service.getDiskUsage(projectId);
         return jsonResponse(req, usage);
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -658,18 +678,18 @@ Bun.serve({
     // POST /api/projects/:id/prune  body: { olderThanDays: number }
     if (
       url.pathname.match(/^\/api\/projects\/[^/]+\/prune$/) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       try {
         const body = (await req.json()) as { olderThanDays?: number };
         const days = body.olderThanDays;
-        if (typeof days !== 'number' || days < 0) {
+        if (typeof days !== "number" || days < 0) {
           return jsonResponse(
             req,
-            { error: 'olderThanDays must be a non-negative number' },
-            400,
+            { error: "olderThanDays must be a non-negative number" },
+            400
           );
         }
         const { deletedCount } = await service.pruneSaves(projectId, days);
@@ -677,7 +697,7 @@ Bun.serve({
         return jsonResponse(req, { deletedCount });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
@@ -686,27 +706,28 @@ Bun.serve({
     // POST /api/projects/:id/compact-storage
     if (
       url.pathname.match(/^\/api\/projects\/[^/]+\/compact-storage$/) &&
-      req.method === 'POST'
+      req.method === "POST"
     ) {
-      const parts = url.pathname.split('/');
+      const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       try {
-        const { project, deletedCount } = await service.compactStorage(
-          projectId,
-        );
+        const { project, deletedCount } =
+          await service.compactStorage(projectId);
         await broadcastSnapshot();
         return jsonResponse(req, { project, deletedCount });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         return jsonResponse(req, { error: message }, status);
       }
     }
 
     // REST: media proxy
-    if (url.pathname === '/api/media') {
-      const p = url.searchParams.get('path');
-      if (!p) return jsonResponse(req, { error: 'path required' }, 400);
+    if (url.pathname === "/api/media") {
+      const p = url.searchParams.get("path");
+      if (!p) {
+        return jsonResponse(req, { error: "path required" }, 400);
+      }
       try {
         const resolved = await service.resolvePreviewPath(p);
         return new Response(Bun.file(resolved), {
@@ -714,15 +735,17 @@ Bun.serve({
         });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 404;
-        const message = err instanceof Error ? err.message : 'File not found';
+        const message = err instanceof Error ? err.message : "File not found";
         return jsonResponse(req, { error: message }, status);
       }
     }
 
     const staticResponse = await serveStatic(req, url.pathname);
-    if (staticResponse) return staticResponse;
+    if (staticResponse) {
+      return staticResponse;
+    }
 
-    return new Response('Not found', {
+    return new Response("Not found", {
       status: 404,
       headers: responseHeaders(req),
     });
@@ -743,14 +766,14 @@ Bun.serve({
           broadcast(result);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : "Unknown error";
         const status = err instanceof AppError ? err.status : 500;
         ws.send(
           JSON.stringify({
-            type: 'error',
+            type: "error",
             message,
             status,
-          } satisfies WsEvent & { status?: number }),
+          } satisfies WsEvent & { status?: number })
         );
       }
     },

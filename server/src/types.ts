@@ -1,147 +1,143 @@
 // ── Domain Types (producer-native language) ─────────────────────────
 
-export type AppState = {
-  roots: TrackedRoot[];
-  projects: Project[];
+export interface AppState {
   activity: ActivityItem[];
-};
+  projects: Project[];
+  roots: TrackedRoot[];
+}
 
-export type TrackedRoot = {
-  id: string;
-  path: string;
-  name: string;
+export interface TrackedRoot {
   createdAt: string;
-  lastScannedAt: string | null;
-  lastError: string | null;
-};
-
-export type Project = {
   id: string;
+  lastError: string | null;
+  lastScannedAt: string | null;
   name: string;
-  adapter: 'ableton';
+  path: string;
+}
+
+export interface Project {
+  adapter: "ableton";
+  createdAt: string;
+  currentIdeaId: string;
+  driftStatus: DriftStatus | null;
+  id: string;
+  ideas: Idea[];
+  lastSeenAt: string | null;
+  name: string;
+  pendingOpen: PendingOpen | null;
+  presence: "active" | "missing";
   projectPath: string;
   rootIds: string[];
-  presence: 'active' | 'missing';
-  watchError: string | null;
-  lastSeenAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  currentIdeaId: string;
-  pendingOpen: PendingOpen | null;
-  driftStatus: DriftStatus | null;
-  ideas: Idea[];
   saves: Save[];
+  updatedAt: string;
+  watchError: string | null;
   watching: boolean;
-};
+}
 
-export type PendingOpen = {
-  ideaId: string;
-  setPath: string;
-  requestedAt: string;
+export interface PendingOpen {
   error: string | null;
-};
-
-export type DriftStatus = {
-  kind: 'unknown-file' | 'missing-file';
+  ideaId: string;
+  requestedAt: string;
   setPath: string;
-  ideaId: string | null;
-  detectedAt: string;
-};
+}
 
-export type Idea = {
+export interface DriftStatus {
+  detectedAt: string;
+  ideaId: string | null;
+  kind: "unknown-file" | "missing-file";
+  setPath: string;
+}
+
+export interface Idea {
+  baseSaveId: string;
+  createdAt: string;
+  forkedFromSaveId: string | null;
+  headSaveId: string;
   id: string;
   name: string;
-  createdAt: string;
-  setPath: string;
-  baseSaveId: string;
-  headSaveId: string;
   parentIdeaId: string | null;
-  forkedFromSaveId: string | null;
-};
+  setPath: string;
+}
 
-export type Save = {
-  id: string;
-  label: string;
-  customLabel?: boolean;
-  note: string;
-  createdAt: string;
-  ideaId: string;
-  previewRefs: string[];
-  previewStatus: PreviewStatus;
-  previewMime: string | null;
-  previewRequestedAt: string | null;
-  previewUpdatedAt: string | null;
-  projectHash: string;
-  metadata: ProjectMetadata;
+export interface Save {
   auto: boolean; // true if created by the watcher automatically
   changes?: ChangeSummary; // diff vs. previous save on the same idea
+  createdAt: string;
+  customLabel?: boolean;
+  id: string;
+  ideaId: string;
+  label: string;
+  metadata: ProjectMetadata;
+  note: string;
+  previewMime: string | null;
+  previewRefs: string[];
+  previewRequestedAt: string | null;
+  previewStatus: PreviewStatus;
+  previewUpdatedAt: string | null;
+  projectHash: string;
   setDiff?: SetDiff; // semantic diff of the .als XML vs. previous save
   trackSummary?: TrackSummaryItem[]; // lightweight track list for visual thumbnails
-};
+}
 
-export type PreviewStatus = 'none' | 'pending' | 'ready' | 'missing' | 'error';
+export type PreviewStatus = "none" | "pending" | "ready" | "missing" | "error";
 
-export type PreviewRequestResult = {
+export interface PreviewRequestResult {
+  acceptedExtensions: string[];
+  expectedBaseName: string;
+  folderPath: string;
   projectId: string;
   saveId: string;
   status: PreviewStatus;
-  folderPath: string;
-  expectedBaseName: string;
-  acceptedExtensions: string[];
-};
+}
 
-export type TrackSummaryItem = {
-  name: string;
-  type: 'audio' | 'midi' | 'return' | 'group';
-  color: number; // Ableton color palette index
-  clipCount: number;
-  trackCount?: number; // legacy summaries may omit this; groups include nested descendants
+export interface TrackSummaryItem {
   children?: TrackSummaryItem[];
-};
+  clipCount: number;
+  color: number; // Ableton color palette index
+  name: string;
+  trackCount?: number; // legacy summaries may omit this; groups include nested descendants
+  type: "audio" | "midi" | "return" | "group";
+}
 
-export type ProjectMetadata = {
+export interface ProjectMetadata {
   activeSetPath: string;
-  setFiles: string[];
   audioFiles: number;
   fileCount: number;
-  sizeBytes: number;
   modifiedAt: string;
-};
+  setFiles: string[];
+  sizeBytes: number;
+}
 
-export type ChangeSummary = {
+export interface ChangeSummary {
   addedFiles: string[]; // relative paths of new files
-  removedFiles: string[]; // relative paths of deleted files
   modifiedFiles: string[]; // relative paths of files whose size changed
+  removedFiles: string[]; // relative paths of deleted files
   sizeDelta: number; // bytes gained or lost vs. previous save
-};
+}
 
-export type SetDiff = {
+export interface SetDiff {
+  addedTracks: { name: string; type: string }[];
+  modifiedTracks: TrackDiff[];
+  removedTracks: { name: string; type: string }[];
   tempoChange: { from: number; to: number } | null;
   timeSignatureChange: { from: string; to: string } | null;
-  addedTracks: { name: string; type: string }[];
-  removedTracks: { name: string; type: string }[];
-  modifiedTracks: TrackDiff[];
-};
+}
 
-export type TrackDiff = {
-  name: string;
-  type: string;
-  renamedFrom?: string;
-  addedDevices: string[];
-  removedDevices: string[];
-  clipCountDelta: number;
+export interface TrackDiff {
   addedClips: string[];
-  removedClips: string[];
+  addedDevices: string[];
+  clipCountDelta: number;
   mixerChanges: string[];
-};
+  name: string;
+  removedClips: string[];
+  removedDevices: string[];
+  renamedFrom?: string;
+  type: string;
+}
 
-export type CompareResult = {
-  leftSave: Save;
-  rightSave: Save;
+export interface CompareResult {
   leftIdea: Idea;
-  rightIdea: Idea;
-  noteChanged: boolean;
-  previewRefs: { left: string[]; right: string[] };
+  leftSave: Save;
   metadataDelta: {
     fileCount: number;
     audioFiles: number;
@@ -150,133 +146,137 @@ export type CompareResult = {
     activeSetChanged: boolean;
     modifiedAt: { left: string; right: string };
   };
-};
+  noteChanged: boolean;
+  previewRefs: { left: string[]; right: string[] };
+  rightIdea: Idea;
+  rightSave: Save;
+}
 
-export type ActivityItem = {
+export interface ActivityItem {
+  createdAt: string;
   id: string;
   kind:
-    | 'root-added'
-    | 'root-removed'
-    | 'root-scanned'
-    | 'project-discovered'
-    | 'project-missing'
-    | 'project-restored'
-    | 'auto-saved'
-    | 'watcher-error';
+    | "root-added"
+    | "root-removed"
+    | "root-scanned"
+    | "project-discovered"
+    | "project-missing"
+    | "project-restored"
+    | "auto-saved"
+    | "watcher-error";
   message: string;
-  createdAt: string;
-  severity: 'info' | 'success' | 'warning' | 'error';
-  rootId?: string | null;
   projectId?: string | null;
-};
+  rootId?: string | null;
+  severity: "info" | "success" | "warning" | "error";
+}
 
-export type RootSuggestion = {
-  path: string;
+export interface RootSuggestion {
   name: string;
+  path: string;
   projectCount: number;
-};
+}
 
 // ── WebSocket Events ────────────────────────────────────────────────
 
 export type WsEvent =
   | {
-      type: 'snapshot';
+      type: "snapshot";
       projects: Project[];
       roots: TrackedRoot[];
       activity: ActivityItem[];
     }
-  | { type: 'project-updated'; project: Project }
-  | { type: 'change-detected'; projectId: string; projectName: string }
-  | { type: 'auto-saved'; projectId: string; save: Save }
-  | { type: 'error'; message: string }
-  | { type: 'discovered-projects'; paths: DiscoveredProject[] }
-  | { type: 'root-suggestions'; suggestions: RootSuggestion[] };
+  | { type: "project-updated"; project: Project }
+  | { type: "change-detected"; projectId: string; projectName: string }
+  | { type: "auto-saved"; projectId: string; save: Save }
+  | { type: "error"; message: string }
+  | { type: "discovered-projects"; paths: DiscoveredProject[] }
+  | { type: "root-suggestions"; suggestions: RootSuggestion[] };
 
 export type WsCommand =
-  | { type: 'track-project'; projectPath: string; name?: string }
-  | { type: 'delete-project'; projectId: string }
-  | { type: 'add-root'; path: string; name?: string }
-  | { type: 'remove-root'; rootId: string }
-  | { type: 'sync-roots' }
-  | { type: 'discover-root-suggestions' }
-  | { type: 'create-save'; projectId: string; label?: string; note?: string }
+  | { type: "track-project"; projectPath: string; name?: string }
+  | { type: "delete-project"; projectId: string }
+  | { type: "add-root"; path: string; name?: string }
+  | { type: "remove-root"; rootId: string }
+  | { type: "sync-roots" }
+  | { type: "discover-root-suggestions" }
+  | { type: "create-save"; projectId: string; label?: string; note?: string }
   | {
-      type: 'branch-from-save';
+      type: "branch-from-save";
       projectId: string;
       saveId: string;
       name: string;
       fileName: string;
     }
-  | { type: 'open-idea'; projectId: string; ideaId: string }
-  | { type: 'reveal-idea-file'; projectId: string; ideaId: string }
-  | { type: 'adopt-drift-file'; projectId: string }
+  | { type: "open-idea"; projectId: string; ideaId: string }
+  | { type: "reveal-idea-file"; projectId: string; ideaId: string }
+  | { type: "adopt-drift-file"; projectId: string }
   | {
-      type: 'compare';
+      type: "compare";
       projectId: string;
       leftSaveId: string;
       rightSaveId: string;
     }
   | {
-      type: 'update-save';
+      type: "update-save";
       projectId: string;
       saveId: string;
       note?: string;
       label?: string;
     }
-  | { type: 'discover-projects' }
-  | { type: 'toggle-watching'; projectId: string; watching: boolean }
-  | { type: 'delete-save'; projectId: string; saveId: string };
+  | { type: "discover-projects" }
+  | { type: "toggle-watching"; projectId: string; watching: boolean }
+  | { type: "delete-save"; projectId: string; saveId: string };
 
-export type DiscoveredProject = {
-  path: string;
+export interface DiscoveredProject {
   name: string;
+  path: string;
+  rootPath?: string;
   setFiles: string[];
   tracked: boolean;
-  rootPath?: string;
-};
+}
 
 // ── Disk Usage ──────────────────────────────────────────────────────
 
-export type DiskUsage = {
-  projectId: string;
-  blobStorageBytes: number; // actual disk used by the project state dir blobs/
-  blobCount: number;
-  manifestCount: number;
-  totalSaveCount: number;
+export interface DiskUsage {
   autoSaveCount: number;
-  manualSaveCount: number;
-  /** Sum of all saves' metadata.sizeBytes — inflated vs blobStorageBytes due to dedup */
-  totalSnapshotBytes: number;
+  blobCount: number;
+  blobStorageBytes: number; // actual disk used by the project state dir blobs/
   dedupSavings: number; // totalSnapshotBytes - blobStorageBytes
   eligibleAutoSaveCount: number;
-  oldestAutoSaveAt: string | null;
   largestAutoSaveBytes: number;
+  manifestCount: number;
+  manualSaveCount: number;
+  oldestAutoSaveAt: string | null;
+  projectId: string;
   saves: DiskUsageSave[];
-};
+  totalSaveCount: number;
+  /** Sum of all saves' metadata.sizeBytes — inflated vs blobStorageBytes due to dedup */
+  totalSnapshotBytes: number;
+}
 
-export type DiskUsageSave = {
+export interface DiskUsageSave {
+  auto: boolean;
+  createdAt: string;
+  customLabel?: boolean;
   id: string;
   label: string;
-  customLabel?: boolean;
-  createdAt: string;
   snapshotBytes: number;
-  auto: boolean;
-};
+}
 
-export type SmartRestoreTrack = {
+export interface SmartRestoreTrack {
+  dependencyReturnIds: string[];
+  dependencyTrackIds: string[];
+  groupId: string | null;
   id: string;
   name: string;
-  type: 'audio' | 'midi' | 'group';
-  groupId: string | null;
-  dependencyTrackIds: string[];
-  dependencyReturnIds: string[];
-};
+  type: "audio" | "midi" | "group";
+}
 
-export type SmartRestoreResult = {
-  restoredTrackCount: number;
-  insertedReturnCount: number;
-  restoredTrackNames: string[];
-  insertedReturnNames: string[];
+export interface SmartRestoreResult {
   backupPath: string;
+  insertedReturnCount: number;
+  insertedReturnNames: string[];
+  restoredTrackCount: number;
+  restoredTrackNames: string[];
   targetSetPath: string;
-};
+}

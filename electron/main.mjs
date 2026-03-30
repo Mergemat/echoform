@@ -1,15 +1,15 @@
-import { spawn } from 'node:child_process';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   app,
   BrowserWindow,
   dialog,
   Menu,
-  Tray,
   nativeImage,
   shell,
-} from 'electron';
+  Tray,
+} from "electron";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
@@ -32,28 +32,30 @@ function resolveResourcesRoot() {
 function resolveServerProcess() {
   if (app.isPackaged) {
     return {
-      command: join(process.resourcesPath, 'bin', 'echoform-server'),
+      command: join(process.resourcesPath, "bin", "echoform-server"),
       args: [],
       cwd: process.resourcesPath,
     };
   }
 
   return {
-    command: 'bun',
-    args: ['server/src/server.ts'],
+    command: "bun",
+    args: ["server/src/server.ts"],
     cwd: projectRoot,
   };
 }
 
 async function waitForServer() {
-  const timeoutMs = 15000;
+  const timeoutMs = 15_000;
   const startedAt = Date.now();
   let lastError = null;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
       const response = await fetch(`${baseUrl}/api/session`);
-      if (response.ok) return;
+      if (response.ok) {
+        return;
+      }
       lastError = new Error(`Unexpected status ${response.status}`);
     } catch (error) {
       lastError = error;
@@ -62,47 +64,53 @@ async function waitForServer() {
     await sleep(250);
   }
 
-  throw lastError ?? new Error('Timed out waiting for Echoform server');
+  throw lastError ?? new Error("Timed out waiting for Echoform server");
 }
 
 async function startServer() {
-  if (serverProcess) return;
+  if (serverProcess) {
+    return;
+  }
 
   const resourcesRoot = resolveResourcesRoot();
   const server = resolveServerProcess();
-  const stateRoot = app.getPath('userData');
-  const legacyStateRoot = join(app.getPath('appData'), 'Ablegit');
+  const stateRoot = app.getPath("userData");
+  const legacyStateRoot = join(app.getPath("appData"), "Ablegit");
 
   serverProcess = spawn(server.command, server.args, {
     cwd: server.cwd,
     env: {
       ...process.env,
       PORT: String(port),
-      ECHOFORM_STATIC_DIR: join(resourcesRoot, 'dist'),
+      ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
       ECHOFORM_STATE_DIR: stateRoot,
       ABLEGIT_STATE_DIR: legacyStateRoot,
     },
-    stdio: 'inherit',
+    stdio: "inherit",
   });
 
-  serverProcess.once('exit', (code, signal) => {
+  serverProcess.once("exit", (code, signal) => {
     serverProcess = null;
-    if (isQuitting) return;
+    if (isQuitting) {
+      return;
+    }
 
     app.show();
     app.focus({ steal: true });
     const detail =
-      signal !== null
-        ? `server exited via signal ${signal}`
-        : `server exited with code ${code ?? 'unknown'}`;
-    dialog.showErrorBox('Echoform stopped', detail);
+      signal === null
+        ? `server exited with code ${code ?? "unknown"}`
+        : `server exited via signal ${signal}`;
+    dialog.showErrorBox("Echoform stopped", detail);
   });
 
   await waitForServer();
 }
 
 function createWindow() {
-  if (mainWindow) return mainWindow;
+  if (mainWindow) {
+    return mainWindow;
+  }
 
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -111,9 +119,9 @@ function createWindow() {
     minHeight: 720,
     show: false,
     autoHideMenuBar: true,
-    title: 'Echoform',
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0f1014',
+    title: "Echoform",
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#0f1014",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -121,19 +129,21 @@ function createWindow() {
     },
   });
 
-  mainWindow.on('close', (event) => {
-    if (isQuitting) return;
+  mainWindow.on("close", (event) => {
+    if (isQuitting) {
+      return;
+    }
     event.preventDefault();
     mainWindow.hide();
   });
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
-    return { action: 'deny' };
+    return { action: "deny" };
   });
 
   return mainWindow;
@@ -160,18 +170,20 @@ function toggleWindow() {
 }
 
 function createTray() {
-  if (tray) return tray;
+  if (tray) {
+    return tray;
+  }
 
   const trayMenu = Menu.buildFromTemplate([
     {
-      label: 'Open Echoform',
+      label: "Open Echoform",
       click: () => {
         void showWindow();
       },
     },
-    { type: 'separator' },
+    { type: "separator" },
     {
-      label: 'Quit',
+      label: "Quit",
       click: () => {
         isQuitting = true;
         app.quit();
@@ -180,10 +192,10 @@ function createTray() {
   ]);
 
   tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle('Echoform');
-  tray.setToolTip('Echoform');
-  tray.on('click', toggleWindow);
-  tray.on('right-click', () => {
+  tray.setTitle("Echoform");
+  tray.setToolTip("Echoform");
+  tray.on("click", toggleWindow);
+  tray.on("right-click", () => {
     tray?.popUpContextMenu(trayMenu);
   });
 
@@ -191,7 +203,7 @@ function createTray() {
 }
 
 async function bootstrap() {
-  if (process.platform === 'darwin') {
+  if (process.platform === "darwin") {
     app.dock?.hide();
   }
 
@@ -203,10 +215,8 @@ async function bootstrap() {
 
 const hasLock = app.requestSingleInstanceLock();
 
-if (!hasLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
+if (hasLock) {
+  app.on("second-instance", () => {
     void showWindow();
   });
 
@@ -215,19 +225,23 @@ if (!hasLock) {
       const message = error instanceof Error ? error.message : String(error);
       app.show();
       app.focus({ steal: true });
-      dialog.showErrorBox('Echoform failed to start', message);
+      dialog.showErrorBox("Echoform failed to start", message);
       app.quit();
     });
   });
+} else {
+  app.quit();
 }
 
-app.on('activate', () => {
+app.on("activate", () => {
   void showWindow();
 });
 
-app.on('before-quit', () => {
+app.on("before-quit", () => {
   isQuitting = true;
-  if (!serverProcess) return;
+  if (!serverProcess) {
+    return;
+  }
 
-  serverProcess.kill('SIGTERM');
+  serverProcess.kill("SIGTERM");
 });

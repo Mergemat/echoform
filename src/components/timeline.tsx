@@ -1,24 +1,24 @@
-import { useStore } from '@/lib/store';
-import { sendDaemonCommand } from '@/lib/daemon-client';
-import { useState, useMemo, useCallback } from 'react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { MusicNotes } from '@phosphor-icons/react';
+import { MusicNotes } from "@phosphor-icons/react";
+import { useCallback, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { sendDaemonCommand } from "@/lib/daemon-client";
+import { useStore } from "@/lib/store";
+import type { Project } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { BranchCard } from "./branch-card";
+import { BranchSelector } from "./branch-selector";
+import { CollapsedCard } from "./collapsed-card";
+import { ExpandedCard } from "./expanded-card";
+import { GroupCard } from "./save-group";
 import {
   buildTimelineDisplayItems,
-  getRootFileGroups,
-  getRootIdeas,
-  getRootIdeaFor,
-  getIdeaSubtreeIds,
   fileTabName,
+  getIdeaSubtreeIds,
+  getRootFileGroups,
+  getRootIdeaFor,
+  getRootIdeas,
   type RootFileGroup,
-} from './timeline-utils';
-import { CollapsedCard } from './collapsed-card';
-import { ExpandedCard } from './expanded-card';
-import { GroupCard } from './save-group';
-import { BranchSelector } from './branch-selector';
-import { BranchCard } from './branch-card';
-import type { Project } from '@/lib/types';
+} from "./timeline-utils";
 
 export function Timeline() {
   return useTimelineView();
@@ -38,7 +38,7 @@ function useTimelineView() {
   // Derive file tabs and active tab from project data
   const rootIdeas = useMemo(
     () => (project ? getRootIdeas(project) : []),
-    [project],
+    [project]
   );
   const rootFileGroups = useMemo<RootFileGroup[]>(() => {
     return project ? getRootFileGroups(project) : [];
@@ -47,15 +47,21 @@ function useTimelineView() {
 
   const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
   const activeRootIdea = useMemo(() => {
-    if (!project || !effectiveIdeaId) return rootIdeas[0] ?? null;
+    if (!(project && effectiveIdeaId)) {
+      return rootIdeas[0] ?? null;
+    }
     return getRootIdeaFor(project, effectiveIdeaId) ?? rootIdeas[0] ?? null;
   }, [project, effectiveIdeaId, rootIdeas]);
   const activeRootGroup = useMemo(() => {
-    if (rootFileGroups.length === 0) return null;
-    if (!activeRootIdea) return rootFileGroups[0] ?? null;
+    if (rootFileGroups.length === 0) {
+      return null;
+    }
+    if (!activeRootIdea) {
+      return rootFileGroups[0] ?? null;
+    }
     return (
       rootFileGroups.find(
-        (group) => group.setPath === activeRootIdea.setPath,
+        (group) => group.setPath === activeRootIdea.setPath
       ) ??
       rootFileGroups[0] ??
       null
@@ -64,8 +70,12 @@ function useTimelineView() {
 
   // Filter project to only ideas/saves under the active file tab
   const filteredProject = useMemo(() => {
-    if (!project || !activeRootGroup) return project;
-    if (!hasMultipleFiles) return project;
+    if (!(project && activeRootGroup)) {
+      return project;
+    }
+    if (!hasMultipleFiles) {
+      return project;
+    }
     const subtreeIds = new Set<string>();
     for (const rootIdea of activeRootGroup.rootIdeas) {
       for (const ideaId of getIdeaSubtreeIds(project, rootIdea.id)) {
@@ -80,38 +90,49 @@ function useTimelineView() {
   }, [project, activeRootGroup, hasMultipleFiles]);
 
   const displayItems = useMemo(() => {
-    if (!filteredProject) return [];
+    if (!filteredProject) {
+      return [];
+    }
     return buildTimelineDisplayItems(
       filteredProject,
       activeIdeaId,
       expandedGroups,
-      collapsedBranches,
+      collapsedBranches
     );
   }, [filteredProject, activeIdeaId, expandedGroups, collapsedBranches]);
 
   const previewCount = useMemo(
     () =>
       project?.saves.filter(
-        (s) => s.previewStatus === 'ready' && s.previewRefs.length > 0,
+        (s) => s.previewStatus === "ready" && s.previewRefs.length > 0
       ).length ?? 0,
-    [project],
+    [project]
   );
   const previewSaveIds = useMemo(() => {
-    if (!showPreviewsOnly) return null;
+    if (!showPreviewsOnly) {
+      return null;
+    }
     return new Set(
       project?.saves
-        .filter((s) => s.previewStatus === 'ready' && s.previewRefs.length > 0)
-        .map((s) => s.id) ?? [],
+        .filter((s) => s.previewStatus === "ready" && s.previewRefs.length > 0)
+        .map((s) => s.id) ?? []
     );
   }, [project, showPreviewsOnly]);
 
   const visibleItems = useMemo(() => {
-    if (!previewSaveIds) return displayItems;
+    if (!previewSaveIds) {
+      return displayItems;
+    }
     return displayItems.filter((item) => {
-      if (item.type === 'branch') return true;
-      if (item.type === 'save') return previewSaveIds.has(item.save.id);
-      if (item.type === 'group')
+      if (item.type === "branch") {
+        return true;
+      }
+      if (item.type === "save") {
+        return previewSaveIds.has(item.save.id);
+      }
+      if (item.type === "group") {
         return item.saves.some((s) => previewSaveIds.has(s.id));
+      }
       return true;
     });
   }, [displayItems, previewSaveIds]);
@@ -119,8 +140,11 @@ function useTimelineView() {
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   }, []);
@@ -128,17 +152,19 @@ function useTimelineView() {
   const handleSelectIdea = useCallback(
     (ideaId: string) => {
       setActiveIdea(ideaId);
-      if (!project) return;
-      sendDaemonCommand({ type: 'open-idea', projectId: project.id, ideaId });
+      if (!project) {
+        return;
+      }
+      sendDaemonCommand({ type: "open-idea", projectId: project.id, ideaId });
     },
-    [project, setActiveIdea],
+    [project, setActiveIdea]
   );
 
   if (!project) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center px-6">
-          <div className="text-base text-white/20 font-medium">
+      <div className="flex h-full items-center justify-center">
+        <div className="px-6 text-center">
+          <div className="font-medium text-base text-white/20">
             No project selected
           </div>
           <div className="mt-1 text-[13px] text-white/10">
@@ -151,84 +177,86 @@ function useTimelineView() {
 
   if (project.saves.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center px-6">
-          <div className="text-base text-white/25 font-medium">
+      <div className="flex h-full items-center justify-center">
+        <div className="px-6 text-center">
+          <div className="font-medium text-base text-white/25">
             No saves yet
           </div>
           <div className="mt-1 text-[13px] text-white/15 leading-relaxed">
-            {project.presence === 'missing'
-              ? 'Project folder is missing from watched roots'
+            {project.presence === "missing"
+              ? "Project folder is missing from watched roots"
               : project.watching
-                ? 'Watching for changes...'
-                : 'Enable watching to auto-save'}
+                ? "Watching for changes..."
+                : "Enable watching to auto-save"}
           </div>
         </div>
       </div>
     );
   }
 
+  const pendingOpen = project.pendingOpen;
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col">
       {hasMultipleFiles && project && (
         <FileTabs
-          rootFileGroups={rootFileGroups}
           activeSetPath={activeRootGroup?.setPath ?? null}
           currentSetPath={
             getRootIdeaFor(project, project.currentIdeaId)?.setPath ?? null
           }
-          project={project}
           onSelect={(ideaId) => {
             setActiveIdea(ideaId);
           }}
+          project={project}
+          rootFileGroups={rootFileGroups}
         />
       )}
 
       {filteredProject && filteredProject.ideas.length > 1 && (
         <BranchSelector
-          project={filteredProject}
           activeIdeaId={activeIdeaId}
           onSelect={handleSelectIdea}
+          project={filteredProject}
         />
       )}
 
-      {project.pendingOpen && (
-        <div className="px-5 py-3 border-b border-amber-400/10 bg-amber-400/[0.04]">
+      {pendingOpen && (
+        <div className="border-amber-400/10 border-b bg-amber-400/[0.04] px-5 py-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs text-amber-200/80 leading-relaxed">
-              Could not open{' '}
+            <div className="text-amber-200/80 text-xs leading-relaxed">
+              Could not open{" "}
               <span className="font-medium text-amber-200">
-                {project.pendingOpen.setPath}
+                {pendingOpen.setPath}
               </span>
               .
-              {project.pendingOpen.error
-                ? ` ${project.pendingOpen.error}`
-                : ' Retry or reveal it in Finder.'}
+              {pendingOpen.error
+                ? ` ${pendingOpen.error}`
+                : " Retry or reveal it in Finder."}
             </div>
             <div className="flex shrink-0 gap-1.5">
               <Button
-                variant="ghost"
-                size="sm"
                 onClick={() =>
                   sendDaemonCommand({
-                    type: 'open-idea',
+                    type: "open-idea",
                     projectId: project.id,
-                    ideaId: project.pendingOpen!.ideaId,
+                    ideaId: pendingOpen.ideaId,
                   })
                 }
+                size="sm"
+                variant="ghost"
               >
                 Open Again
               </Button>
               <Button
-                variant="ghost"
-                size="sm"
                 onClick={() =>
                   sendDaemonCommand({
-                    type: 'reveal-idea-file',
+                    type: "reveal-idea-file",
                     projectId: project.id,
-                    ideaId: project.pendingOpen!.ideaId,
+                    ideaId: pendingOpen.ideaId,
                   })
                 }
+                size="sm"
+                variant="ghost"
               >
                 Reveal
               </Button>
@@ -238,38 +266,38 @@ function useTimelineView() {
       )}
 
       {project.driftStatus && (
-        <div className="px-5 py-3 border-b border-red-400/10 bg-red-400/[0.04]">
+        <div className="border-red-400/10 border-b bg-red-400/[0.04] px-5 py-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs text-red-200/80 leading-relaxed">
-              {project.driftStatus.kind === 'unknown-file'
+            <div className="text-red-200/80 text-xs leading-relaxed">
+              {project.driftStatus.kind === "unknown-file"
                 ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
                 : `Branch file ${project.driftStatus.setPath} is missing.`}
             </div>
             <div className="flex shrink-0 gap-1.5">
-              {project.driftStatus.kind === 'unknown-file' && (
+              {project.driftStatus.kind === "unknown-file" && (
                 <Button
-                  variant="ghost"
-                  size="sm"
                   onClick={() =>
                     sendDaemonCommand({
-                      type: 'adopt-drift-file',
+                      type: "adopt-drift-file",
                       projectId: project.id,
                     })
                   }
+                  size="sm"
+                  variant="ghost"
                 >
                   Adopt File
                 </Button>
               )}
               <Button
-                variant="ghost"
-                size="sm"
                 onClick={() =>
                   sendDaemonCommand({
-                    type: 'open-idea',
+                    type: "open-idea",
                     projectId: project.id,
                     ideaId: project.currentIdeaId,
                   })
                 }
+                size="sm"
+                variant="ghost"
               >
                 Open Current Branch
               </Button>
@@ -278,9 +306,9 @@ function useTimelineView() {
         </div>
       )}
 
-      {project.presence === 'missing' && (
-        <div className="border-b border-amber-400/10 bg-amber-400/[0.04] px-5 py-3">
-          <div className="text-xs text-amber-200/80 leading-relaxed">
+      {project.presence === "missing" && (
+        <div className="border-amber-400/10 border-b bg-amber-400/[0.04] px-5 py-3">
+          <div className="text-amber-200/80 text-xs leading-relaxed">
             This project is missing from your watched folders. History stays
             safe here, but file actions are disabled until the folder comes back
             or the root is re-added.
@@ -289,58 +317,58 @@ function useTimelineView() {
       )}
 
       {previewCount > 0 && (
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-border">
+        <div className="flex items-center gap-2 border-border border-b px-5 py-2">
           <Button
-            type="button"
-            variant={showPreviewsOnly ? 'outline' : 'ghost'}
-            size="sm"
             className={cn(
-              'text-xs gap-1.5',
+              "gap-1.5 text-xs",
               showPreviewsOnly
-                ? 'text-white/70'
-                : 'text-white/30 hover:text-white/50',
+                ? "text-white/70"
+                : "text-white/30 hover:text-white/50"
             )}
             onClick={() => setShowPreviewsOnly((v) => !v)}
+            size="sm"
+            type="button"
+            variant={showPreviewsOnly ? "outline" : "ghost"}
           >
             <MusicNotes size={13} />
             Previews
-            <span className="text-[10px] tabular-nums text-white/20">
+            <span className="text-[10px] text-white/20 tabular-nums">
               {previewCount}
             </span>
           </Button>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="scrollbar-thin flex-1 overflow-y-auto">
         {visibleItems.map((item) => {
-          if (item.type === 'branch') {
+          if (item.type === "branch") {
             return (
               <BranchCard
-                key={`branch-${item.idea.id}`}
-                idea={item.idea}
-                fromSave={item.fromSave}
                 depth={item.depth}
+                fromSave={item.fromSave}
+                idea={item.idea}
+                isCollapsed={item.isCollapsed}
                 isCurrent={item.isCurrent}
                 isFocused={item.isFocused}
-                isCollapsed={item.isCollapsed}
-                saveCount={item.saveCount}
+                key={`branch-${item.idea.id}`}
                 onToggleCollapse={() => toggleBranchCollapse(item.idea.id)}
+                saveCount={item.saveCount}
               />
             );
           }
 
-          if (item.type === 'group') {
+          if (item.type === "group") {
             return (
               <BranchLine
-                key={`group-${item.key}`}
                 depth={item.depth}
                 isFocused={item.isFocused}
+                key={`group-${item.key}`}
               >
                 <GroupCard
-                  saves={item.saves}
-                  groupKey={item.key}
                   expanded={expandedGroups.has(item.key)}
+                  groupKey={item.key}
                   onToggle={() => toggleGroup(item.key)}
+                  saves={item.saves}
                 />
               </BranchLine>
             );
@@ -353,34 +381,34 @@ function useTimelineView() {
 
           return (
             <BranchLine
-              key={`save-${save.id}`}
               depth={item.depth}
               isFocused={item.isFocused}
+              key={`save-${save.id}`}
             >
               {isSelected ? (
                 <div>
                   <CollapsedCard
-                    save={save}
-                    isSelected
                     isHead={isHead}
-                    project={project}
+                    isSelected
                     onClick={() => toggleSave(save.id)}
+                    project={project}
+                    save={save}
                   />
                   <ExpandedCard
-                    save={save}
                     idea={idea}
                     isHead={isHead}
-                    project={project}
                     onClose={() => toggleSave(save.id)}
+                    project={project}
+                    save={save}
                   />
                 </div>
               ) : (
                 <CollapsedCard
-                  save={save}
-                  isSelected={false}
                   isHead={isHead}
-                  project={project}
+                  isSelected={false}
                   onClick={() => toggleSave(save.id)}
+                  project={project}
+                  save={save}
                 />
               )}
             </BranchLine>
@@ -421,7 +449,7 @@ function FileTabs({
   }, [rootFileGroups, project]);
 
   return (
-    <div className="flex items-center gap-0 border-b border-border px-3 overflow-x-auto shrink-0 scrollbar-none">
+    <div className="scrollbar-none flex shrink-0 items-center gap-0 overflow-x-auto border-border border-b px-3">
       {rootFileGroups.map((group) => {
         const idea = group.representativeIdea;
         const isActive = group.setPath === activeSetPath;
@@ -433,16 +461,16 @@ function FileTabs({
 
         return (
           <button
-            key={group.setPath}
-            type="button"
-            onClick={() => onSelect(idea.id)}
             className={cn(
-              'relative flex items-center gap-1.5 px-4 py-3 text-[13px] whitespace-nowrap transition-colors duration-150',
-              isActive ? 'text-white/85' : 'text-white/30 hover:text-white/50',
+              "relative flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[13px] transition-colors duration-150",
+              isActive ? "text-white/85" : "text-white/30 hover:text-white/50"
             )}
+            key={group.setPath}
+            onClick={() => onSelect(idea.id)}
+            type="button"
           >
             {isCurrent && (
-              <span className="size-1.5 rounded-full bg-emerald-400/70 shrink-0" />
+              <span className="size-1.5 shrink-0 rounded-full bg-emerald-400/70" />
             )}
             <span className="font-medium">{fileTabName(idea)}</span>
             {saveCount > 0 && (
@@ -451,7 +479,7 @@ function FileTabs({
               </span>
             )}
             {isActive && (
-              <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-white/40" />
+              <span className="absolute right-3 bottom-0 left-3 h-[2px] rounded-full bg-white/40" />
             )}
           </button>
         );
@@ -480,8 +508,8 @@ function BranchLine({
         style={{
           left: `${lineLeft + 5}px`,
           backgroundColor: isFocused
-            ? 'rgba(52, 211, 153, 0.2)'
-            : 'rgba(255, 255, 255, 0.05)',
+            ? "rgba(52, 211, 153, 0.2)"
+            : "rgba(255, 255, 255, 0.05)",
         }}
       />
       <div style={{ paddingLeft: `${lineLeft + 18}px` }}>{children}</div>

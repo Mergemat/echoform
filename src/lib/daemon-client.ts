@@ -1,9 +1,9 @@
-import type { WsCommand, WsEvent } from '@/lib/types';
+import type { WsCommand, WsEvent } from "@/lib/types";
 
 type EventListener = (event: WsEvent) => void;
 type ConnectionListener = (connected: boolean) => void;
 
-const API_URL = '';
+const API_URL = "";
 const RECONNECT_DELAY_MS = 2000;
 
 let socket: WebSocket | null = null;
@@ -14,19 +14,23 @@ const eventListeners = new Set<EventListener>();
 const connectionListeners = new Set<ConnectionListener>();
 
 function emitConnected(connected: boolean) {
-  for (const listener of connectionListeners) listener(connected);
+  for (const listener of connectionListeners) {
+    listener(connected);
+  }
 }
 
 function emitEvent(event: WsEvent) {
-  for (const listener of eventListeners) listener(event);
+  for (const listener of eventListeners) {
+    listener(event);
+  }
 }
 
 function getWsUrl() {
   const locationLike =
-    typeof window !== 'undefined'
-      ? window.location
-      : { protocol: 'http:', host: 'localhost' };
-  const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
+    typeof window === "undefined"
+      ? { protocol: "http:", host: "localhost" }
+      : window.location;
+  const wsProtocol = locationLike.protocol === "https:" ? "wss:" : "ws:";
   return `${wsProtocol}//${locationLike.host}/ws`;
 }
 
@@ -38,7 +42,9 @@ function clearReconnectTimer() {
 }
 
 function scheduleReconnect() {
-  if (!running || reconnectTimer) return;
+  if (!running || reconnectTimer) {
+    return;
+  }
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     void connectDaemonClient();
@@ -56,7 +62,9 @@ async function connectDaemonClient() {
 
   try {
     const res = await fetch(`${API_URL}/api/session`);
-    if (!res.ok) throw new Error('Session bootstrap failed');
+    if (!res.ok) {
+      throw new Error("Session bootstrap failed");
+    }
   } catch {
     emitConnected(false);
     scheduleReconnect();
@@ -72,7 +80,9 @@ async function connectDaemonClient() {
   };
 
   ws.onclose = () => {
-    if (socket === ws) socket = null;
+    if (socket === ws) {
+      socket = null;
+    }
     emitConnected(false);
     scheduleReconnect();
   };

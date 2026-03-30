@@ -8,63 +8,67 @@
  * All writes are atomic (write to .tmp, then rename).
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   copyFile,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   rename,
   rm,
   stat,
   writeFile,
-} from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from './paths';
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from "./paths";
 
 // ── Types ───────────────────────────────────────────────────────────
 
-export type FileManifestEntry = {
-  type?: 'file';
-  relativePath: string;
+export interface FileManifestEntry {
   blobHash: string;
-  size: number;
-  mtimeMs?: number;
   contentHash?: string;
-};
-
-export type DirectoryManifestEntry = {
-  type: 'dir';
+  mtimeMs?: number;
   relativePath: string;
-};
+  size: number;
+  type?: "file";
+}
+
+export interface DirectoryManifestEntry {
+  relativePath: string;
+  type: "dir";
+}
 
 export type ManifestEntry = FileManifestEntry | DirectoryManifestEntry;
 
-export type Manifest = {
-  saveId: string;
-  files: ManifestEntry[];
+export interface Manifest {
   createdAt: string;
-};
+  files: ManifestEntry[];
+  saveId: string;
+}
 
 // ── Internal paths ──────────────────────────────────────────────────
 
 export function resolveProjectStateDir(projectPath: string): string {
   const stateDir = join(projectPath, STATE_DIRNAME);
-  if (existsSync(stateDir)) return stateDir;
+  if (existsSync(stateDir)) {
+    return stateDir;
+  }
 
   const legacyStateDir = join(projectPath, LEGACY_STATE_DIRNAME);
-  if (existsSync(legacyStateDir)) return legacyStateDir;
+  if (existsSync(legacyStateDir)) {
+    return legacyStateDir;
+  }
 
   return stateDir;
 }
 
 function blobsDir(projectPath: string): string {
-  return join(resolveProjectStateDir(projectPath), 'blobs');
+  return join(resolveProjectStateDir(projectPath), "blobs");
 }
 
 function manifestsDir(projectPath: string): string {
-  return join(resolveProjectStateDir(projectPath), 'manifests');
+  return join(resolveProjectStateDir(projectPath), "manifests");
 }
 
 function blobFilePath(projectPath: string, hash: string): string {
@@ -84,10 +88,10 @@ function manifestFilePath(projectPath: string, saveId: string): string {
  */
 export async function storeBlob(
   projectPath: string,
-  filePath: string,
+  filePath: string
 ): Promise<{ hash: string; size: number }> {
   const content = await readFile(filePath);
-  const hash = createHash('sha256').update(content).digest('hex');
+  const hash = createHash("sha256").update(content).digest("hex");
   const dest = blobFilePath(projectPath, hash);
 
   // Dedup: skip write if blob already exists
@@ -107,12 +111,12 @@ export async function storeBlob(
     await rm(tmp, { force: true }).catch(() => {});
     if (
       err &&
-      typeof err === 'object' &&
-      'code' in err &&
-      (err as NodeJS.ErrnoException).code === 'ENOSPC'
+      typeof err === "object" &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "ENOSPC"
     ) {
       throw new Error(
-        'Disk is full — cannot store snapshot. Free up space and try again.',
+        "Disk is full — cannot store snapshot. Free up space and try again."
       );
     }
     throw err;
@@ -132,7 +136,7 @@ export async function createManifest(
   projectPath: string,
   saveId: string,
   files: ManifestEntry[],
-  createdAt: string,
+  createdAt: string
 ): Promise<Manifest> {
   const manifest: Manifest = { saveId, files, createdAt };
   await mkdir(manifestsDir(projectPath), { recursive: true });
@@ -146,16 +150,16 @@ export async function createManifest(
 /** Read and parse a manifest for a save. Throws if not found. */
 export async function readManifest(
   projectPath: string,
-  saveId: string,
+  saveId: string
 ): Promise<Manifest> {
-  const content = await readFile(manifestFilePath(projectPath, saveId), 'utf8');
+  const content = await readFile(manifestFilePath(projectPath, saveId), "utf8");
   return JSON.parse(content) as Manifest;
 }
 
 /** Delete a manifest file. No-op if already deleted. */
 export async function deleteManifest(
   projectPath: string,
-  saveId: string,
+  saveId: string
 ): Promise<void> {
   await rm(manifestFilePath(projectPath, saveId), { force: true });
 }
@@ -163,18 +167,22 @@ export async function deleteManifest(
 // ── Restore ─────────────────────────────────────────────────────────
 
 /** Reconstruct a directory from a manifest by copying blobs to their original relative paths. */
-async function reconstructFromManifest(
+async function _reconstructFromManifest(
   projectPath: string,
   manifest: Manifest,
-  targetDir: string,
+  targetDir: string
 ): Promise<void> {
   for (const entry of manifest.files) {
-    if (entry.type !== 'dir') continue;
+    if (entry.type !== "dir") {
+      continue;
+    }
     await mkdir(join(targetDir, entry.relativePath), { recursive: true });
   }
 
   for (const entry of manifest.files) {
-    if (entry.type === 'dir') continue;
+    if (entry.type === "dir") {
+      continue;
+    }
     const src = getBlobPath(projectPath, entry.blobHash);
     const dest = join(targetDir, entry.relativePath);
     await mkdir(dirname(dest), { recursive: true });
@@ -191,7 +199,7 @@ async function reconstructFromManifest(
  */
 export async function gcBlobs(
   projectPath: string,
-  keepSaveIds: string[],
+  keepSaveIds: string[]
 ): Promise<number> {
   // Collect all hashes referenced by kept saves
   const referenced = new Set<string>();
@@ -199,7 +207,9 @@ export async function gcBlobs(
     try {
       const manifest = await readManifest(projectPath, saveId);
       for (const entry of manifest.files) {
-        if (entry.type === 'dir') continue;
+        if (entry.type === "dir") {
+          continue;
+        }
         referenced.add(entry.blobHash);
       }
     } catch {
@@ -218,7 +228,7 @@ export async function gcBlobs(
 
   let deleted = 0;
   for (const name of entries) {
-    if (name.endsWith('.tmp') || !referenced.has(name)) {
+    if (name.endsWith(".tmp") || !referenced.has(name)) {
       await rm(join(dir, name), { force: true });
       deleted++;
     }

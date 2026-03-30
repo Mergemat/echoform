@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
-import type { PreviewStatus, Project } from '@/lib/types';
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
+import type { PreviewStatus, Project } from "@/lib/types";
 
 export function usePreviewStatusToasts(projects: Project[]) {
   const prevPreviewStatuses = useRef<Map<string, PreviewStatus>>(new Map());
@@ -13,7 +13,7 @@ export function usePreviewStatusToasts(projects: Project[]) {
       for (const save of project.saves) {
         next.set(save.id, save.previewStatus);
         const was = prev.get(save.id);
-        if (was === 'pending' && save.previewStatus === 'ready') {
+        if (was === "pending" && save.previewStatus === "ready") {
           toast.success(`Preview attached to "${save.label}"`);
         }
       }

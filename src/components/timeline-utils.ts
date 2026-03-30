@@ -1,5 +1,5 @@
-import { basename, extname } from '@/lib/path';
-import type { Idea, Project, Save } from '@/lib/types';
+import { basename, extname } from "@/lib/path";
+import type { Idea, Project, Save } from "@/lib/types";
 
 // ── Idea tree helpers ────────────────────────────────────────────────
 
@@ -7,7 +7,7 @@ import type { Idea, Project, Save } from '@/lib/types';
 export function getRootIdeas(project: Project): Idea[] {
   const ids = new Set(project.ideas.map((i) => i.id));
   return project.ideas.filter(
-    (i) => !i.parentIdeaId || !ids.has(i.parentIdeaId),
+    (i) => !(i.parentIdeaId && ids.has(i.parentIdeaId))
   );
 }
 
@@ -24,12 +24,14 @@ export function getRootIdeaFor(project: Project, ideaId: string): Idea | null {
 /** Get all idea IDs that descend from a root idea (including the root itself) */
 export function getIdeaSubtreeIds(
   project: Project,
-  rootIdeaId: string,
+  rootIdeaId: string
 ): Set<string> {
   const result = new Set<string>([rootIdeaId]);
   const childrenByParent = new Map<string, Idea[]>();
   for (const idea of project.ideas) {
-    if (!idea.parentIdeaId) continue;
+    if (!idea.parentIdeaId) {
+      continue;
+    }
     const existing = childrenByParent.get(idea.parentIdeaId) ?? [];
     existing.push(idea);
     childrenByParent.set(idea.parentIdeaId, existing);
@@ -44,11 +46,11 @@ export function getIdeaSubtreeIds(
   return result;
 }
 
-export type RootFileGroup = {
-  setPath: string;
-  rootIdeas: Idea[];
+export interface RootFileGroup {
   representativeIdea: Idea;
-};
+  rootIdeas: Idea[];
+  setPath: string;
+}
 
 export function getRootFileGroups(project: Project): RootFileGroup[] {
   const groups = new Map<string, RootFileGroup>();
@@ -78,25 +80,34 @@ export function fileTabName(idea: Idea): string {
 function formatTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'pm' : 'am';
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "pm" : "am";
   const h12 = h % 12 || 12;
   return `${h12}:${m}${ampm}`;
 }
 
 export function formatSizeDelta(bytes: number): string {
   const abs = Math.abs(bytes);
-  const sign = bytes >= 0 ? '+' : '\u2212';
-  if (abs < 1024) return `${sign}${abs}B`;
-  if (abs < 1024 * 1024) return `${sign}${(abs / 1024).toFixed(0)}K`;
+  const sign = bytes >= 0 ? "+" : "\u2212";
+  if (abs < 1024) {
+    return `${sign}${abs}B`;
+  }
+  if (abs < 1024 * 1024) {
+    return `${sign}${(abs / 1024).toFixed(0)}K`;
+  }
   return `${sign}${(abs / 1024 / 1024).toFixed(1)}M`;
 }
 
 export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
@@ -108,36 +119,35 @@ export function formatDateTime(iso: string): string {
 
   const time = formatTime(iso);
 
-  if (diffDays === 0) return `Today ${time}`;
-  if (diffDays === 1) return `Yesterday ${time}`;
+  if (diffDays === 0) {
+    return `Today ${time}`;
+  }
+  if (diffDays === 1) {
+    return `Yesterday ${time}`;
+  }
   if (diffDays < 7) {
-    const day = d.toLocaleDateString(undefined, { weekday: 'long' });
+    const day = d.toLocaleDateString(undefined, { weekday: "long" });
     return `${day} ${time}`;
   }
-  return (
-    d.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    }) + ` ${time}`
-  );
+  return `${d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })} ${time}`;
 }
 
-function formatSaveTitle(
-  iso: string,
-  options?: { compact?: boolean },
-): string {
+function formatSaveTitle(iso: string, options?: { compact?: boolean }): string {
   return new Date(iso).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: options?.compact ? undefined : 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+    month: "short",
+    day: "numeric",
+    year: options?.compact ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
 export function getSaveDisplayTitle(
   save: { label: string; createdAt: string; customLabel?: boolean },
-  options?: { compact?: boolean },
+  options?: { compact?: boolean }
 ): string {
   if (save.customLabel && save.label.trim()) {
     return save.label.trim();
@@ -147,13 +157,13 @@ export function getSaveDisplayTitle(
 
 // ── File-type helpers ────────────────────────────────────────────────
 const AUDIO_EXT = new Set([
-  '.aif',
-  '.aiff',
-  '.flac',
-  '.m4a',
-  '.mp3',
-  '.ogg',
-  '.wav',
+  ".aif",
+  ".aiff",
+  ".flac",
+  ".m4a",
+  ".mp3",
+  ".ogg",
+  ".wav",
 ]);
 
 export function isAudio(p: string) {
@@ -161,111 +171,135 @@ export function isAudio(p: string) {
 }
 
 export function isAls(p: string) {
-  return extname(p).toLowerCase() === '.als';
+  return extname(p).toLowerCase() === ".als";
 }
 
 // ── Chip builders ────────────────────────────────────────────────────
-export type Chip = {
+export interface Chip {
+  kind: "neutral" | "add" | "remove" | "change";
   label: string;
-  kind: 'neutral' | 'add' | 'remove' | 'change';
-};
+}
 
 export function buildChips(save: Save): Chip[] {
   const chips: Chip[] = [];
   const sd = save.setDiff;
   if (sd) {
-    if (sd.tempoChange)
+    if (sd.tempoChange) {
       chips.push({
         label: `${sd.tempoChange.from}\u2192${sd.tempoChange.to} bpm`,
-        kind: 'change',
+        kind: "change",
       });
-    if (sd.timeSignatureChange)
+    }
+    if (sd.timeSignatureChange) {
       chips.push({
         label: `${sd.timeSignatureChange.from}\u2192${sd.timeSignatureChange.to}`,
-        kind: 'change',
+        kind: "change",
       });
+    }
     const addByType: Record<string, number> = {};
     const remByType: Record<string, number> = {};
-    for (const t of sd.addedTracks)
+    for (const t of sd.addedTracks) {
       addByType[t.type] = (addByType[t.type] ?? 0) + 1;
-    for (const t of sd.removedTracks)
+    }
+    for (const t of sd.removedTracks) {
       remByType[t.type] = (remByType[t.type] ?? 0) + 1;
+    }
     const TL: Record<string, string> = {
-      midi: 'MIDI',
-      audio: 'Audio',
-      return: 'Return',
-      group: 'Group',
+      midi: "MIDI",
+      audio: "Audio",
+      return: "Return",
+      group: "Group",
     };
-    for (const [type, count] of Object.entries(addByType))
-      chips.push({ label: `+${count} ${TL[type] ?? type}`, kind: 'add' });
-    for (const [type, count] of Object.entries(remByType))
+    for (const [type, count] of Object.entries(addByType)) {
+      chips.push({ label: `+${count} ${TL[type] ?? type}`, kind: "add" });
+    }
+    for (const [type, count] of Object.entries(remByType)) {
       chips.push({
         label: `\u2212${count} ${TL[type] ?? type}`,
-        kind: 'remove',
+        kind: "remove",
       });
+    }
     const renames = sd.modifiedTracks.filter((t) => t.renamedFrom);
-    if (renames.length === 1)
+    if (renames.length === 1) {
       chips.push({
-        label: `\u201c${renames[0]!.renamedFrom}\u201d\u2192\u201c${renames[0]!.name}\u201d`,
-        kind: 'change',
+        label: `\u201c${renames[0]?.renamedFrom}\u201d\u2192\u201c${renames[0]?.name}\u201d`,
+        kind: "change",
       });
-    else if (renames.length >= 2)
-      chips.push({ label: `${renames.length} tracks renamed`, kind: 'change' });
+    } else if (renames.length >= 2) {
+      chips.push({ label: `${renames.length} tracks renamed`, kind: "change" });
+    }
     let deviceDelta = 0;
-    for (const t of sd.modifiedTracks)
+    for (const t of sd.modifiedTracks) {
       deviceDelta += t.addedDevices.length - t.removedDevices.length;
-    if (deviceDelta !== 0)
+    }
+    if (deviceDelta !== 0) {
       chips.push({
-        label: `${deviceDelta > 0 ? '+' : ''}${deviceDelta} device${Math.abs(deviceDelta) !== 1 ? 's' : ''}`,
-        kind: deviceDelta > 0 ? 'add' : 'remove',
+        label: `${deviceDelta > 0 ? "+" : ""}${deviceDelta} device${Math.abs(deviceDelta) === 1 ? "" : "s"}`,
+        kind: deviceDelta > 0 ? "add" : "remove",
       });
+    }
     let clipDelta = 0;
-    for (const t of sd.modifiedTracks) clipDelta += t.clipCountDelta;
-    if (clipDelta !== 0)
+    for (const t of sd.modifiedTracks) {
+      clipDelta += t.clipCountDelta;
+    }
+    if (clipDelta !== 0) {
       chips.push({
-        label: `${clipDelta > 0 ? '+' : ''}${clipDelta} clip${Math.abs(clipDelta) !== 1 ? 's' : ''}`,
-        kind: clipDelta > 0 ? 'add' : 'remove',
+        label: `${clipDelta > 0 ? "+" : ""}${clipDelta} clip${Math.abs(clipDelta) === 1 ? "" : "s"}`,
+        kind: clipDelta > 0 ? "add" : "remove",
       });
-    if (sd.modifiedTracks.some((t) => t.mixerChanges.length > 0))
-      chips.push({ label: 'mixer changes', kind: 'neutral' });
+    }
+    if (sd.modifiedTracks.some((t) => t.mixerChanges.length > 0)) {
+      chips.push({ label: "mixer changes", kind: "neutral" });
+    }
   }
   if (save.changes) {
     const added = save.changes.addedFiles.filter((f) => !isAls(f));
     const removed = save.changes.removedFiles.filter((f) => !isAls(f));
-    if (added.length > 0)
+    if (added.length > 0) {
       chips.push({
-        label: `+${added.length} file${added.length !== 1 ? 's' : ''}`,
-        kind: 'add',
+        label: `+${added.length} file${added.length === 1 ? "" : "s"}`,
+        kind: "add",
       });
-    if (removed.length > 0)
+    }
+    if (removed.length > 0) {
       chips.push({
-        label: `\u2212${removed.length} file${removed.length !== 1 ? 's' : ''}`,
-        kind: 'remove',
+        label: `\u2212${removed.length} file${removed.length === 1 ? "" : "s"}`,
+        kind: "remove",
       });
+    }
   }
   return chips;
 }
 
 // ── Auto-save grouping ───────────────────────────────────────────────
 type DisplayItem =
-  | { type: 'save'; save: Save }
-  | { type: 'group'; saves: Save[]; key: string };
+  | { type: "save"; save: Save }
+  | { type: "group"; saves: Save[]; key: string };
 
 function isTrivialAutoSave(save: Save): boolean {
-  if (!save.auto) return false;
+  if (!save.auto) {
+    return false;
+  }
   const sd = save.setDiff;
   if (sd) {
-    if (sd.tempoChange || sd.timeSignatureChange) return false;
+    if (sd.tempoChange || sd.timeSignatureChange) {
+      return false;
+    }
     if (
       sd.addedTracks.length ||
       sd.removedTracks.length ||
       sd.modifiedTracks.length
-    )
+    ) {
       return false;
+    }
   }
   if (save.changes) {
-    if (save.changes.addedFiles.filter((f) => !isAls(f)).length) return false;
-    if (save.changes.removedFiles.filter((f) => !isAls(f)).length) return false;
+    if (save.changes.addedFiles.filter((f) => !isAls(f)).length) {
+      return false;
+    }
+    if (save.changes.removedFiles.filter((f) => !isAls(f)).length) {
+      return false;
+    }
   }
   return true;
 }
@@ -273,7 +307,7 @@ function isTrivialAutoSave(save: Save): boolean {
 function buildDisplayItems(
   saves: Save[],
   expandedGroups: Set<string>,
-  ungroupableSaveIds: Set<string> = new Set(),
+  ungroupableSaveIds: Set<string> = new Set()
 ): DisplayItem[] {
   const items: DisplayItem[] = [];
   let i = 0;
@@ -285,21 +319,25 @@ function buildDisplayItems(
       while (
         j < saves.length &&
         isTrivialAutoSave(saves[j]!) &&
-        !ungroupableSaveIds.has(saves[j]!.id)
+        !ungroupableSaveIds.has(saves[j]?.id)
       ) {
         group.push(saves[j]!);
         j++;
       }
       if (group.length >= 2) {
-        const key = group[0]!.id;
+        const key = group[0]?.id;
         if (expandedGroups.has(key)) {
-          for (const s of group) items.push({ type: 'save', save: s });
-        } else items.push({ type: 'group', saves: group, key });
+          for (const s of group) {
+            items.push({ type: "save", save: s });
+          }
+        } else {
+          items.push({ type: "group", saves: group, key });
+        }
         i = j;
         continue;
       }
     }
-    items.push({ type: 'save', save });
+    items.push({ type: "save", save });
     i++;
   }
   return items;
@@ -307,7 +345,7 @@ function buildDisplayItems(
 
 type TimelineDisplayItem =
   | {
-      type: 'branch';
+      type: "branch";
       idea: Idea;
       depth: number;
       fromSave: Save | null;
@@ -317,14 +355,14 @@ type TimelineDisplayItem =
       saveCount: number;
     }
   | {
-      type: 'save';
+      type: "save";
       save: Save;
       idea: Idea;
       depth: number;
       isFocused: boolean;
     }
   | {
-      type: 'group';
+      type: "group";
       saves: Save[];
       key: string;
       idea: Idea;
@@ -334,7 +372,7 @@ type TimelineDisplayItem =
 
 function sortIdeasByNewestSave(
   ideas: Idea[],
-  savesByIdea: Map<string, Save[]>,
+  savesByIdea: Map<string, Save[]>
 ): Idea[] {
   return [...ideas].sort((a, b) => {
     const aNewest = savesByIdea.get(a.id)?.[0]?.createdAt ?? a.createdAt;
@@ -347,7 +385,7 @@ export function buildTimelineDisplayItems(
   project: Project,
   focusedIdeaId: string | null,
   expandedGroups: Set<string>,
-  collapsedBranches: Set<string> = new Set(),
+  collapsedBranches: Set<string> = new Set()
 ): TimelineDisplayItem[] {
   const savesByIdea = new Map<string, Save[]>();
   for (const idea of project.ideas) {
@@ -362,7 +400,9 @@ export function buildTimelineDisplayItems(
   const savesById = new Map(project.saves.map((save) => [save.id, save]));
   const childrenBySaveId = new Map<string, Idea[]>();
   for (const idea of project.ideas) {
-    if (!idea.forkedFromSaveId) continue;
+    if (!idea.forkedFromSaveId) {
+      continue;
+    }
     const existing = childrenBySaveId.get(idea.forkedFromSaveId) ?? [];
     existing.push(idea);
     childrenBySaveId.set(idea.forkedFromSaveId, existing);
@@ -374,13 +414,13 @@ export function buildTimelineDisplayItems(
   const forkSaveIds = new Set(
     project.ideas
       .map((idea) => idea.forkedFromSaveId)
-      .filter((id): id is string => Boolean(id)),
+      .filter((id): id is string => Boolean(id))
   );
   const rootIdeas = sortIdeasByNewestSave(
     project.ideas.filter(
-      (idea) => !idea.parentIdeaId || !ideasById.has(idea.parentIdeaId),
+      (idea) => !(idea.parentIdeaId && ideasById.has(idea.parentIdeaId))
     ),
-    savesByIdea,
+    savesByIdea
   );
   const effectiveFocusId = focusedIdeaId ?? project.currentIdeaId;
   const items: TimelineDisplayItem[] = [];
@@ -394,7 +434,7 @@ export function buildTimelineDisplayItems(
     const isCollapsed = collapsedBranches.has(idea.id) && !isFocused;
 
     items.push({
-      type: 'branch',
+      type: "branch",
       idea,
       depth,
       fromSave,
@@ -404,18 +444,20 @@ export function buildTimelineDisplayItems(
       saveCount: ideaSaves.length,
     });
 
-    if (isCollapsed) return;
+    if (isCollapsed) {
+      return;
+    }
 
     const branchItems = buildDisplayItems(
       ideaSaves,
       expandedGroups,
-      forkSaveIds,
+      forkSaveIds
     );
 
     for (const item of branchItems) {
-      if (item.type === 'group') {
+      if (item.type === "group") {
         items.push({
-          type: 'group',
+          type: "group",
           saves: item.saves,
           key: item.key,
           idea,
@@ -426,7 +468,7 @@ export function buildTimelineDisplayItems(
       }
 
       items.push({
-        type: 'save',
+        type: "save",
         save: item.save,
         idea,
         depth,
@@ -434,10 +476,14 @@ export function buildTimelineDisplayItems(
       });
 
       const children = childrenBySaveId.get(item.save.id) ?? [];
-      for (const child of children) visitIdea(child, depth + 1);
+      for (const child of children) {
+        visitIdea(child, depth + 1);
+      }
     }
   };
 
-  for (const idea of rootIdeas) visitIdea(idea, 0);
+  for (const idea of rootIdeas) {
+    visitIdea(idea, 0);
+  }
   return items;
 }
