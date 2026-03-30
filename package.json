@@ -2,7 +2,7 @@
   "name": "echoform",
   "private": true,
   "version": "0.0.3",
-  "description": "Ableton project versioning and recovery for music producers.",
+  "description": "Desktop version history for Ableton projects with previews and recovery.",
   "author": "b.omarov",
   "type": "module",
   "main": "electron/main.mjs",
