@@ -9,7 +9,10 @@ import type {
   TrackedRoot,
 } from "./types";
 
-const COMMON_ROOT_DIRS = ["Music/Ableton", "Documents/Ableton"];
+const COMMON_ROOT_DIRS =
+  process.platform === "win32"
+    ? ["Documents\\Ableton", "Music\\Ableton"]
+    : ["Music/Ableton", "Documents/Ableton"];
 
 const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, "Backup"]);
 

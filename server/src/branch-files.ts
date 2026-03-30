@@ -15,8 +15,8 @@ export interface AbletonLauncher {
   revealFile: (filePath: string) => Promise<void>;
 }
 
-async function runOpen(args: string[]): Promise<void> {
-  const subprocess = Bun.spawn(["open", ...args], {
+async function runCommand(command: string, args: string[]): Promise<void> {
+  const subprocess = Bun.spawn([command, ...args], {
     stdout: "ignore",
     stderr: "pipe",
   });
@@ -25,16 +25,27 @@ async function runOpen(args: string[]): Promise<void> {
     return;
   }
   const output = await new Response(subprocess.stderr).text();
-  throw new Error(output.trim() || "Failed to open file in Ableton.");
+  throw new Error(output.trim() || "Failed to open file.");
 }
 
 export function createAbletonLauncher(): AbletonLauncher {
+  if (process.platform === "win32") {
+    return {
+      openFile(filePath) {
+        return runCommand("cmd", ["/c", "start", "", filePath]);
+      },
+      revealFile(filePath) {
+        return runCommand("explorer", ["/select,", filePath]);
+      },
+    };
+  }
+
   return {
     openFile(filePath) {
-      return runOpen([filePath]);
+      return runCommand("open", [filePath]);
     },
     revealFile(filePath) {
-      return runOpen(["-R", filePath]);
+      return runCommand("open", ["-R", filePath]);
     },
   };
 }

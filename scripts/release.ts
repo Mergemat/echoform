@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const rootDir = import.meta.dir.replace(/\/scripts$/, "");
+const rootDir = import.meta.dir.replace(/[/\\]scripts$/, "");
 const packageJsonPath = join(rootDir, "package.json");
 
 interface PackageJson {
