@@ -20,3 +20,23 @@ bun run test
 bun run check
 bun run dist
 ```
+
+## Releasing
+
+Local packaged builds:
+
+```bash
+bun run release
+```
+
+Cut a versioned release commit and tag:
+
+```bash
+bun run release:ship 0.0.2
+```
+
+Cut and push the release:
+
+```bash
+bun run release:ship 0.0.2 --push
+```
