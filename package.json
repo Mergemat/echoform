@@ -58,6 +58,7 @@
         "dir"
       ],
       "extendInfo": {
+        "LSUIElement": true,
         "NSDocumentsFolderUsageDescription": "Echoform needs access to your documents to find and version Ableton projects.",
         "NSDesktopFolderUsageDescription": "Echoform needs access to your desktop to find and version Ableton projects.",
         "NSDownloadsFolderUsageDescription": "Echoform needs access to your downloads to find and version Ableton projects."

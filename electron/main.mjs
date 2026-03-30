@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -19,6 +20,7 @@ const port = Number(process.env.PORT || 3001);
 const rendererUrl = process.env.ECHOFORM_RENDERER_URL?.trim() || null;
 const useExternalServer = rendererUrl !== null;
 const baseUrl = rendererUrl ?? `http://127.0.0.1:${port}`;
+const appStateFile = "app-state.json";
 
 let mainWindow = null;
 let tray = null;
@@ -57,6 +59,40 @@ function sleep(ms, signal) {
 
 function resolveResourcesRoot() {
   return app.isPackaged ? process.resourcesPath : projectRoot;
+}
+
+function resolveAppStatePath() {
+  return join(app.getPath("userData"), appStateFile);
+}
+
+async function readAppState() {
+  try {
+    const raw = await readFile(resolveAppStatePath(), "utf8");
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      if (error.code === "ENOENT") {
+        return {};
+      }
+    }
+
+    console.error("[echoform] failed to read app state", error);
+    return {};
+  }
+}
+
+async function markFirstLaunchHandled() {
+  const currentState = await readAppState();
+  await writeFile(
+    resolveAppStatePath(),
+    JSON.stringify(
+      { ...currentState, hasCompletedFirstLaunch: true },
+      null,
+      2
+    ),
+    "utf8"
+  );
 }
 
 function resolveServerProcess() {
@@ -271,6 +307,16 @@ function createWindow() {
 
 const loadingHtml = join(__dirname, "loading.html");
 
+async function prepareWindow() {
+  const window = createWindow();
+  if (window.webContents.getURL() === `${baseUrl}/`) {
+    return;
+  }
+
+  await startServer();
+  await window.loadURL(baseUrl);
+}
+
 async function showWindow() {
   const window = createWindow();
   const currentUrl = window.webContents.getURL();
@@ -288,8 +334,7 @@ async function showWindow() {
   window.focus();
 
   // Wait for the server, then load the real app
-  await startServer();
-  await window.loadURL(baseUrl);
+  await prepareWindow();
 }
 
 function toggleWindow() {
@@ -354,8 +399,20 @@ ipcMain.handle("echoform:pick-folder", async () => {
 });
 
 async function bootstrap() {
+  if (process.platform === "darwin") {
+    app.dock.hide();
+  }
+
   createTray();
   createWindow();
+  const { hasCompletedFirstLaunch = false } = await readAppState();
+
+  if (!hasCompletedFirstLaunch) {
+    await markFirstLaunchHandled();
+    await prepareWindow();
+    return;
+  }
+
   await showWindow();
 }
 
