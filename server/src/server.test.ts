@@ -42,7 +42,7 @@ async function getSessionCookie(): Promise<string> {
 }
 
 beforeAll(async () => {
-  tmpDir = await mkdtemp(join(tmpdir(), 'ablegit-test-'));
+  tmpDir = await mkdtemp(join(tmpdir(), 'echoform-test-'));
 
   serverProcess = Bun.spawn(['bun', join(import.meta.dir, 'server.ts')], {
     cwd: tmpDir,
@@ -135,7 +135,7 @@ describe('Session cookie auth', () => {
     });
     expect(res.status).toBe(200);
     const setCookie = res.headers.get('set-cookie')!;
-    expect(setCookie).toContain('ablegit_session=');
+    expect(setCookie).toContain('echoform_session=');
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('SameSite=Strict');
     expect(setCookie).toContain('Path=/');
@@ -150,7 +150,7 @@ describe('Session cookie auth', () => {
 
   test('API request with invalid cookie returns 401', async () => {
     const res = await fetch(`${BASE}/api/projects`, {
-      headers: { Cookie: 'ablegit_session=invalid-token' },
+      headers: { Cookie: 'echoform_session=invalid-token' },
     });
     expect(res.status).toBe(401);
   });
@@ -282,9 +282,9 @@ describe('Path traversal protection', () => {
 
 describe('toggleWatching service', () => {
   test('toggleWatching persists watching state', async () => {
-    const { AblegitService } = await import('./core');
+    const { EchoformService } = await import('./core');
     const stateDir = join(tmpDir, 'toggle-test-state');
-    const svc = new AblegitService(stateDir);
+    const svc = new EchoformService(stateDir);
 
     // Create a temp project dir with a minimal .als file
     const projectDir = join(tmpDir, 'test-project');

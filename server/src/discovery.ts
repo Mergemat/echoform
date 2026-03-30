@@ -7,6 +7,7 @@ import type {
   RootSuggestion,
   TrackedRoot,
 } from './types';
+import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from './paths';
 
 const COMMON_ROOT_DIRS = [
   'Music/Ableton',
@@ -15,7 +16,7 @@ const COMMON_ROOT_DIRS = [
   'Library/Mobile Documents/com~apple~CloudDocs/ableton/projects',
 ];
 
-const IGNORED_DIRS = new Set(['.ablegit-state', 'Backup']);
+const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, 'Backup']);
 
 async function dirExists(p: string): Promise<boolean> {
   try {

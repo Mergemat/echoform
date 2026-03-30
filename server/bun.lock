@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "ablegit-server",
+      "name": "echoform-server",
       "dependencies": {
         "cheerio": "^1.2.0",
         "fast-xml-parser": "^5.5.8",

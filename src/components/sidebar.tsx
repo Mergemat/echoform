@@ -221,7 +221,7 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
             No watched projects
           </div>
           <div className="mt-1 text-xs text-white/15 leading-relaxed">
-            Point Ablegit at your music folders to start protecting your
+            Point Echoform at your music folders to start protecting your
             sessions automatically.
           </div>
         </div>
@@ -293,7 +293,7 @@ export function AppSidebar() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-base font-semibold tracking-tight text-white/90">
-                Ablegit
+                Echoform
               </h1>
               <p className="mt-0.5 text-xs text-white/25 leading-tight">
                 protecting your sessions

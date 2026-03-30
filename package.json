@@ -1,5 +1,5 @@
 {
-  "name": "ablegit",
+  "name": "echoform",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -13,7 +13,7 @@
     "dev:daemon": "bun --watch server/src/server.ts",
     "daemon": "bun server/src/server.ts",
     "build": "tsc -b && vite build",
-    "build:server:bin": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/ablegit-server server/src/server.ts",
+    "build:server:bin": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/echoform-server server/src/server.ts",
     "app:start": "bun run build && bunx electron electron/main.mjs",
     "app:dist": "bun run build && bun run build:server:bin && bunx electron-builder --mac dir --publish never",
     "lint": "eslint .",
@@ -23,8 +23,8 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.bomarov.ablegit",
-    "productName": "Ablegit",
+    "appId": "com.bomarov.echoform",
+    "productName": "Echoform",
     "directories": {
       "output": "release"
     },
@@ -63,6 +63,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -72,7 +73,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "electron": "^41.0.4",
+    "electron": "^41.1.0",
     "electron-builder": "^26.8.1",
     "embla-carousel-react": "^8.6.0",
     "eslint": "^10.1.0",
@@ -88,9 +89,9 @@
     "react": "^19.2.4",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.4",
-    "react-resizable-panels": "^4.7.6",
-    "recharts": "2.15.4",
-    "shadcn": "^4.1.0",
+    "react-resizable-panels": "^4.8.0",
+    "recharts": "3.8.1",
+    "shadcn": "^4.1.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
@@ -98,8 +99,8 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.57.2",
     "vaul": "^1.1.2",
-    "vite": "^8.0.2",
-    "vitest": "^4.1.1",
+    "vite": "^8.0.3",
+    "vitest": "^4.1.2",
     "zustand": "^5.0.12"
   },
   "dependencies": {

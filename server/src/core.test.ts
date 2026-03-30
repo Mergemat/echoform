@@ -12,17 +12,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AppState, Idea, Project, Save } from './types';
 import type { AbletonLauncher } from './branch-files';
-import { AblegitService } from './core';
+import { EchoformService } from './core';
 
-describe('AblegitService file-bound branches', () => {
+describe('EchoformService file-bound branches', () => {
   let tmpRoot: string;
   let projectDir: string;
   let stateDir: string;
   let launcher: AbletonLauncher;
-  let svc: AblegitService;
+  let svc: EchoformService;
 
   beforeEach(async () => {
-    tmpRoot = await mkdtemp(join(tmpdir(), 'ablegit-core-'));
+    tmpRoot = await mkdtemp(join(tmpdir(), 'echoform-core-'));
     projectDir = join(tmpRoot, 'project');
     stateDir = join(tmpRoot, 'state');
     await mkdir(projectDir, { recursive: true });
@@ -31,7 +31,7 @@ describe('AblegitService file-bound branches', () => {
       openFile: mock(async () => {}),
       revealFile: mock(async () => {}),
     };
-    svc = new AblegitService(stateDir, launcher);
+    svc = new EchoformService(stateDir, launcher);
   });
 
   afterEach(async () => {
@@ -110,10 +110,11 @@ describe('AblegitService file-bound branches', () => {
 
   test('migrates legacy default state into an explicit state directory', async () => {
     const previousCwd = process.cwd();
-    const previousStateDir = process.env.ABLEGIT_STATE_DIR;
+    const previousStateDir = process.env.ECHOFORM_STATE_DIR;
+    const previousLegacyStateDir = process.env.ABLEGIT_STATE_DIR;
     process.chdir(tmpRoot);
     try {
-      process.env.ABLEGIT_STATE_DIR = stateDir;
+      process.env.ECHOFORM_STATE_DIR = stateDir;
       const legacyStateDir = join(tmpRoot, '.ablegit-state');
       await mkdir(legacyStateDir, { recursive: true });
 
@@ -138,7 +139,7 @@ describe('AblegitService file-bound branches', () => {
         JSON.stringify(legacyState),
       );
 
-      const migratedService = new AblegitService(stateDir, launcher);
+      const migratedService = new EchoformService(stateDir, launcher);
       const state = await migratedService.loadState();
 
       expect(state.activity).toHaveLength(1);
@@ -148,7 +149,12 @@ describe('AblegitService file-bound branches', () => {
       );
     } finally {
       if (typeof previousStateDir === 'string') {
-        process.env.ABLEGIT_STATE_DIR = previousStateDir;
+        process.env.ECHOFORM_STATE_DIR = previousStateDir;
+      } else {
+        delete process.env.ECHOFORM_STATE_DIR;
+      }
+      if (typeof previousLegacyStateDir === 'string') {
+        process.env.ABLEGIT_STATE_DIR = previousLegacyStateDir;
       } else {
         delete process.env.ABLEGIT_STATE_DIR;
       }
@@ -214,7 +220,7 @@ describe('AblegitService file-bound branches', () => {
     launcher.openFile = mock(async () => {
       throw new Error('Ableton launch failed');
     });
-    svc = new AblegitService(stateDir, launcher);
+    svc = new EchoformService(stateDir, launcher);
 
     const tracked = await svc.trackProject({ projectPath: projectDir });
     const first = await svc.createSave(tracked.id, { label: 'Original' });
@@ -333,7 +339,7 @@ describe('AblegitService file-bound branches', () => {
 
     expect(changed.save).not.toBeNull();
     const latestSave = changed.save!;
-    const manifestDir = join(projectDir, '.ablegit-state', 'manifests');
+    const manifestDir = join(projectDir, '.echoform-state', 'manifests');
     const latestManifest = JSON.parse(
       await readFile(join(manifestDir, `${latestSave.id}.json`), 'utf8'),
     ) as {
@@ -387,7 +393,7 @@ describe('AblegitService file-bound branches', () => {
 
     const manifest = JSON.parse(
       await readFile(
-        join(projectDir, '.ablegit-state', 'manifests', `${created.save!.id}.json`),
+        join(projectDir, '.echoform-state', 'manifests', `${created.save!.id}.json`),
         'utf8',
       ),
     ) as { files: Array<{ relativePath: string }> };
@@ -605,7 +611,7 @@ describe('AblegitService file-bound branches', () => {
     expect(result.project.currentIdeaId).toBe(newIdea!.id);
   });
 
-  test('deleting a tracked project only removes it from Ablegit state', async () => {
+  test('deleting a tracked project only removes it from Echoform state', async () => {
     const tracked = await svc.trackProject({ projectPath: projectDir });
     await svc.createSave(tracked.id, { label: 'Original' });
 

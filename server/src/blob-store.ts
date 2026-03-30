@@ -1,14 +1,15 @@
 /**
- * blob-store.ts – Content-addressed blob storage for Ablegit snapshots.
+ * blob-store.ts – Content-addressed blob storage for Echoform snapshots.
  *
- * Blobs are stored per-project at {projectPath}/.ablegit-state/blobs/{sha256}.
+ * Blobs are stored per-project at {projectPath}/.echoform-state/blobs/{sha256}.
  * Manifests map saveIds to their file→blob associations at
- * {projectPath}/.ablegit-state/manifests/{saveId}.json.
+ * {projectPath}/.echoform-state/manifests/{saveId}.json.
  *
  * All writes are atomic (write to .tmp, then rename).
  */
 
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   copyFile,
   mkdir,
@@ -20,6 +21,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from './paths';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -47,12 +49,22 @@ export type Manifest = {
 
 // ── Internal paths ──────────────────────────────────────────────────
 
+export function resolveProjectStateDir(projectPath: string): string {
+  const stateDir = join(projectPath, STATE_DIRNAME);
+  if (existsSync(stateDir)) return stateDir;
+
+  const legacyStateDir = join(projectPath, LEGACY_STATE_DIRNAME);
+  if (existsSync(legacyStateDir)) return legacyStateDir;
+
+  return stateDir;
+}
+
 function blobsDir(projectPath: string): string {
-  return join(projectPath, '.ablegit-state', 'blobs');
+  return join(resolveProjectStateDir(projectPath), 'blobs');
 }
 
 function manifestsDir(projectPath: string): string {
-  return join(projectPath, '.ablegit-state', 'manifests');
+  return join(resolveProjectStateDir(projectPath), 'manifests');
 }
 
 function blobFilePath(projectPath: string, hash: string): string {

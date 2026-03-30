@@ -92,7 +92,7 @@ export function RootManagerDialog({
                         Add a folder
                       </div>
                       <div className="text-xs text-white/40 mt-0.5">
-                        Ablegit watches all projects inside your folders.
+                        Echoform watches all projects inside your folders.
                       </div>
                     </div>
                     <Button

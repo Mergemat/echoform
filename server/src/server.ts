@@ -1,18 +1,20 @@
 import { access } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { AblegitService, AppError } from './core';
+import { EchoformService, AppError } from './core';
 import { discoverProjects } from './discovery';
 import { resolveStateDir } from './paths';
 import { ProjectWatcher, RootWatcher } from './watcher';
 import type { WsCommand, WsEvent } from './types';
 
 const PORT = Number(process.env.PORT || 3001);
-const service = new AblegitService(resolveStateDir());
+const service = new EchoformService(resolveStateDir());
 const clients = new Set<{ send: (data: string) => void }>();
-const SESSION_COOKIE_NAME = 'ablegit_session';
+const SESSION_COOKIE_NAME = 'echoform_session';
 const SESSION_TOKEN = crypto.randomUUID();
 const STATIC_DIR = resolve(
-  process.env.ABLEGIT_STATIC_DIR ?? join(process.cwd(), 'dist'),
+  process.env.ECHOFORM_STATIC_DIR ??
+    process.env.ABLEGIT_STATIC_DIR ??
+    join(process.cwd(), 'dist'),
 );
 const DEFAULT_ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
@@ -22,9 +24,13 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const allowedOrigins = new Set([
   ...DEFAULT_ALLOWED_ORIGINS,
-  ...(process.env.ABLEGIT_ALLOWED_ORIGINS?.split(',')
+  ...(
+    process.env.ECHOFORM_ALLOWED_ORIGINS ??
+    process.env.ABLEGIT_ALLOWED_ORIGINS
+  )
+    ?.split(',')
     .map((origin) => origin.trim())
-    .filter(Boolean) ?? []),
+    .filter(Boolean) ?? [],
 ]);
 const PREVIEW_POLL_MS = 1500;
 
@@ -754,4 +760,4 @@ Bun.serve({
   },
 });
 
-console.log(`Ablegit server running on http://localhost:${PORT}`);
+console.log(`Echoform server running on http://localhost:${PORT}`);

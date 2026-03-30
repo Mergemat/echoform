@@ -15,12 +15,12 @@ describe('discoverProjectsInRoot', () => {
   });
 
   test('recursively discovers real project folders and ignores backups, hidden dirs, and AppleDouble files', async () => {
-    rootDir = await mkdtemp(join(tmpdir(), 'ablegit-discovery-'));
+    rootDir = await mkdtemp(join(tmpdir(), 'echoform-discovery-'));
 
     const nestedProject = join(rootDir, 'WEST FALLIN', 'INTRO Project');
     const backupDir = join(nestedProject, 'Backup');
     const hiddenDir = join(rootDir, '.cache');
-    const ignoredStateDir = join(rootDir, 'foo', '.ablegit-state');
+    const ignoredStateDir = join(rootDir, 'foo', '.echoform-state');
 
     await mkdir(backupDir, { recursive: true });
     await mkdir(hiddenDir, { recursive: true });

@@ -1,6 +1,6 @@
-# Ablegit
+# Echoform
 
-Ablegit is a music app that automatically saves Ableton project versions so producers can compare old exports and recover better ideas they would otherwise lose.
+Echoform is a music app that automatically saves Ableton project versions so producers can compare old exports and recover better ideas they would otherwise lose.
 
 ## What it does
 

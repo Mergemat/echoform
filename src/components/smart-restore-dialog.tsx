@@ -201,7 +201,7 @@ export function SmartRestoreDialog({
 
         <DialogFooter className="px-5 py-3 border-t border-white/[0.06] bg-white/[0.02] flex-row items-center">
           <p className="flex-1 text-[10px] text-white/30">
-            Ablegit expands group and return dependencies automatically.
+            Echoform expands group and return dependencies automatically.
           </p>
           <Button
             variant="ghost"
