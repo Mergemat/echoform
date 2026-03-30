@@ -19,6 +19,7 @@
     "build:server": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/echoform-server server/src/server.ts",
     "dist": "bun run build && bun run build:server && bunx electron-builder --mac dir --publish never",
     "release": "bun run build && bun run build:server && bunx electron-builder --mac zip dmg --publish never",
+    "release:ship": "bun run scripts/release.ts",
     "lint": "ultracite check",
     "format": "ultracite fix",
     "test": "bun run test:client && bun run test:server",
