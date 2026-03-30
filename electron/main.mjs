@@ -96,8 +96,10 @@ async function markFirstLaunchHandled() {
 
 function resolveServerProcess() {
   if (app.isPackaged) {
+    const binaryName =
+      process.platform === "win32" ? "echoform-server.exe" : "echoform-server";
     return {
-      command: join(process.resourcesPath, "bin", "echoform-server"),
+      command: join(process.resourcesPath, "bin", binaryName),
       args: [],
       cwd: process.resourcesPath,
     };
@@ -250,7 +252,7 @@ async function startServer() {
       if (serverProcess === child) {
         serverProcess = null;
       }
-      child.kill("SIGTERM");
+      child.kill();
       scheduleServerRestart(error);
     }
   } finally {
@@ -274,7 +276,11 @@ function createWindow() {
     autoHideMenuBar: true,
     icon: join(__dirname, "icon.png"),
     title: "Echoform",
-    titleBarStyle: "hiddenInset",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    titleBarOverlay:
+      process.platform === "win32"
+        ? { color: "#0f1014", symbolColor: "#ffffff", height: 36 }
+        : undefined,
     backgroundColor: "#0f1014",
     webPreferences: {
       contextIsolation: true,
@@ -370,7 +376,9 @@ function createTray() {
 
   const trayIconPath = join(__dirname, "iconTemplate.png");
   const trayIcon = nativeImage.createFromPath(trayIconPath);
-  trayIcon.setTemplateImage(true);
+  if (process.platform === "darwin") {
+    trayIcon.setTemplateImage(true);
+  }
   tray = new Tray(trayIcon);
   tray.setToolTip("Echoform");
   tray.on("click", toggleWindow);
@@ -398,7 +406,7 @@ ipcMain.handle("echoform:pick-folder", async () => {
 });
 
 async function bootstrap() {
-  if (process.platform === "darwin") {
+  if (process.platform === "darwin" && app.dock) {
     app.dock.hide();
   }
 
@@ -446,5 +454,5 @@ app.on("before-quit", () => {
     return;
   }
 
-  serverProcess.kill("SIGTERM");
+  serverProcess.kill();
 });

@@ -57,3 +57,46 @@ jobs:
           else
             gh release create "$TAG_NAME" "${files[@]}" --generate-notes --title "$TAG_NAME"
           fi
+
+  windows-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install root dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install server dependencies
+        working-directory: server
+        run: bun install --frozen-lockfile
+
+      - name: Build release artifacts
+        run: bun run release:win
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release/*.exe release/*.zip release/*.blockmap release/latest*.yml)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release artifacts found in release/"
+            exit 1
+          fi
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$TAG_NAME" "${files[@]}" --generate-notes --title "$TAG_NAME"
+          fi

@@ -1,8 +1,9 @@
 /** Browser-safe path utilities (no node:path dependency) */
 
 export function basename(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i === -1 ? path : path.slice(i + 1);
+  const normalized = path.replaceAll("\\", "/");
+  const i = normalized.lastIndexOf("/");
+  return i === -1 ? normalized : normalized.slice(i + 1);
 }
 
 export function extname(path: string): string {
