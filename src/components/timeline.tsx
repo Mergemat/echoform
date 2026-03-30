@@ -1,4 +1,4 @@
-import { MusicNotes } from "@phosphor-icons/react";
+import { GitFork, MusicNotes } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
@@ -473,6 +473,12 @@ function FileTabs({
               <span className="size-1.5 shrink-0 rounded-full bg-emerald-400/70" />
             )}
             <span className="font-medium">{fileTabName(idea)}</span>
+            {group.forkedFromSetPath && (
+              <span className="flex items-center gap-0.5 text-[11px] text-white/20">
+                <GitFork className="size-3" weight="bold" />
+                {group.forkedFromIdeaName}
+              </span>
+            )}
             {saveCount > 0 && (
               <span className="text-[11px] text-white/20 tabular-nums">
                 {saveCount}

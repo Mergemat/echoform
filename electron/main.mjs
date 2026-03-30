@@ -237,6 +237,7 @@ function createWindow() {
     minHeight: 720,
     show: false,
     autoHideMenuBar: true,
+    icon: join(__dirname, "icon.png"),
     title: "Echoform",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#0f1014",
@@ -268,15 +269,27 @@ function createWindow() {
   return mainWindow;
 }
 
+const loadingHtml = join(__dirname, "loading.html");
+
 async function showWindow() {
   const window = createWindow();
-  if (window.webContents.getURL() !== `${baseUrl}/`) {
-    await startServer();
-    await window.loadURL(baseUrl);
+  const currentUrl = window.webContents.getURL();
+  const isShowingApp = currentUrl === `${baseUrl}/`;
+
+  if (isShowingApp) {
+    window.show();
+    window.focus();
+    return;
   }
 
+  // Show the loading screen immediately so the window is visible
+  await window.loadFile(loadingHtml);
   window.show();
   window.focus();
+
+  // Wait for the server, then load the real app
+  await startServer();
+  await window.loadURL(baseUrl);
 }
 
 function toggleWindow() {
@@ -311,8 +324,10 @@ function createTray() {
     },
   ]);
 
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle("Echoform");
+  const trayIconPath = join(__dirname, "iconTemplate.png");
+  const trayIcon = nativeImage.createFromPath(trayIconPath);
+  trayIcon.setTemplateImage(true);
+  tray = new Tray(trayIcon);
   tray.setToolTip("Echoform");
   tray.on("click", toggleWindow);
   tray.on("right-click", () => {
@@ -339,11 +354,6 @@ ipcMain.handle("echoform:pick-folder", async () => {
 });
 
 async function bootstrap() {
-  if (process.platform === "darwin") {
-    app.dock?.hide();
-  }
-
-  await startServer();
   createTray();
   createWindow();
   await showWindow();

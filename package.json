@@ -52,9 +52,33 @@
     ],
     "mac": {
       "category": "public.app-category.music",
+      "icon": "electron/icon.png",
       "target": [
         "dir"
-      ]
+      ],
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "Echoform needs access to your documents to find and version Ableton projects.",
+        "NSDesktopFolderUsageDescription": "Echoform needs access to your desktop to find and version Ableton projects.",
+        "NSDownloadsFolderUsageDescription": "Echoform needs access to your downloads to find and version Ableton projects."
+      }
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     }
   },
   "devDependencies": {

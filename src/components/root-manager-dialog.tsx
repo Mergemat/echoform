@@ -1,10 +1,5 @@
-import {
-  ArrowsClockwise,
-  FolderSimple,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowsClockwise, FolderSimple, Trash } from "@phosphor-icons/react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { useStore } from "@/lib/store";
 
@@ -65,7 +59,6 @@ export function RootManagerDialog({
     (state) => state.rootSuggestionsLoaded
   );
   const projects = useStore((state) => state.projects);
-  const [path, setPath] = useState("");
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionsLoading = open && !rootSuggestionsLoaded;
 
@@ -78,7 +71,6 @@ export function RootManagerDialog({
     sendDaemonCommand({
       type: "discover-root-suggestions",
     });
-    setPath("");
   };
 
   const handlePickFolder = async () => {
@@ -152,13 +144,7 @@ export function RootManagerDialog({
                 </Button>
               </div>
 
-              <div className="mt-3 flex gap-2">
-                <Input
-                  className="rounded-lg text-[13px]"
-                  onChange={(event) => setPath(event.target.value)}
-                  placeholder="/Users/you/Music/Ableton/projects"
-                  value={path}
-                />
+              <div className="mt-3">
                 <Button
                   className="rounded-lg"
                   onClick={() => {
@@ -169,14 +155,6 @@ export function RootManagerDialog({
                 >
                   <FolderSimple size={14} />
                   Choose folder
-                </Button>
-                <Button
-                  className="rounded-lg"
-                  onClick={() => watchPath(path)}
-                  type="button"
-                >
-                  <Plus size={14} />
-                  Watch
                 </Button>
               </div>
             </section>

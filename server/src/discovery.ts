@@ -9,12 +9,7 @@ import type {
   TrackedRoot,
 } from "./types";
 
-const COMMON_ROOT_DIRS = [
-  "Music/Ableton",
-  "Documents/Ableton",
-  "Library/Mobile Documents/com~apple~CloudDocs/ableton",
-  "Library/Mobile Documents/com~apple~CloudDocs/ableton/projects",
-];
+const COMMON_ROOT_DIRS = ["Music/Ableton", "Documents/Ableton"];
 
 const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, "Backup"]);
 

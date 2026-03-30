@@ -47,22 +47,39 @@ export function getIdeaSubtreeIds(
 }
 
 export interface RootFileGroup {
+  /** Human-readable name of the idea it was forked from */
+  forkedFromIdeaName: string | null;
+  /** If this tab was forked from a different .als file, the origin setPath */
+  forkedFromSetPath: string | null;
   representativeIdea: Idea;
   rootIdeas: Idea[];
   setPath: string;
 }
 
 export function getRootFileGroups(project: Project): RootFileGroup[] {
+  const ideasById = new Map(project.ideas.map((i) => [i.id, i]));
   const groups = new Map<string, RootFileGroup>();
   for (const idea of getRootIdeas(project)) {
     const existing = groups.get(idea.setPath);
     if (existing) {
       existing.rootIdeas.push(idea);
     } else {
+      // Check if this root idea was forked from a different setPath
+      let forkedFromSetPath: string | null = null;
+      let forkedFromIdeaName: string | null = null;
+      if (idea.parentIdeaId) {
+        const parent = ideasById.get(idea.parentIdeaId);
+        if (parent && parent.setPath !== idea.setPath) {
+          forkedFromSetPath = parent.setPath;
+          forkedFromIdeaName = parent.name;
+        }
+      }
       groups.set(idea.setPath, {
         setPath: idea.setPath,
         rootIdeas: [idea],
         representativeIdea: idea,
+        forkedFromSetPath,
+        forkedFromIdeaName,
       });
     }
   }
