@@ -71,10 +71,13 @@ async function readAppState() {
     const parsed = JSON.parse(raw);
     return typeof parsed === "object" && parsed !== null ? parsed : {};
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error) {
-      if (error.code === "ENOENT") {
-        return {};
-      }
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return {};
     }
 
     console.error("[echoform] failed to read app state", error);
@@ -86,11 +89,7 @@ async function markFirstLaunchHandled() {
   const currentState = await readAppState();
   await writeFile(
     resolveAppStatePath(),
-    JSON.stringify(
-      { ...currentState, hasCompletedFirstLaunch: true },
-      null,
-      2
-    ),
+    JSON.stringify({ ...currentState, hasCompletedFirstLaunch: true }, null, 2),
     "utf8"
   );
 }
