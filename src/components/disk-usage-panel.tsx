@@ -445,7 +445,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
                   </div>
                 )}
                 <div className="mt-2 text-[10px] text-white/15">
-                  Head and idea-base saves are never pruned.
+                  Latest and base saves are never pruned.
                 </div>
               </div>
 

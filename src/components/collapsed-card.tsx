@@ -1,6 +1,12 @@
 import { Pause, Play } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { usePreviewStore } from "@/lib/preview-store";
 import type { Project, Save } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -91,12 +97,22 @@ export function CollapsedCard({
             {getSaveDisplayTitle(save)}
           </span>
           {!save.auto && (
-            <Badge
-              className="h-auto shrink-0 rounded border-transparent bg-emerald-400/8 px-1 py-0 text-[10px] text-emerald-400/60 uppercase leading-tight tracking-widest"
-              variant="secondary"
-            >
-              saved
-            </Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    className="h-auto shrink-0 rounded border-transparent bg-emerald-400/8 px-1 py-0 text-[10px] text-emerald-400/60 uppercase leading-tight tracking-widest"
+                    variant="secondary"
+                  >
+                    saved
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  You pressed Save in Ableton — other entries are automatic
+                  snapshots
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
         {hasChips && (

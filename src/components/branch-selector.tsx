@@ -91,7 +91,10 @@ export function BranchSelector({
           className="w-[var(--radix-popover-trigger-width)] p-1.5"
         >
           <div className="px-2 py-1.5 font-medium text-[10px] text-white/25 uppercase tracking-[0.14em]">
-            Branches
+            Versions
+          </div>
+          <div className="px-2 pb-1.5 text-[11px] text-white/15 leading-snug">
+            Each version is a separate .als file. Switch between them here.
           </div>
           <div className="scrollbar-thin max-h-[280px] overflow-y-auto">
             {branches.map(({ idea, depth, saveCount }) => {

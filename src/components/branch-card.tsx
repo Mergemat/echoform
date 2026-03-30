@@ -105,7 +105,7 @@ export function BranchCard({
           )}
           style={{ paddingLeft: `${lineLeft + 22}px` }}
         >
-          forked from{" "}
+          based on{" "}
           <span className="font-medium">{getSaveDisplayTitle(fromSave)}</span>
         </div>
       )}
