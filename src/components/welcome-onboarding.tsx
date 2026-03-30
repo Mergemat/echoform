@@ -1,11 +1,11 @@
 import {
   ArrowRight,
+  CaretUpDown,
+  Check,
   CheckCircle,
   FolderSimple,
   FolderSimplePlus,
   GitFork,
-  MusicNotes,
-  Waveform,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -251,60 +251,338 @@ function PickFolderStep() {
 
 // ── Step 3: How it works ────────────────────────────────────────────
 
-function HowItWorksStep({ onNext }: { onNext: () => void }) {
-  return (
-    <div className="flex w-full max-w-md flex-col items-center text-center">
-      <h2 className="font-semibold text-white/90 text-xl tracking-tight">
-        Here's what you'll see
-      </h2>
-      <p className="mt-2 text-[13px] text-white/30 leading-relaxed">
-        A quick look at the three parts of Echoform.
-      </p>
+const TIMELINE_ENTRIES = [
+  {
+    time: "2:41 PM",
+    label: "Added bass track",
+    head: true,
+    auto: false,
+    chips: [
+      { text: "+Bass", color: "emerald" as const },
+      { text: "~Mixer", color: "amber" as const },
+    ],
+  },
+  {
+    time: "2:38 PM",
+    label: "Adjusted EQ on drums",
+    head: false,
+    auto: false,
+    chips: [{ text: "~Drums", color: "amber" as const }],
+  },
+  {
+    time: "2:30 PM",
+    label: "Auto-snapshot",
+    head: false,
+    auto: true,
+    chips: [],
+  },
+  {
+    time: "2:12 PM",
+    label: "New vocal take",
+    head: false,
+    auto: false,
+    chips: [
+      { text: "+Vocals", color: "emerald" as const },
+      { text: "-Scratch", color: "red" as const },
+    ],
+  },
+];
 
-      <div className="mt-8 w-full space-y-3 text-left">
-        {[
-          {
-            icon: <Waveform className="text-white/40" size={18} />,
-            title: "Timeline",
-            desc: "Every time you hit Save in Ableton, a new entry appears here. Click one to see exactly what changed — tracks, tempo, sounds.",
-          },
-          {
-            icon: <MusicNotes className="text-white/40" size={18} />,
-            title: "Tabs",
-            desc: "If a project has multiple .als files, each gets its own tab. Switch between them without leaving Echoform.",
-          },
-          {
-            icon: <GitFork className="text-white/40" size={18} />,
-            title: "Versions",
-            desc: "Want to try a different direction? Create a version — a separate copy you can work on freely. Your original stays untouched.",
-          },
-        ].map((item) => (
+const CHIP_STYLES = {
+  emerald: "text-emerald-400/80 bg-emerald-400/10 border-emerald-400/15",
+  amber: "text-amber-400/80 bg-amber-400/10 border-amber-400/15",
+  red: "text-red-400/80 bg-red-400/10 border-red-400/15",
+};
+
+function MockTimeline() {
+  return (
+    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      {TIMELINE_ENTRIES.map((entry, i) => (
+        <div
+          className={cn(
+            "relative flex items-center gap-2.5 py-3 pr-4 pl-4",
+            i === 0
+              ? "border-white/50 border-l-2 bg-white/[0.06]"
+              : "border-transparent border-l-2"
+          )}
+          key={entry.time}
+        >
+          {/* Vertical branch line */}
           <div
-            className="flex gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5"
-            key={item.title}
+            className="absolute top-0 bottom-0 left-[22px] w-px bg-white/[0.05]"
+            style={
+              i === 0
+                ? { top: "50%", backgroundColor: "rgba(255,255,255,0.05)" }
+                : i === TIMELINE_ENTRIES.length - 1
+                  ? { bottom: "50%" }
+                  : undefined
+            }
+          />
+
+          {/* Dot */}
+          <div
+            className={cn(
+              "relative z-10 size-2 shrink-0 rounded-full ring-2",
+              i === 0
+                ? "bg-white ring-white/20"
+                : entry.head
+                  ? "bg-emerald-400 ring-emerald-400/20"
+                  : entry.auto
+                    ? "bg-white/15 ring-white/[0.04]"
+                    : "bg-white/40 ring-white/10"
+            )}
+          />
+
+          {/* Content */}
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "truncate text-[13px] leading-tight",
+                  i === 0 ? "font-medium text-white/90" : "text-white/55"
+                )}
+              >
+                {entry.label}
+              </span>
+              {!entry.auto && (
+                <span className="shrink-0 rounded border-transparent bg-emerald-400/8 px-1 py-0 text-[10px] text-emerald-400/60 uppercase leading-tight tracking-widest">
+                  saved
+                </span>
+              )}
+            </div>
+            {entry.chips.length > 0 && (
+              <div className="flex items-center gap-1">
+                {entry.chips.map((chip) => (
+                  <span
+                    className={cn(
+                      "rounded border px-1 py-0 font-mono text-[10px] leading-tight",
+                      CHIP_STYLES[chip.color]
+                    )}
+                    key={chip.text}
+                  >
+                    {chip.text}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Time */}
+          <span className="shrink-0 text-[11px] text-white/20 tabular-nums">
+            {entry.time}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MockTabs() {
+  const tabs = [
+    { name: "Summer Beat.als", saves: 24, active: true, current: true },
+    {
+      name: "Summer Beat (vocal mix).als",
+      saves: 8,
+      active: false,
+      current: false,
+    },
+  ];
+
+  return (
+    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 border-white/[0.06] border-b px-3">
+        {tabs.map((tab) => (
+          <div
+            className={cn(
+              "relative flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[13px]",
+              tab.active ? "text-white/85" : "text-white/30"
+            )}
+            key={tab.name}
           >
-            <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.05]">
-              {item.icon}
-            </div>
-            <div>
-              <div className="font-medium text-[13px] text-white/60">
-                {item.title}
-              </div>
-              <div className="mt-0.5 text-[12px] text-white/25 leading-relaxed">
-                {item.desc}
-              </div>
-            </div>
+            {tab.current && (
+              <span className="size-1.5 shrink-0 rounded-full bg-emerald-400/70" />
+            )}
+            <span className="font-medium">{tab.name}</span>
+            <span className="text-[11px] text-white/20 tabular-nums">
+              {tab.saves}
+            </span>
+            {tab.active && (
+              <span className="absolute right-3 bottom-0 left-3 h-[2px] rounded-full bg-white/40" />
+            )}
           </div>
         ))}
       </div>
 
+      {/* Fake timeline entries beneath */}
+      <div className="px-4 py-3">
+        {[
+          { label: "Latest save", dim: false },
+          { label: "Earlier today", dim: true },
+          { label: "Yesterday", dim: true },
+        ].map((row) => (
+          <div className="flex items-center gap-2.5 py-2" key={row.label}>
+            <div
+              className={cn(
+                "size-2 shrink-0 rounded-full ring-2",
+                row.dim
+                  ? "bg-white/15 ring-white/[0.04]"
+                  : "bg-emerald-400 ring-emerald-400/20"
+              )}
+            />
+            <span
+              className={cn(
+                "text-[13px]",
+                row.dim ? "text-white/30" : "text-white/55"
+              )}
+            >
+              {row.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MockVersions() {
+  const branches = [
+    { name: "Main", depth: 0, saves: 24, current: true, active: true },
+    { name: "Experiment", depth: 1, saves: 6, current: false, active: false },
+    { name: "Lo-fi remix", depth: 1, saves: 3, current: false, active: false },
+  ];
+
+  return (
+    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      {/* Version selector header */}
+      <div className="flex items-center justify-between border-white/[0.06] border-b px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <div className="flex size-7 items-center justify-center rounded-md bg-white/[0.06]">
+            <GitFork className="text-white/40" size={13} />
+          </div>
+          <div>
+            <span className="block font-medium text-[13px] text-white/75">
+              Main
+            </span>
+            <span className="block text-[10px] text-emerald-400/60 uppercase tracking-wider">
+              current
+            </span>
+          </div>
+        </div>
+        <CaretUpDown className="text-white/25" size={12} />
+      </div>
+
+      {/* Branch list */}
+      <div className="p-1.5">
+        <div className="px-2 py-1.5 font-medium text-[10px] text-white/25 uppercase tracking-[0.14em]">
+          Versions
+        </div>
+        {branches.map((branch) => (
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-2",
+              branch.active ? "bg-white/[0.08] text-white/90" : "text-white/50"
+            )}
+            key={branch.name}
+            style={{ paddingLeft: `${8 + branch.depth * 16}px` }}
+          >
+            {branch.depth > 0 && (
+              <span className="shrink-0 text-[10px] text-white/15">
+                &#x2514;
+              </span>
+            )}
+            <span className="flex-1 text-[13px]">{branch.name}</span>
+            <span className="shrink-0 text-[10px] text-white/20 tabular-nums">
+              {branch.saves}
+            </span>
+            {branch.current && (
+              <div className="size-1.5 shrink-0 rounded-full bg-emerald-400/70 ring-2 ring-emerald-400/20" />
+            )}
+            {branch.active && (
+              <Check
+                className="shrink-0 text-white/40"
+                size={12}
+                weight="bold"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    title: "Timeline",
+    desc: "Every save in Ableton creates an entry. Click any to see what changed.",
+    mockup: MockTimeline,
+  },
+  {
+    title: "Tabs",
+    desc: "Multiple .als files in one project each get their own tab.",
+    mockup: MockTabs,
+  },
+  {
+    title: "Versions",
+    desc: "Try a different direction without losing your original. Branch off freely.",
+    mockup: MockVersions,
+  },
+];
+
+function HowItWorksStep({ onNext }: { onNext: () => void }) {
+  const [subStep, setSubStep] = useState(0);
+  const current = HOW_IT_WORKS_STEPS[subStep];
+  const isLast = subStep === HOW_IT_WORKS_STEPS.length - 1;
+  const Mockup = current.mockup;
+
+  return (
+    <div className="flex w-full max-w-md flex-col items-center text-center">
+      {/* Sub-step indicator */}
+      <div className="mb-6 flex items-center gap-1.5">
+        {HOW_IT_WORKS_STEPS.map((s) => (
+          <div
+            className={cn(
+              "h-1 rounded-full transition-all duration-300",
+              s.title === current.title
+                ? "w-5 bg-white/30"
+                : "w-1.5 bg-white/10"
+            )}
+            key={s.title}
+          />
+        ))}
+      </div>
+
+      {/* Title + description */}
+      <div
+        className="fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-400"
+        key={`text-${subStep}`}
+      >
+        <h2 className="font-semibold text-white/90 text-xl tracking-tight">
+          {current.title}
+        </h2>
+        <p className="mt-2 text-[13px] text-white/30 leading-relaxed">
+          {current.desc}
+        </p>
+      </div>
+
+      {/* Mockup */}
+      <div
+        className="fade-in slide-in-from-bottom-3 mt-6 w-full animate-in fill-mode-both duration-500"
+        key={`mockup-${subStep}`}
+        style={{ animationDelay: "80ms" }}
+      >
+        <Mockup />
+      </div>
+
+      {/* Navigation */}
       <Button
         className="mt-8 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={onNext}
+        onClick={isLast ? onNext : () => setSubStep((s) => s + 1)}
         size="lg"
         type="button"
       >
-        Let's go
+        {isLast ? "Let's go" : "Next"}
         <ArrowRight className="text-white/50" size={14} />
       </Button>
     </div>
