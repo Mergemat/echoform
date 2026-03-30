@@ -36,6 +36,7 @@ interface Store {
   setCompare: (compare: CompareResult | null) => void;
   setDiscoveredProjects: (projects: DiscoveredProject[]) => void;
   setRootSuggestions: (suggestions: RootSuggestion[]) => void;
+  snapshotReceived: boolean;
   toggleBranchCollapse: (ideaId: string) => void;
   toggleSave: (id: string) => void;
 }
@@ -77,6 +78,7 @@ export const useStore = create<Store>((set, get) => ({
   activity: [],
   rootSuggestions: [],
   rootSuggestionsLoaded: false,
+  snapshotReceived: false,
   selectedProjectId: null,
   selectedSaveId: null,
   activeIdeaId: null,
@@ -103,6 +105,7 @@ export const useStore = create<Store>((set, get) => ({
       projects,
       roots,
       activity,
+      snapshotReceived: true,
       ...applySnapshotSelection(
         projects,
         state.selectedProjectId,
