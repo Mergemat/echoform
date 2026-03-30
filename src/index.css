@@ -160,3 +160,12 @@
     }
   }
 }
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
