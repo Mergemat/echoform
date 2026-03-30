@@ -1,5 +1,5 @@
 {
-  "name": "ablegit-server",
+  "name": "echoform-server",
   "private": true,
   "type": "module",
   "scripts": {

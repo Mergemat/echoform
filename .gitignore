@@ -1,4 +1,5 @@
 node_modules
+.echoform-state
 .ablegit-state
 dist
 .gstack/

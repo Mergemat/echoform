@@ -38,7 +38,7 @@ function makeTrack(
 }
 
 async function writeAlsFile(xml: string): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'ablegit-als-parser-'));
+  const dir = await mkdtemp(join(tmpdir(), 'echoform-als-parser-'));
   tempDirs.push(dir);
   const filePath = join(dir, 'test.als');
   await writeFile(filePath, gzipSync(xml));

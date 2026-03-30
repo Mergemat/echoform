@@ -66,7 +66,7 @@ async function main() {
   const rebuiltXml = builder.buildObject(parsed);
   const rebuiltCompressed = gzipSync(Buffer.from(rebuiltXml, 'utf8'));
 
-  const tmpDir = await mkdtemp(join(tmpdir(), 'ablegit-smart-restore-'));
+  const tmpDir = await mkdtemp(join(tmpdir(), 'echoform-smart-restore-'));
   const rebuiltPath = join(tmpDir, basename(fixturePath));
 
   try {

@@ -239,7 +239,7 @@ export type DiscoveredProject = {
 
 export type DiskUsage = {
   projectId: string;
-  blobStorageBytes: number; // actual disk used by .ablegit-state/blobs/
+  blobStorageBytes: number; // actual disk used by the project state dir blobs/
   blobCount: number;
   manifestCount: number;
   totalSaveCount: number;

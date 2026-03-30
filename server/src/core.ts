@@ -41,6 +41,7 @@ import {
   gcBlobs,
   getBlobPath,
   readManifest,
+  resolveProjectStateDir,
   storeBlob,
 } from './blob-store';
 import { parseAlsFile, extractTrackSummary } from './als-parser';
@@ -61,6 +62,12 @@ import {
   resolveProjectFilePath,
 } from './branch-files';
 import { discoverProjectsInRoot, discoverRootSuggestions } from './discovery';
+import {
+  LEGACY_STATE_DIRNAME,
+  LEGACY_STATE_DIR_ENV,
+  STATE_DIRNAME,
+  STATE_DIR_ENV,
+} from './paths';
 
 const AUDIO_EXTENSIONS = new Set([
   '.aif',
@@ -349,7 +356,11 @@ async function walkProject(
     async (entry): Promise<ProjectSnapshot> => {
       const abs = join(currentPath, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === '.ablegit-state' || entry.name === 'Backup') {
+        if (
+          entry.name === STATE_DIRNAME ||
+          entry.name === LEGACY_STATE_DIRNAME ||
+          entry.name === 'Backup'
+        ) {
           return { files: [], emptyDirs: [] };
         }
         const child = await walkProject(rootPath, abs);
@@ -668,7 +679,7 @@ async function getBlobStorageStats(projectPath: string): Promise<{
   blobStorageBytes: number;
   blobCount: number;
 }> {
-  const blobsDirPath = join(projectPath, '.ablegit-state', 'blobs');
+  const blobsDirPath = join(resolveProjectStateDir(projectPath), 'blobs');
   let blobStorageBytes = 0;
   let blobCount = 0;
   try {
@@ -1001,7 +1012,7 @@ class AsyncMutex {
 
 // ── Service ─────────────────────────────────────────────────────────
 
-export class AblegitService {
+export class EchoformService {
   private readonly rootDir: string;
   private readonly statePath: string;
   private readonly allowLegacyMigration: boolean;
@@ -1014,9 +1025,11 @@ export class AblegitService {
   >();
 
   constructor(
-    rootDir = resolve(process.cwd(), '.ablegit-state'),
+    rootDir = resolve(process.cwd(), STATE_DIRNAME),
     launcher: AbletonLauncher = createAbletonLauncher(),
-    allowLegacyMigration = Boolean(process.env.ABLEGIT_STATE_DIR),
+    allowLegacyMigration = Boolean(
+      process.env[STATE_DIR_ENV] ?? process.env[LEGACY_STATE_DIR_ENV],
+    ),
   ) {
     this.rootDir = rootDir;
     this.statePath = join(rootDir, 'state.json');
@@ -1026,33 +1039,42 @@ export class AblegitService {
 
   private async maybeMigrateLegacyState(): Promise<void> {
     if (!this.allowLegacyMigration) return;
-    const legacyRootDir = resolve(process.cwd(), '.ablegit-state');
-    if (legacyRootDir === this.rootDir) return;
-
-    const legacyStatePath = join(legacyRootDir, 'state.json');
     const targetExists = await access(this.statePath)
       .then(() => true)
       .catch(() => false);
     if (targetExists) return;
 
-    const legacyExists = await access(legacyStatePath)
-      .then(() => true)
-      .catch(() => false);
-    if (!legacyExists) return;
+    const legacyCandidates = [
+      process.env[LEGACY_STATE_DIR_ENV],
+      join(process.cwd(), LEGACY_STATE_DIRNAME),
+    ]
+      .filter((candidate): candidate is string => Boolean(candidate))
+      .map((candidate) => resolve(candidate))
+      .filter((candidate, index, all) => all.indexOf(candidate) === index)
+      .filter((candidate) => candidate !== this.rootDir);
 
-    await mkdir(dirname(this.rootDir), { recursive: true });
-    try {
-      await cp(legacyRootDir, this.rootDir, {
-        recursive: true,
-        force: false,
-        errorOnExist: true,
-      });
-    } catch (err) {
-      if (err && typeof err === 'object' && 'code' in err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === 'EEXIST') return;
+    for (const legacyRootDir of legacyCandidates) {
+      const legacyStatePath = join(legacyRootDir, 'state.json');
+      const legacyExists = await access(legacyStatePath)
+        .then(() => true)
+        .catch(() => false);
+      if (!legacyExists) continue;
+
+      await mkdir(dirname(this.rootDir), { recursive: true });
+      try {
+        await cp(legacyRootDir, this.rootDir, {
+          recursive: true,
+          force: false,
+          errorOnExist: true,
+        });
+        return;
+      } catch (err) {
+        if (err && typeof err === 'object' && 'code' in err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === 'EEXIST') return;
+        }
+        throw err;
       }
-      throw err;
     }
   }
 
@@ -1225,7 +1247,7 @@ export class AblegitService {
     return join(
       homedir(),
       'Music',
-      'Ablegit Previews',
+      'Echoform Previews',
       slugifyProjectName(project.name),
       save.id,
     );
@@ -2527,8 +2549,7 @@ export class AblegitService {
 
     // Count manifests
     const manifestsDirPath = join(
-      project.projectPath,
-      '.ablegit-state',
+      resolveProjectStateDir(project.projectPath),
       'manifests',
     );
     let manifestCount = 0;

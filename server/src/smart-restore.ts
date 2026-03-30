@@ -282,7 +282,7 @@ function normalizeTrackSends(
 function backupFileName(targetAlsPath: string): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const file = basename(targetAlsPath, '.als');
-  return `${file} [Ablegit Smart Restore ${stamp}].als`;
+  return `${file} [Echoform Smart Restore ${stamp}].als`;
 }
 
 export async function smartRestoreTracks(input: {
@@ -409,7 +409,7 @@ export async function smartRestoreTracks(input: {
 
   const rebuiltXml = target$.xml();
   const rebuiltCompressed = gzipSync(Buffer.from(rebuiltXml, 'utf8'));
-  const tmpPath = `${input.targetAlsPath}.ablegit-smart-restore.tmp`;
+  const tmpPath = `${input.targetAlsPath}.echoform-smart-restore.tmp`;
 
   const backupDir = join(dirname(input.targetAlsPath), 'Backup');
   await mkdir(backupDir, { recursive: true });
