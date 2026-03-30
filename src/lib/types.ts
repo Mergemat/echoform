@@ -12,8 +12,6 @@ export type {
   Project,
   RootSuggestion,
   Save,
-  SmartRestoreResult,
-  SmartRestoreTrack,
   TrackedRoot,
   TrackSummaryItem,
   WsCommand,

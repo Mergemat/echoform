@@ -8,10 +8,6 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("@/components/smart-restore-dialog", () => ({
-  SmartRestoreDialog: () => null,
-}));
-
 vi.mock("@/components/preview-request-dialog", () => ({
   PreviewRequestDialog: () => null,
 }));
