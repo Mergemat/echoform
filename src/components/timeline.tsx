@@ -1,4 +1,4 @@
-import { GitFork, MusicNotes } from "@phosphor-icons/react";
+import { GitFork, MusicNotes, Waveform } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
@@ -163,12 +163,15 @@ function useTimelineView() {
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="px-6 text-center">
-          <div className="font-medium text-base text-white/20">
+        <div className="flex flex-col items-center gap-3 px-6 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl bg-white/[0.04]">
+            <Waveform className="text-white/15" size={22} weight="bold" />
+          </div>
+          <div className="font-medium text-[15px] text-white/25">
             No project selected
           </div>
-          <div className="mt-1 text-[13px] text-white/10">
-            Select a project from the sidebar to see its timeline
+          <div className="max-w-[240px] text-[13px] text-white/15 leading-relaxed">
+            Pick a project from the sidebar to see its version timeline
           </div>
         </div>
       </div>
@@ -176,19 +179,42 @@ function useTimelineView() {
   }
 
   if (project.saves.length === 0) {
+    const isMissing = project.presence === "missing";
+    const isWatching = project.watching && !isMissing;
+
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="px-6 text-center">
-          <div className="font-medium text-base text-white/25">
-            No saves yet
+        <div className="flex flex-col items-center gap-4 px-6 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl bg-white/[0.04]">
+            <MusicNotes className="text-white/15" size={22} weight="bold" />
           </div>
-          <div className="mt-1 text-[13px] text-white/15 leading-relaxed">
-            {project.presence === "missing"
-              ? "Project folder is missing from watched roots"
-              : project.watching
-                ? "Watching for changes..."
-                : "Enable watching to auto-save"}
+          <div className="font-medium text-[15px] text-white/25">
+            {isMissing ? "Project not found" : "No saves yet"}
           </div>
+          {isMissing ? (
+            <div className="max-w-[280px] text-[13px] text-white/15 leading-relaxed">
+              This project's folder is missing from your watched roots.
+            </div>
+          ) : isWatching ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="max-w-[260px] text-[13px] text-white/30 leading-relaxed">
+                Open this project in Ableton and hit{" "}
+                <span className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-white/40">
+                  ⌘S
+                </span>{" "}
+                — Echoform will capture the save automatically.
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400/50">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400/60" />
+                Listening for changes
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-[280px] text-[13px] text-white/15 leading-relaxed">
+              Enable watching to start capturing saves whenever you work on this
+              project.
+            </div>
+          )}
         </div>
       </div>
     );
@@ -271,7 +297,7 @@ function useTimelineView() {
             <div className="text-red-200/80 text-xs leading-relaxed">
               {project.driftStatus.kind === "unknown-file"
                 ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
-                : `Branch file ${project.driftStatus.setPath} is missing.`}
+                : `Version file ${project.driftStatus.setPath} is missing.`}
             </div>
             <div className="flex shrink-0 gap-1.5">
               {project.driftStatus.kind === "unknown-file" && (
@@ -299,7 +325,7 @@ function useTimelineView() {
                 size="sm"
                 variant="ghost"
               >
-                Open Current Branch
+                Open Current Version
               </Button>
             </div>
           </div>

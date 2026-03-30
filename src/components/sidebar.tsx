@@ -221,13 +221,17 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
   if (isEmpty) {
     return (
       <div className="min-h-0 flex-1 px-2 py-1">
-        <div className="px-3 py-10 text-center">
-          <div className="font-medium text-sm text-white/25">
-            No watched projects
+        <div className="px-3 py-8 text-center">
+          <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-white/[0.04]">
+            <FolderSimplePlus className="text-white/15" size={18} />
           </div>
-          <div className="mt-1 text-white/15 text-xs leading-relaxed">
-            Point Echoform at your music folders to start protecting your
-            sessions automatically.
+          <div className="mt-3 font-medium text-[13px] text-white/30">
+            No projects found
+          </div>
+          <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
+            Add a music folder above to start
+            <br />
+            protecting your sessions.
           </div>
         </div>
       </div>
