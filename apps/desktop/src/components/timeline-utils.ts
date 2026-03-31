@@ -245,14 +245,22 @@ export function buildChips(save: Save): Chip[] {
     } else if (renames.length >= 2) {
       chips.push({ label: `${renames.length} tracks renamed`, kind: "change" });
     }
-    let deviceDelta = 0;
+    let totalDeviceAdds = 0;
+    let totalDeviceRemoves = 0;
     for (const t of sd.modifiedTracks) {
-      deviceDelta += t.addedDevices.length - t.removedDevices.length;
+      totalDeviceAdds += t.addedDevices.length;
+      totalDeviceRemoves += t.removedDevices.length;
     }
+    const deviceDelta = totalDeviceAdds - totalDeviceRemoves;
     if (deviceDelta !== 0) {
       chips.push({
         label: `${deviceDelta > 0 ? "+" : ""}${deviceDelta} device${Math.abs(deviceDelta) === 1 ? "" : "s"}`,
         kind: deviceDelta > 0 ? "add" : "remove",
+      });
+    } else if (totalDeviceAdds > 0) {
+      chips.push({
+        label: `${totalDeviceAdds} device${totalDeviceAdds === 1 ? "" : "s"} replaced`,
+        kind: "change",
       });
     }
     let clipDelta = 0;
@@ -267,6 +275,54 @@ export function buildChips(save: Save): Chip[] {
     }
     if (sd.modifiedTracks.some((t) => t.mixerChanges.length > 0)) {
       chips.push({ label: "mixer changes", kind: "neutral" });
+    }
+    // Track color changes
+    const colorChanges = sd.modifiedTracks.filter((t) => t.colorChanged).length;
+    if (colorChanges > 0) {
+      chips.push({
+        label: `${colorChanges} track${colorChanges === 1 ? "" : "s"} recolored`,
+        kind: "change",
+      });
+    }
+    // Device enable/disable toggles
+    let toggleCount = 0;
+    for (const t of sd.modifiedTracks) {
+      toggleCount += (t.deviceToggles ?? []).length;
+    }
+    if (toggleCount > 0) {
+      chips.push({
+        label: `${toggleCount} device${toggleCount === 1 ? "" : "s"} toggled`,
+        kind: "change",
+      });
+    }
+    // Arrangement length
+    if (sd.arrangementLengthChange) {
+      const delta = sd.arrangementLengthChange.to - sd.arrangementLengthChange.from;
+      const bars = Math.round(Math.abs(delta) / 4);
+      chips.push({
+        label: `${delta > 0 ? "+" : "\u2212"}${bars} bar${bars === 1 ? "" : "s"}`,
+        kind: delta > 0 ? "add" : "remove",
+      });
+    }
+    // Scene count
+    if (sd.sceneCountChange) {
+      const delta = sd.sceneCountChange.to - sd.sceneCountChange.from;
+      chips.push({
+        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} scene${Math.abs(delta) === 1 ? "" : "s"}`,
+        kind: delta > 0 ? "add" : "remove",
+      });
+    }
+    // Locator / cue point count
+    if (sd.locatorCountChange) {
+      const delta = sd.locatorCountChange.to - sd.locatorCountChange.from;
+      chips.push({
+        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} locator${Math.abs(delta) === 1 ? "" : "s"}`,
+        kind: delta > 0 ? "add" : "remove",
+      });
+    }
+    // Track reorder
+    if (sd.tracksReordered) {
+      chips.push({ label: "tracks reordered", kind: "change" });
     }
   }
   if (save.changes) {
@@ -300,6 +356,12 @@ function isTrivialAutoSave(save: Save): boolean {
   const sd = save.setDiff;
   if (sd) {
     if (sd.tempoChange || sd.timeSignatureChange) {
+      return false;
+    }
+    if (sd.arrangementLengthChange || sd.sceneCountChange || sd.locatorCountChange) {
+      return false;
+    }
+    if (sd.tracksReordered) {
       return false;
     }
     if (
