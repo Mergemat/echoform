@@ -16,4 +16,4 @@ export type {
   TrackSummaryItem,
   WsCommand,
   WsEvent,
-} from "../../server/src/types";
+} from "../../../../packages/server/src/types";
