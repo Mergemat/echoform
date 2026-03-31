@@ -436,8 +436,7 @@ function useExpandedCardView({
                           <span className="text-amber-400/40">
                             {(rep.deviceToggles ?? [])
                               .map(
-                                (d) =>
-                                  `${d.name} ${d.enabled ? "on" : "off"}`
+                                (d) => `${d.name} ${d.enabled ? "on" : "off"}`
                               )
                               .join(", ")}
                           </span>
