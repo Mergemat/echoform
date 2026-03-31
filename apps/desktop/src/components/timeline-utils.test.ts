@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Idea, Project, Save } from "@/lib/types";
+import type {
+  SetDiff,
+  TrackDiff,
+} from "../../../../packages/server/src/types";
 import {
+  buildChips,
   buildTimelineDisplayItems,
   getRootFileGroups,
   getSaveDisplayTitle,
@@ -178,5 +183,238 @@ describe("getSaveDisplayTitle", () => {
         createdAt: "2024-01-03T14:45:00Z",
       })
     ).not.toBe("3 files changed");
+  });
+});
+
+// ── Backward compatibility: old saved data with missing fields ──────
+
+/**
+ * Simulates a TrackDiff from old persisted data that lacks fields added later
+ * (deviceToggles, colorChanged, renamedFrom). The type system says these are
+ * optional, but code that does `.length` on undefined will crash.
+ */
+function legacyTrackDiff(overrides: Partial<TrackDiff> = {}): TrackDiff {
+  return {
+    name: "Bass",
+    type: "audio",
+    addedClips: [],
+    removedClips: [],
+    addedDevices: [],
+    removedDevices: [],
+    clipCountDelta: 0,
+    mixerChanges: [],
+    // intentionally omit: deviceToggles, colorChanged, renamedFrom
+    ...overrides,
+  } as TrackDiff;
+}
+
+/**
+ * Simulates a SetDiff from old persisted data that lacks fields added later
+ * (arrangementLengthChange, sceneCountChange, locatorCountChange, tracksReordered).
+ */
+function legacySetDiff(overrides: Partial<SetDiff> = {}): SetDiff {
+  return {
+    tempoChange: null,
+    timeSignatureChange: null,
+    addedTracks: [],
+    removedTracks: [],
+    modifiedTracks: [],
+    // intentionally omit: arrangementLengthChange, sceneCountChange,
+    //                      locatorCountChange, tracksReordered
+    ...overrides,
+  } as SetDiff;
+}
+
+function makeSaveWithDiff(
+  setDiff?: SetDiff,
+  changes?: Save["changes"]
+): Save {
+  return {
+    id: "save-bc",
+    label: "old save",
+    note: "",
+    createdAt: "2024-01-01T00:00:00Z",
+    ideaId: "idea-1",
+    previewRefs: [],
+    previewStatus: "none",
+    previewMime: null,
+    previewRequestedAt: null,
+    previewUpdatedAt: null,
+    projectHash: "abc",
+    auto: false,
+    setDiff,
+    changes,
+    metadata: {
+      activeSetPath: "song.als",
+      setFiles: ["song.als"],
+      audioFiles: 0,
+      fileCount: 1,
+      sizeBytes: 100,
+      modifiedAt: "2024-01-01T00:00:00Z",
+    },
+  };
+}
+
+describe("buildChips – backward compatibility with old saved data", () => {
+  it("does not crash when TrackDiff is missing deviceToggles", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        modifiedTracks: [legacyTrackDiff({ addedDevices: ["Compressor"] })],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("device"))).toBe(true);
+  });
+
+  it("does not crash when TrackDiff is missing colorChanged", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        modifiedTracks: [legacyTrackDiff({ clipCountDelta: 3 })],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("clip"))).toBe(true);
+    // should not produce a "recolored" chip
+    expect(chips.some((c) => c.label.includes("recolored"))).toBe(false);
+  });
+
+  it("does not crash when TrackDiff is missing renamedFrom", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        modifiedTracks: [legacyTrackDiff({ mixerChanges: ["volume"] })],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label === "mixer changes")).toBe(true);
+  });
+
+  it("does not crash when SetDiff is missing arrangementLengthChange", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({ tempoChange: { from: 120, to: 130 } })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("bpm"))).toBe(true);
+    // should not crash or produce bar chips
+    expect(chips.some((c) => c.label.includes("bar"))).toBe(false);
+  });
+
+  it("does not crash when SetDiff is missing sceneCountChange and locatorCountChange", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        addedTracks: [{ name: "Synth", type: "midi" }],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("MIDI"))).toBe(true);
+    expect(chips.some((c) => c.label.includes("scene"))).toBe(false);
+    expect(chips.some((c) => c.label.includes("locator"))).toBe(false);
+  });
+
+  it("does not crash when SetDiff is missing tracksReordered", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        removedTracks: [{ name: "Pad", type: "audio" }],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("Audio"))).toBe(true);
+    expect(chips.some((c) => c.label.includes("reordered"))).toBe(false);
+  });
+
+  it("handles a fully minimal legacy SetDiff with no optional fields", () => {
+    const save = makeSaveWithDiff(legacySetDiff());
+    const chips = buildChips(save);
+    expect(chips).toEqual([]);
+  });
+
+  it("handles a save with no setDiff at all (pre-diff era)", () => {
+    const save = makeSaveWithDiff(undefined);
+    const chips = buildChips(save);
+    expect(chips).toEqual([]);
+  });
+
+  it("handles a save with changes but no setDiff", () => {
+    const save = makeSaveWithDiff(undefined, {
+      addedFiles: ["Samples/kick.wav"],
+      modifiedFiles: [],
+      removedFiles: [],
+      sizeDelta: 1024,
+    });
+    const chips = buildChips(save);
+    expect(chips).toEqual([{ label: "+1 file", kind: "add" }]);
+  });
+
+  it("handles multiple legacy TrackDiffs in one SetDiff without crashing", () => {
+    const save = makeSaveWithDiff(
+      legacySetDiff({
+        modifiedTracks: [
+          legacyTrackDiff({
+            name: "Kick",
+            clipCountDelta: 2,
+            addedDevices: ["Saturator"],
+          }),
+          legacyTrackDiff({
+            name: "Snare",
+            clipCountDelta: -1,
+            removedDevices: ["EQ Eight"],
+            mixerChanges: ["pan"],
+          }),
+          legacyTrackDiff({
+            name: "HiHat",
+            clipCountDelta: 0,
+          }),
+        ],
+      })
+    );
+    const chips = buildChips(save);
+    expect(chips.some((c) => c.label.includes("clip"))).toBe(true);
+    expect(chips.some((c) => c.label === "mixer changes")).toBe(true);
+  });
+});
+
+describe("buildChips – current data with all fields present", () => {
+  it("produces chips for tempo, tracks, devices, clips, mixer, color, toggles, arrangement, scenes, locators, reorder", () => {
+    const save = makeSaveWithDiff({
+      tempoChange: { from: 120, to: 128 },
+      timeSignatureChange: { from: "4/4", to: "3/4" },
+      addedTracks: [{ name: "Lead", type: "midi" }],
+      removedTracks: [{ name: "Old Pad", type: "audio" }],
+      modifiedTracks: [
+        {
+          name: "Bass",
+          type: "audio",
+          addedClips: ["clip-1"],
+          removedClips: [],
+          addedDevices: ["Compressor"],
+          removedDevices: [],
+          clipCountDelta: 1,
+          mixerChanges: ["volume"],
+          colorChanged: true,
+          deviceToggles: [{ name: "EQ Eight", enabled: false }],
+          renamedFrom: "Old Bass",
+        },
+      ],
+      arrangementLengthChange: { from: 64, to: 128 },
+      sceneCountChange: { from: 8, to: 10 },
+      locatorCountChange: { from: 2, to: 4 },
+      tracksReordered: true,
+    });
+    const chips = buildChips(save);
+    const labels = chips.map((c) => c.label);
+
+    expect(labels).toContain("120→128 bpm");
+    expect(labels).toContain("4/4→3/4");
+    expect(labels.some((l) => l.includes("MIDI"))).toBe(true);
+    expect(labels.some((l) => l.includes("Audio"))).toBe(true);
+    expect(labels.some((l) => l.includes("Old Bass"))).toBe(true);
+    expect(labels.some((l) => l.includes("device"))).toBe(true);
+    expect(labels.some((l) => l.includes("clip"))).toBe(true);
+    expect(labels).toContain("mixer changes");
+    expect(labels.some((l) => l.includes("recolored"))).toBe(true);
+    expect(labels.some((l) => l.includes("toggled"))).toBe(true);
+    expect(labels.some((l) => l.includes("bar"))).toBe(true);
+    expect(labels.some((l) => l.includes("scene"))).toBe(true);
+    expect(labels.some((l) => l.includes("locator"))).toBe(true);
+    expect(labels).toContain("tracks reordered");
   });
 });
