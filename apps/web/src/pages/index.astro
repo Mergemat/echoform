@@ -137,20 +137,22 @@ const githubIcon = `<svg class="h-4 w-4" viewBox="0 0 1024 1024" fill="currentCo
         </div>
       </div>
 
-      <!-- App screenshot placeholder -->
       <div class="relative mx-auto mt-16 w-full max-w-4xl">
         <div
-          class="overflow-hidden rounded-xl border border-edge bg-surface-raised shadow-2xl shadow-black/50"
+          class="overflow-hidden rounded-md border border-edge bg-surface-raised shadow-2xl shadow-black/50 ring-1 ring-white/5"
         >
-          <div class="flex h-8 items-center gap-1.5 border-b border-edge px-4">
-            <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
-          </div>
-          <div
-            class="aspect-[16/9] bg-surface-raised flex items-center justify-center"
-          >
-            <span class="text-[13px] text-text-tertiary">App screenshot</span>
+          <div class="relative aspect-[16/9] bg-surface-raised">
+            <img
+              src="/screenshot.webp"
+              alt="Echoform desktop app showing project history, saved versions, and change previews."
+              class="h-full w-full object-cover object-top"
+              loading="eager"
+              decoding="async"
+              fetchpriority="high"
+            >
+            <div
+              class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/12 to-transparent"
+            ></div>
           </div>
         </div>
         <!-- Bottom fade -->
