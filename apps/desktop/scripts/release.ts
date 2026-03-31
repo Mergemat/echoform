@@ -71,6 +71,17 @@ function writeVersion(version: string) {
   const packageJson = readPackageJson();
   packageJson.version = version;
   writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+  const indexPath = join(rootDir, "../../apps/web/src/pages/index.astro");
+  const indexContent = readFileSync(indexPath, "utf8");
+  const updated = indexContent.replace(
+    /^const version = "[^"]+";/m,
+    `const version = "${version}";`
+  );
+  if (updated === indexContent) {
+    fail("Could not find version string in apps/web/src/pages/index.astro");
+  }
+  writeFileSync(indexPath, updated);
 }
 
 function main() {
@@ -94,7 +105,7 @@ function main() {
   run("bun", ["run", "test"]);
   run("bun", ["run", "release"]);
 
-  run("git", ["add", "package.json"]);
+  run("git", ["add", "package.json", "../../apps/web/src/pages/index.astro"]);
   run("git", ["commit", "-m", `chore: release ${tagName}`]);
   run("git", ["tag", tagName]);
 
