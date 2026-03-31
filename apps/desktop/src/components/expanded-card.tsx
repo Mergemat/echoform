@@ -49,8 +49,8 @@ function trackChangeKey(t: TrackDiff): string {
 }
 
 interface TrackGroup {
-  tracks: TrackDiff[];
   key: string;
+  tracks: TrackDiff[];
 }
 
 function groupModifiedTracks(tracks: TrackDiff[]): TrackGroup[] {
@@ -344,9 +344,7 @@ function useExpandedCardView({
             </div>
           )}
           {sd.tracksReordered && (
-            <div className="text-[11px] text-white/30">
-              Tracks reordered
-            </div>
+            <div className="text-[11px] text-white/30">Tracks reordered</div>
           )}
           {sd.addedTracks.length > 0 && (
             <div className="space-y-px">
@@ -382,88 +380,89 @@ function useExpandedCardView({
               ))}
             </div>
           )}
-          {sd.modifiedTracks.length > 0 && (() => {
-            const groups = groupModifiedTracks(sd.modifiedTracks);
-            return groups.map((g) => {
-              const rep = g.tracks[0]!;
-              const names = g.tracks.map((t) => t.name);
-              const hasDetail =
-                rep.addedDevices.length > 0 ||
-                rep.removedDevices.length > 0 ||
-                (rep.deviceToggles ?? []).length > 0 ||
-                rep.colorChanged ||
-                rep.clipCountDelta !== 0 ||
-                rep.mixerChanges.length > 0;
-              return (
-                <div
-                  className="space-y-px text-[11px]"
-                  key={g.key}
-                >
-                  <div className="flex items-center gap-1 text-white/40">
-                    {g.tracks.length === 1 && (
-                      <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
-                        {TTRACK[rep.type] ?? rep.type}
+          {sd.modifiedTracks.length > 0 &&
+            (() => {
+              const groups = groupModifiedTracks(sd.modifiedTracks);
+              return groups.map((g) => {
+                const rep = g.tracks[0]!;
+                const names = g.tracks.map((t) => t.name);
+                const hasDetail =
+                  rep.addedDevices.length > 0 ||
+                  rep.removedDevices.length > 0 ||
+                  (rep.deviceToggles ?? []).length > 0 ||
+                  rep.colorChanged ||
+                  rep.clipCountDelta !== 0 ||
+                  rep.mixerChanges.length > 0;
+                return (
+                  <div className="space-y-px text-[11px]" key={g.key}>
+                    <div className="flex items-center gap-1 text-white/40">
+                      {g.tracks.length === 1 && (
+                        <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
+                          {TTRACK[rep.type] ?? rep.type}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {g.tracks.length === 1
+                          ? rep.name
+                          : `${names.join(", ")}`}
                       </span>
-                    )}
-                    <span className="truncate">
-                      {g.tracks.length === 1
-                        ? rep.name
-                        : `${names.join(", ")}`}
-                    </span>
-                    {g.tracks.length > 1 && (
-                      <span className="shrink-0 text-[9px] text-white/15">
-                        ({g.tracks.length} tracks)
-                      </span>
-                    )}
-                    {rep.renamedFrom && g.tracks.length === 1 && (
-                      <span className="text-[10px] text-white/15">
-                        ← {rep.renamedFrom}
-                      </span>
-                    )}
-                  </div>
-                  {hasDetail && (
-                    <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
-                      {rep.colorChanged && (
-                        <span className="text-white/30">color changed</span>
-                      )}
-                      {rep.addedDevices.length > 0 && (
-                        <span className="text-emerald-400/40">
-                          +{rep.addedDevices.join(", ")}
+                      {g.tracks.length > 1 && (
+                        <span className="shrink-0 text-[9px] text-white/15">
+                          ({g.tracks.length} tracks)
                         </span>
                       )}
-                      {rep.removedDevices.length > 0 && (
-                        <span className="text-red-400/40">
-                          −{rep.removedDevices.join(", ")}
+                      {rep.renamedFrom && g.tracks.length === 1 && (
+                        <span className="text-[10px] text-white/15">
+                          ← {rep.renamedFrom}
                         </span>
-                      )}
-                      {(rep.deviceToggles ?? []).length > 0 && (
-                        <span className="text-amber-400/40">
-                          {(rep.deviceToggles ?? [])
-                            .map((d) => `${d.name} ${d.enabled ? "on" : "off"}`)
-                            .join(", ")}
-                        </span>
-                      )}
-                      {rep.clipCountDelta !== 0 && (
-                        <span
-                          className={
-                            rep.clipCountDelta > 0
-                              ? "text-emerald-400/40"
-                              : "text-red-400/40"
-                          }
-                        >
-                          {rep.clipCountDelta > 0 ? "+" : ""}
-                          {rep.clipCountDelta} clips
-                        </span>
-                      )}
-                      {rep.mixerChanges.length > 0 && (
-                        <span>{rep.mixerChanges.join(", ")}</span>
                       )}
                     </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
+                    {hasDetail && (
+                      <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
+                        {rep.colorChanged && (
+                          <span className="text-white/30">color changed</span>
+                        )}
+                        {rep.addedDevices.length > 0 && (
+                          <span className="text-emerald-400/40">
+                            +{rep.addedDevices.join(", ")}
+                          </span>
+                        )}
+                        {rep.removedDevices.length > 0 && (
+                          <span className="text-red-400/40">
+                            −{rep.removedDevices.join(", ")}
+                          </span>
+                        )}
+                        {(rep.deviceToggles ?? []).length > 0 && (
+                          <span className="text-amber-400/40">
+                            {(rep.deviceToggles ?? [])
+                              .map(
+                                (d) =>
+                                  `${d.name} ${d.enabled ? "on" : "off"}`
+                              )
+                              .join(", ")}
+                          </span>
+                        )}
+                        {rep.clipCountDelta !== 0 && (
+                          <span
+                            className={
+                              rep.clipCountDelta > 0
+                                ? "text-emerald-400/40"
+                                : "text-red-400/40"
+                            }
+                          >
+                            {rep.clipCountDelta > 0 ? "+" : ""}
+                            {rep.clipCountDelta} clips
+                          </span>
+                        )}
+                        {rep.mixerChanges.length > 0 && (
+                          <span>{rep.mixerChanges.join(", ")}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
         </div>
       )}
 
