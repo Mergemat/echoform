@@ -116,3 +116,6 @@ jobs:
           gh release edit "$TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false
+
+      - name: Trigger marketing site rebuild
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
