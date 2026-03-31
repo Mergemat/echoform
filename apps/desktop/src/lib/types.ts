@@ -12,6 +12,8 @@ export type {
   Project,
   RootSuggestion,
   Save,
+  SetDiff,
+  TrackDiff,
   TrackedRoot,
   TrackSummaryItem,
   WsCommand,
