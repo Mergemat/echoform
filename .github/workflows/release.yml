@@ -15,7 +15,7 @@ permissions:
 jobs:
   macos-release:
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -26,18 +26,16 @@ jobs:
         with:
           bun-version: 1.3.9
 
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install server dependencies
-        working-directory: server
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Verify repository
         run: bun run check
+        working-directory: apps/desktop
 
       - name: Build release artifacts
         run: bun run release
+        working-directory: apps/desktop
 
       - name: Publish GitHub release
         env:
@@ -45,10 +43,10 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           shopt -s nullglob
-          files=(release/*.dmg release/*.zip release/*.blockmap release/latest*.yml)
+          files=(apps/desktop/release/*.dmg apps/desktop/release/*.zip apps/desktop/release/*.blockmap apps/desktop/release/latest*.yml)
 
           if [ ${#files[@]} -eq 0 ]; then
-            echo "No release artifacts found in release/"
+            echo "No release artifacts found in apps/desktop/release/"
             exit 1
           fi
 
@@ -71,15 +69,12 @@ jobs:
         with:
           bun-version: 1.3.9
 
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install server dependencies
-        working-directory: server
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Build release artifacts
         run: bun run release:win
+        working-directory: apps/desktop
 
       - name: Publish GitHub release
         env:
@@ -88,10 +83,10 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          files=(release/*.exe release/*.zip release/*.blockmap release/latest*.yml)
+          files=(apps/desktop/release/*.exe apps/desktop/release/*.zip apps/desktop/release/*.blockmap apps/desktop/release/latest*.yml)
 
           if [ ${#files[@]} -eq 0 ]; then
-            echo "No release artifacts found in release/"
+            echo "No release artifacts found in apps/desktop/release/"
             exit 1
           fi
 

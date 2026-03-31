@@ -8,11 +8,10 @@
 coverage/
 *.tsbuildinfo
 node_modules
-server/node_modules
 .echoform-state
 .ablegit-state
 dist
 .gstack/
 release
-electron/bin
+apps/desktop/electron/bin
 *.bun-build

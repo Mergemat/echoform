@@ -16,6 +16,7 @@ import { getServerRestartDelayMs } from "./server-supervisor.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
+const monorepoRoot = dirname(dirname(projectRoot));
 const port = Number(process.env.PORT || 3001);
 const rendererUrl = process.env.ECHOFORM_RENDERER_URL?.trim() || null;
 const useExternalServer = rendererUrl !== null;
@@ -111,8 +112,8 @@ function resolveServerProcess() {
 
   return {
     command: "bun",
-    args: ["server/src/server.ts"],
-    cwd: projectRoot,
+    args: ["packages/server/src/server.ts"],
+    cwd: monorepoRoot,
   };
 }
 

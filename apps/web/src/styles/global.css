@@ -1,0 +1,42 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --color-surface: oklch(0.13 0.006 260);
+  --color-surface-raised: oklch(0.17 0.008 260);
+  --color-surface-overlay: oklch(0.2 0.01 260);
+  --color-edge: oklch(1 0 0 / 8%);
+  --color-edge-strong: oklch(1 0 0 / 14%);
+  --color-text-primary: oklch(0.95 0.005 250);
+  --color-text-secondary: oklch(0.6 0.015 250);
+  --color-text-tertiary: oklch(0.45 0.01 250);
+  --color-teal: oklch(0.65 0.14 182);
+  --color-teal-dim: oklch(0.45 0.1 182);
+  --color-teal-glow: oklch(0.65 0.14 182 / 20%);
+}
+
+@layer base {
+	* {
+		box-sizing: border-box;
+	}
+	html {
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		text-rendering: optimizeLegibility;
+		scroll-behavior: smooth;
+	}
+	body {
+		font-family: var(--font-sans);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		margin: 0;
+		min-height: 100dvh;
+	}
+	::selection {
+		background: var(--color-teal-glow);
+		color: var(--color-text-primary);
+	}
+}
