@@ -74,7 +74,7 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
-  launch("bun", ["run", "dev:server"], {
+  launch("bun", ["--watch", "../../packages/server/src/server.ts"], {
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
   });
   await waitFor("http://127.0.0.1:3001/api/session", "Echoform server");

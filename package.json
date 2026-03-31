@@ -1,150 +1,19 @@
 {
-  "name": "echoform",
-  "private": true,
-  "version": "0.0.6",
-  "description": "Desktop version history for Ableton projects with previews and recovery.",
-  "author": "b.omarov",
-  "type": "module",
-  "main": "electron/main.mjs",
-  "packageManager": "bun@1.3.9",
-  "workspaces": [
-    "server"
-  ],
-  "scripts": {
-    "dev": "bun run dev:app",
-    "dev:app": "bun run scripts/dev-app.ts",
-    "dev:client": "node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5193 --strictPort",
-    "dev:server": "bun --watch server/src/server.ts",
-    "build": "tsc -b && vite build",
-    "build:server": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/echoform-server server/src/server.ts",
-    "build:server:win": "mkdir -p electron/bin && bun build --compile --target=bun-windows-x64 --outfile electron/bin/echoform-server.exe server/src/server.ts",
-    "dist": "bun run build && bun run build:server && bunx electron-builder --mac dir --publish never",
-    "dist:win": "bun run build && bun run build:server:win && bunx electron-builder --win dir --publish never",
-    "release": "bun run build && bun run build:server && bunx electron-builder --mac zip dmg --publish never",
-    "release:win": "bun run build && bun run build:server:win && bunx electron-builder --win nsis zip --publish never",
-    "release:ship": "bun run scripts/release.ts",
-    "lint": "ultracite check",
-    "format": "ultracite fix",
-    "test": "bun run test:client && bun run test:server",
-    "test:client": "vitest --run",
-    "test:server": "bun --cwd server test",
-    "typecheck": "tsc --noEmit && bunx tsc --noEmit -p server/tsconfig.json",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run build"
-  },
-  "build": {
-    "appId": "com.bomarov.echoform",
-    "productName": "Echoform",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "electron/**/*",
-      "!electron/bin/**/*",
-      "package.json"
-    ],
-    "npmRebuild": false,
-    "nodeGypRebuild": false,
-    "extraResources": [
-      {
-        "from": "dist",
-        "to": "dist"
-      },
-      {
-        "from": "electron/bin",
-        "to": "bin"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.music",
-      "icon": "electron/icon.png",
-      "target": [
-        "dir"
-      ],
-      "extendInfo": {
-        "LSUIElement": true,
-        "NSDocumentsFolderUsageDescription": "Echoform needs access to your documents to find and version Ableton projects.",
-        "NSDesktopFolderUsageDescription": "Echoform needs access to your desktop to find and version Ableton projects.",
-        "NSDownloadsFolderUsageDescription": "Echoform needs access to your downloads to find and version Ableton projects."
-      }
-    },
-    "dmg": {
-      "contents": [
-        {
-          "x": 130,
-          "y": 220
-        },
-        {
-          "x": 410,
-          "y": 220,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ],
-      "window": {
-        "width": 540,
-        "height": 380
-      }
-    },
-    "win": {
-      "icon": "electron/icon.png",
-      "target": [
-        "nsis",
-        "zip"
-      ]
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false
-    }
-  },
-  "devDependencies": {
-    "@base-ui/react": "^1.3.0",
-    "@biomejs/biome": "2.4.9",
-    "@fontsource-variable/inter": "^5.2.8",
-    "@phosphor-icons/react": "^2.1.10",
-    "@rolldown/plugin-babel": "^0.2.2",
-    "@tailwindcss/vite": "^4.2.1",
-    "@tanstack/react-virtual": "^3.13.23",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/jsdom": "^28.0.1",
-    "@types/node": "^25.5.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "cmdk": "^1.1.1",
-    "date-fns": "^4.1.0",
-    "electron": "^41.1.0",
-    "electron-builder": "^26.8.1",
-    "embla-carousel-react": "^8.6.0",
-    "input-otp": "^1.4.2",
-    "jsdom": "^29.0.1",
-    "next-themes": "^0.4.6",
-    "radix-ui": "^1.4.3",
-    "react": "^19.2.4",
-    "react-day-picker": "^9.14.0",
-    "react-dom": "^19.2.4",
-    "react-resizable-panels": "^4.8.0",
-    "recharts": "3.8.1",
-    "shadcn": "^4.1.1",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.2.1",
-    "tw-animate-css": "^1.4.0",
-    "typescript": "~6.0.2",
-    "ultracite": "7.4.0",
-    "vaul": "^1.1.2",
-    "vite": "^8.0.3",
-    "vitest": "^4.1.2",
-    "zustand": "^5.0.12"
-  },
-  "dependencies": {
-    "@tanstack/react-query": "^5.95.2",
-    "wavesurfer.js": "^7.12.5"
-  }
+	"name": "echoform-monorepo",
+	"private": true,
+	"packageManager": "bun@1.3.9",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "bun run --cwd apps/desktop dev",
+		"dev:web": "bun run --cwd apps/web dev",
+		"build": "bun run --cwd apps/desktop build",
+		"build:web": "bun run --cwd apps/web build",
+		"test": "bun run --cwd apps/desktop test",
+		"lint": "bun run --cwd apps/desktop lint",
+		"typecheck": "bun run --cwd apps/desktop typecheck",
+		"check": "bun run --cwd apps/desktop check"
+	}
 }
