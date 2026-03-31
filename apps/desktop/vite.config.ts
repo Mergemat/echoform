@@ -1,17 +1,25 @@
 import path from "node:path";
 import babel from "@rolldown/plugin-babel";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: {
+    sourcemap: true,
+  },
   plugins: [
     react(),
     babel({
       presets: [reactCompilerPreset()],
     }),
     tailwindcss(),
+    sentryVitePlugin({
+      org: "base-hn",
+      project: "4511141666816080",
+    }),
   ],
   resolve: {
     alias: {

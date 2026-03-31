@@ -1,3 +1,10 @@
+import * as Sentry from "@sentry/electron/main";
+
+Sentry.init({
+  dsn: "https://156315951684d5acfd672d49d6bd1e8a@o4507184585244672.ingest.de.sentry.io/4511141666816080",
+  release: `echoform@${process.env.npm_package_version ?? "0.0.0"}`,
+});
+
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
