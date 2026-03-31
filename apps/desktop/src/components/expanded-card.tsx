@@ -12,7 +12,7 @@ import {
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { basename } from "@/lib/path";
 import { usePreviewStore } from "@/lib/preview-store";
-import type { Idea, Project, Save } from "@/lib/types";
+import type { Idea, Project, Save, TrackDiff } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { PreviewRequestDialog } from "./preview-request-dialog";
 import {
@@ -30,6 +30,45 @@ const TTRACK: Record<string, string> = {
   return: "Return",
   group: "Group",
 };
+
+/** Fingerprint a track's changes so identical edits can be grouped. */
+function trackChangeKey(t: TrackDiff): string {
+  const parts = [
+    t.addedDevices.slice().sort().join(","),
+    t.removedDevices.slice().sort().join(","),
+    (t.deviceToggles ?? [])
+      .map((d) => `${d.name}:${d.enabled}`)
+      .sort()
+      .join(","),
+    String(t.clipCountDelta),
+    t.mixerChanges.slice().sort().join(","),
+    String(t.colorChanged ?? false),
+    t.renamedFrom ?? "",
+  ];
+  return parts.join("|");
+}
+
+interface TrackGroup {
+  tracks: TrackDiff[];
+  key: string;
+}
+
+function groupModifiedTracks(tracks: TrackDiff[]): TrackGroup[] {
+  const groups: TrackGroup[] = [];
+  const map = new Map<string, TrackGroup>();
+  for (const t of tracks) {
+    const k = trackChangeKey(t);
+    const existing = map.get(k);
+    if (existing) {
+      existing.tracks.push(t);
+    } else {
+      const g: TrackGroup = { tracks: [t], key: k };
+      map.set(k, g);
+      groups.push(g);
+    }
+  }
+  return groups;
+}
 
 interface ExpandedCardProps {
   idea: Idea | undefined;
@@ -262,6 +301,53 @@ function useExpandedCardView({
               </span>
             </div>
           )}
+          {sd.arrangementLengthChange && (
+            <div className="flex items-center gap-1 text-[11px]">
+              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                Length
+              </span>
+              <span className="font-mono text-white/35 tabular-nums">
+                {Math.round(sd.arrangementLengthChange.from / 4)} bars
+              </span>
+              <span className="text-white/12">→</span>
+              <span className="font-mono text-white/55 tabular-nums">
+                {Math.round(sd.arrangementLengthChange.to / 4)} bars
+              </span>
+            </div>
+          )}
+          {sd.sceneCountChange && (
+            <div className="flex items-center gap-1 text-[11px]">
+              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                Scenes
+              </span>
+              <span className="font-mono text-white/35 tabular-nums">
+                {sd.sceneCountChange.from}
+              </span>
+              <span className="text-white/12">→</span>
+              <span className="font-mono text-white/55 tabular-nums">
+                {sd.sceneCountChange.to}
+              </span>
+            </div>
+          )}
+          {sd.locatorCountChange && (
+            <div className="flex items-center gap-1 text-[11px]">
+              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                Cues
+              </span>
+              <span className="font-mono text-white/35 tabular-nums">
+                {sd.locatorCountChange.from}
+              </span>
+              <span className="text-white/12">→</span>
+              <span className="font-mono text-white/55 tabular-nums">
+                {sd.locatorCountChange.to}
+              </span>
+            </div>
+          )}
+          {sd.tracksReordered && (
+            <div className="text-[11px] text-white/30">
+              Tracks reordered
+            </div>
+          )}
           {sd.addedTracks.length > 0 && (
             <div className="space-y-px">
               {sd.addedTracks.map((t) => (
@@ -296,56 +382,88 @@ function useExpandedCardView({
               ))}
             </div>
           )}
-          {sd.modifiedTracks.map((t) => (
-            <div
-              className="space-y-px text-[11px]"
-              key={`mod-${t.type}-${t.name}`}
-            >
-              <div className="flex items-center gap-1 text-white/40">
-                <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
-                  {TTRACK[t.type] ?? t.type}
-                </span>
-                <span className="truncate">{t.name}</span>
-                {t.renamedFrom && (
-                  <span className="text-[10px] text-white/15">
-                    ← {t.renamedFrom}
-                  </span>
-                )}
-              </div>
-              {(t.addedDevices.length > 0 ||
-                t.removedDevices.length > 0 ||
-                t.clipCountDelta !== 0 ||
-                t.mixerChanges.length > 0) && (
-                <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
-                  {t.addedDevices.length > 0 && (
-                    <span className="text-emerald-400/40">
-                      +{t.addedDevices.join(", ")}
+          {sd.modifiedTracks.length > 0 && (() => {
+            const groups = groupModifiedTracks(sd.modifiedTracks);
+            return groups.map((g) => {
+              const rep = g.tracks[0]!;
+              const names = g.tracks.map((t) => t.name);
+              const hasDetail =
+                rep.addedDevices.length > 0 ||
+                rep.removedDevices.length > 0 ||
+                (rep.deviceToggles ?? []).length > 0 ||
+                rep.colorChanged ||
+                rep.clipCountDelta !== 0 ||
+                rep.mixerChanges.length > 0;
+              return (
+                <div
+                  className="space-y-px text-[11px]"
+                  key={g.key}
+                >
+                  <div className="flex items-center gap-1 text-white/40">
+                    {g.tracks.length === 1 && (
+                      <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
+                        {TTRACK[rep.type] ?? rep.type}
+                      </span>
+                    )}
+                    <span className="truncate">
+                      {g.tracks.length === 1
+                        ? rep.name
+                        : `${names.join(", ")}`}
                     </span>
-                  )}
-                  {t.removedDevices.length > 0 && (
-                    <span className="text-red-400/40">
-                      −{t.removedDevices.join(", ")}
-                    </span>
-                  )}
-                  {t.clipCountDelta !== 0 && (
-                    <span
-                      className={
-                        t.clipCountDelta > 0
-                          ? "text-emerald-400/40"
-                          : "text-red-400/40"
-                      }
-                    >
-                      {t.clipCountDelta > 0 ? "+" : ""}
-                      {t.clipCountDelta} clips
-                    </span>
-                  )}
-                  {t.mixerChanges.length > 0 && (
-                    <span>{t.mixerChanges.join(", ")}</span>
+                    {g.tracks.length > 1 && (
+                      <span className="shrink-0 text-[9px] text-white/15">
+                        ({g.tracks.length} tracks)
+                      </span>
+                    )}
+                    {rep.renamedFrom && g.tracks.length === 1 && (
+                      <span className="text-[10px] text-white/15">
+                        ← {rep.renamedFrom}
+                      </span>
+                    )}
+                  </div>
+                  {hasDetail && (
+                    <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
+                      {rep.colorChanged && (
+                        <span className="text-white/30">color changed</span>
+                      )}
+                      {rep.addedDevices.length > 0 && (
+                        <span className="text-emerald-400/40">
+                          +{rep.addedDevices.join(", ")}
+                        </span>
+                      )}
+                      {rep.removedDevices.length > 0 && (
+                        <span className="text-red-400/40">
+                          −{rep.removedDevices.join(", ")}
+                        </span>
+                      )}
+                      {(rep.deviceToggles ?? []).length > 0 && (
+                        <span className="text-amber-400/40">
+                          {(rep.deviceToggles ?? [])
+                            .map((d) => `${d.name} ${d.enabled ? "on" : "off"}`)
+                            .join(", ")}
+                        </span>
+                      )}
+                      {rep.clipCountDelta !== 0 && (
+                        <span
+                          className={
+                            rep.clipCountDelta > 0
+                              ? "text-emerald-400/40"
+                              : "text-red-400/40"
+                          }
+                        >
+                          {rep.clipCountDelta > 0 ? "+" : ""}
+                          {rep.clipCountDelta} clips
+                        </span>
+                      )}
+                      {rep.mixerChanges.length > 0 && (
+                        <span>{rep.mixerChanges.join(", ")}</span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            });
+          })()}
         </div>
       )}
 
