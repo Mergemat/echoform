@@ -1,7 +1,7 @@
 {
   "name": "echoform",
   "private": true,
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Desktop version history for Ableton projects with previews and recovery.",
   "author": "b.omarov",
   "type": "module",
