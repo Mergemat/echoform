@@ -13,6 +13,9 @@ import type { TrackSummaryItem } from "./types";
 // ── Public types ────────────────────────────────────────────────────
 
 export interface SetSnapshot {
+  arrangementLength: number; // beats (from MainTrack's ArrangementLength)
+  locatorCount: number; // number of cue points / locators
+  sceneCount: number; // number of scenes in session view
   tempo: number;
   timeSignature: string; // e.g. "4/4"
   tracks: TrackSnapshot[];
@@ -501,5 +504,19 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
   );
   const timeSignature = decodeTimeSignature(tsEncoded);
 
-  return { tempo, timeSignature, tracks };
+  // ── Arrangement length (beats, from MainTrack) ──────────────────
+  const mainSeqRoot = val(mainTrack, "DeviceChain", "MainSequencer");
+  const arrangementLength = Number(
+    attrVal(val(mainSeqRoot, "ClipTimeable", "ArrangerAutomation", "ArrangementLength")) ?? 0
+  );
+
+  // ── Scene count (Session view scenes) ───────────────────────────
+  const scenes = asArray(val(liveSet, "Scenes", "Scene"));
+  const sceneCount = scenes.length;
+
+  // ── Locator / cue point count ───────────────────────────────────
+  const locators = asArray(val(liveSet, "Locators", "Locators", "Locator"));
+  const locatorCount = locators.length;
+
+  return { tempo, timeSignature, tracks, arrangementLength, sceneCount, locatorCount };
 }
