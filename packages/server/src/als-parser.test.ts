@@ -75,6 +75,9 @@ describe("extractTrackSummary", () => {
     const snapshot: SetSnapshot = {
       tempo: 120,
       timeSignature: "4/4",
+      arrangementLength: 0,
+      locatorCount: 0,
+      sceneCount: 0,
       tracks: [
         makeTrack("group-1", "group", "Drums", { clipCount: 1 }),
         makeTrack("audio-1", "audio", "Kick", {
