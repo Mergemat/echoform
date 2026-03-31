@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreviewPlayer } from "@/components/preview-player";
 import type { Project, Save } from "@/lib/types";
@@ -143,7 +143,7 @@ describe("PreviewPlayer compare switching", () => {
 
   it("keeps exactly two players and switches by volume while preserving time", async () => {
     const project = makeProject();
-    render(
+    const view = render(
       <PreviewPlayer
         onClose={vi.fn()}
         project={project}
@@ -158,7 +158,7 @@ describe("PreviewPlayer compare switching", () => {
     });
 
     await act(async () => {
-      fireEvent.change(screen.getByRole("combobox"), {
+      fireEvent.change(view.getByRole("combobox"), {
         target: { value: "save-b" },
       });
     });
@@ -172,7 +172,7 @@ describe("PreviewPlayer compare switching", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Play preview" }));
+      fireEvent.click(view.getByRole("button", { name: "Play preview" }));
     });
 
     expect(MockWaveSurfer.instances).toHaveLength(2);
@@ -202,13 +202,13 @@ describe("PreviewPlayer compare switching", () => {
       laneA.emit("timeupdate", 32);
     });
 
-    expect(screen.getAllByText("A").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/0:32 \/ 1:30/)).toBeInTheDocument();
+    expect(view.getAllByText("A").length).toBeGreaterThanOrEqual(1);
+    expect(view.getByText(/0:32 \/ 1:30/)).toBeInTheDocument();
   });
 
   it("pauses the current preview before switching to another save", async () => {
     const project = makeProject();
-    const { rerender } = render(
+    const view = render(
       <PreviewPlayer
         key={project.saves[0]?.id}
         onClose={vi.fn()}
@@ -224,13 +224,13 @@ describe("PreviewPlayer compare switching", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Play preview" }));
+      fireEvent.click(view.getByRole("button", { name: "Play preview" }));
     });
 
     expect(firstLane.play).toHaveBeenCalledTimes(1);
     expect(firstLane.pause).not.toHaveBeenCalled();
 
-    rerender(
+    view.rerender(
       <PreviewPlayer
         key={project.saves[1]?.id}
         onClose={vi.fn()}
@@ -242,7 +242,7 @@ describe("PreviewPlayer compare switching", () => {
     expect(firstLane.pause).toHaveBeenCalled();
     expect(firstLane.destroy).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: "Play preview" })
+      view.getByRole("button", { name: "Play preview" })
     ).toBeInTheDocument();
     expect(MockWaveSurfer.instances[1]?.play).not.toHaveBeenCalled();
   });
