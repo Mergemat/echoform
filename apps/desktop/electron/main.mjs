@@ -427,6 +427,8 @@ ipcMain.handle("echoform:open-update", (_event, url) => {
   }
 });
 
+ipcMain.handle("echoform:get-update-info", () => latestUpdateInfo);
+
 function compareVersions(current, latest) {
   const parse = (v) => v.replace(/^v/, "").split(".").map(Number);
   const c = parse(current);
