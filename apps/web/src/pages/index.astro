@@ -1,13 +1,21 @@
 ---
 import "../styles/global.css";
+import DownloadDropdown from "../components/download-dropdown.astro";
 
 const title = "Echoform — Version history for Ableton projects";
-const description = "Desktop version history for Ableton Live projects with previews and recovery.";
+const description =
+  "Desktop version history for Ableton Live projects with previews and recovery.";
 const repo = "https://github.com/Mergemat/echoform";
 
-const releaseRes = await fetch("https://api.github.com/repos/Mergemat/echoform/releases/latest", {
-  headers: { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-});
+const releaseRes = await fetch(
+  "https://api.github.com/repos/Mergemat/echoform/releases/latest",
+  {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  }
+);
 const release = await releaseRes.json();
 const version: string = (release.tag_name as string).replace(/^v/, "");
 
@@ -16,262 +24,445 @@ const dl = {
   macIntel: `${repo}/releases/download/v${version}/Echoform-${version}.dmg`,
   win: `${repo}/releases/download/v${version}/Echoform.Setup.${version}.exe`,
 };
+
+const downloads = [
+  {
+    id: "mac-arm",
+    href: dl.macArm,
+    platform: "macOS",
+    architecture: "Apple Silicon",
+    icon: "apple",
+  },
+  {
+    id: "mac-intel",
+    href: dl.macIntel,
+    platform: "macOS",
+    architecture: "Intel",
+    icon: "apple",
+  },
+  {
+    id: "win",
+    href: dl.win,
+    platform: "Windows",
+    architecture: "x64",
+    icon: "windows",
+    dividerBefore: true,
+  },
+] as const;
+
 const githubIcon = `<svg class="h-4 w-4" viewBox="0 0 1024 1024" fill="currentColor"><path fill-rule="evenodd" d="M512 0C229.12 0 0 229.12 0 512c0 226.56 146.56 417.92 350.08 485.76 25.6 4.48 35.2-10.88 35.2-24.32 0-12.16-.64-52.48-.64-95.36-128.64 23.68-161.92-31.36-172.16-60.16-5.76-14.72-30.72-60.16-52.48-72.32-17.92-9.6-43.52-33.28-.64-33.92 40.32-.64 69.12 37.12 78.72 52.48 46.08 77.44 119.68 55.68 149.12 42.24 4.48-33.28 17.92-55.68 32.64-68.48-113.92-12.8-232.96-56.96-232.96-252.8 0-55.68 19.84-101.76 52.48-137.6-5.12-12.8-23.04-65.28 5.12-135.68 0 0 42.88-13.44 140.8 52.48 40.96-11.52 84.48-17.28 128-17.28s87.04 5.76 128 17.28c97.92-66.56 140.8-52.48 140.8-52.48 28.16 70.4 10.24 122.88 5.12 135.68 32.64 35.84 52.48 81.28 52.48 137.6 0 196.48-119.68 240-233.6 252.8 18.56 16 34.56 46.72 34.56 94.72 0 68.48-.64 123.52-.64 140.8 0 13.44 9.6 29.44 35.2 24.32C877.44 929.92 1024 737.92 1024 512 1024 229.12 794.88 0 512 0" clip-rule="evenodd"/></svg>`;
 ---
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content={description} />
+    <meta charset="utf-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content={description}>
     <title>{title}</title>
   </head>
   <body>
     <!-- NAV -->
-    <nav class="fixed top-0 left-0 right-0 z-50 border-b border-edge bg-surface/80 backdrop-blur-xl">
-      <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+    <nav
+      class="fixed top-0 left-0 right-0 z-50 border-b border-edge bg-surface/80 backdrop-blur-xl"
+    >
+      <div
+        class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
+      >
         <a href="/" class="flex items-center gap-2.5 text-text-primary">
-          <img src="/echoform.svg" alt="" class="h-6 w-6" />
-          <span class="text-[15px] font-semibold tracking-[-0.02em]">Echoform</span>
+          <img src="/echoform.svg" alt="" class="h-6 w-6">
+          <span class="text-[15px] font-semibold tracking-[-0.02em]"
+            >Echoform</span
+          >
         </a>
         <div class="flex items-center gap-4">
-          <a href={repo} class="flex items-center justify-center text-text-secondary transition-colors hover:text-text-primary" aria-label="GitHub">
+          <a
+            href={repo}
+            class="flex items-center justify-center text-text-secondary transition-colors hover:text-text-primary"
+            aria-label="GitHub"
+          >
             <Fragment set:html={githubIcon} />
           </a>
-          <div class="relative" data-dropdown>
-            <button class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal px-3.5 text-[13px] font-medium text-surface transition-opacity hover:opacity-90" data-dropdown-trigger>
-              Download
-              <svg class="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            <div class="absolute right-0 top-full mt-2 hidden w-56 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40" data-dropdown-menu>
-              <a href={dl.macArm} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-arm">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Apple Silicon</div></div>
-              </a>
-              <a href={dl.macIntel} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-intel">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Intel</div></div>
-              </a>
-              <div class="border-t border-edge"></div>
-              <a href={dl.win} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="win">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l8-1.25V12H3zm0 .5h8v6.5l-8-1.25V12.5zM11.5 5.4L21 3.75V12H11.5V5.4zm0 7.1H21v8.25l-9.5-1.65V12.5z"/></svg>
-                <div><div class="font-medium text-text-primary">Windows</div><div class="text-[11px] text-text-tertiary">x64</div></div>
-              </a>
-            </div>
-          </div>
+          <DownloadDropdown
+            options={downloads}
+            buttonLabel="Download"
+            variant="nav"
+          />
         </div>
       </div>
     </nav>
 
     <!-- HERO -->
-    <section class="relative flex min-h-[85dvh] flex-col items-center justify-center px-6 pt-28">
+    <section
+      class="relative flex min-h-[85dvh] flex-col items-center justify-center px-6 pt-28"
+    >
       <!-- Gradient glow -->
-      <div class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-teal/[0.04] blur-[120px]"></div>
+      <div
+        class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-teal/[0.04] blur-[120px]"
+      ></div>
 
       <div class="relative mx-auto max-w-2xl text-center">
-        <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-edge px-3 py-1">
+        <div
+          class="mb-6 inline-flex items-center gap-2 rounded-full border border-edge px-3 py-1"
+        >
           <span class="h-1.5 w-1.5 rounded-full bg-teal animate-pulse"></span>
-          <span class="text-[12px] font-medium tracking-wide text-text-secondary uppercase">v{version}</span>
+          <span
+            class="text-[12px] font-medium tracking-wide text-text-secondary uppercase"
+            >v{version}</span
+          >
         </div>
 
-        <h1 class="text-[clamp(2.25rem,5vw,3.5rem)] font-bold leading-[1.08] tracking-[-0.035em] text-text-primary">
-          Version history for<br />Ableton projects
+        <h1
+          class="text-[clamp(2.25rem,5vw,3.5rem)] font-bold leading-[1.08] tracking-[-0.035em] text-text-primary"
+        >
+          Version history for<br>Ableton projects
         </h1>
 
-        <p class="mx-auto mt-5 max-w-md text-[16px] leading-relaxed text-text-secondary">
-          Every save, tracked. Preview past versions, compare changes, and recover anything — without leaving your workflow.
+        <p
+          class="mx-auto mt-5 max-w-md text-[16px] leading-relaxed text-text-secondary"
+        >
+          Every save, tracked. Preview past versions, compare changes, and
+          recover anything — without leaving your workflow.
         </p>
 
         <div class="mt-8 flex flex-col items-center gap-3">
-          <div class="relative" data-dropdown>
-            <button class="inline-flex h-10 items-center gap-2 rounded-lg bg-teal px-5 text-[14px] font-medium text-surface transition-opacity hover:opacity-90" data-dropdown-trigger>
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4" /></svg>
-              <span id="hero-dl-label">Download for macOS</span>
-              <svg class="h-3.5 w-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            <div class="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden w-56 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40" data-dropdown-menu>
-              <a href={dl.macArm} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-arm">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Apple Silicon</div></div>
-              </a>
-              <a href={dl.macIntel} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-intel">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Intel</div></div>
-              </a>
-              <div class="border-t border-edge"></div>
-              <a href={dl.win} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="win">
-                <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l8-1.25V12H3zm0 .5h8v6.5l-8-1.25V12.5zM11.5 5.4L21 3.75V12H11.5V5.4zm0 7.1H21v8.25l-9.5-1.65V12.5z"/></svg>
-                <div><div class="font-medium text-text-primary">Windows</div><div class="text-[11px] text-text-tertiary">x64</div></div>
-              </a>
-            </div>
-          </div>
+          <DownloadDropdown
+            options={downloads}
+            buttonLabel="Download for macOS"
+            variant="hero"
+            dynamicLabel={true}
+            macLabel="Download for macOS"
+            winLabel="Download for Windows"
+          />
         </div>
       </div>
 
       <!-- App screenshot placeholder -->
       <div class="relative mx-auto mt-16 w-full max-w-4xl">
-        <div class="overflow-hidden rounded-xl border border-edge bg-surface-raised shadow-2xl shadow-black/50">
+        <div
+          class="overflow-hidden rounded-xl border border-edge bg-surface-raised shadow-2xl shadow-black/50"
+        >
           <div class="flex h-8 items-center gap-1.5 border-b border-edge px-4">
             <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
             <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
             <span class="h-2.5 w-2.5 rounded-full bg-edge-strong"></span>
           </div>
-          <div class="aspect-[16/9] bg-surface-raised flex items-center justify-center">
+          <div
+            class="aspect-[16/9] bg-surface-raised flex items-center justify-center"
+          >
             <span class="text-[13px] text-text-tertiary">App screenshot</span>
           </div>
         </div>
         <!-- Bottom fade -->
-        <div class="pointer-events-none absolute -bottom-px left-0 right-0 h-32 bg-gradient-to-t from-surface to-transparent"></div>
+        <div
+          class="pointer-events-none absolute -bottom-px left-0 right-0 h-32 bg-gradient-to-t from-surface to-transparent"
+        ></div>
       </div>
     </section>
 
     <!-- FEATURES -->
     <section class="mx-auto max-w-5xl px-6 py-24">
-      <div class="grid gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-2 lg:grid-cols-3">
-
+      <div
+        class="grid gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-2 lg:grid-cols-3"
+      >
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Automatic tracking</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">Every save creates a version. No commits, no commands — just work.</p>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Automatic tracking
+          </h3>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            Every save creates a version. No commits, no commands — just work.
+          </p>
         </div>
 
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Audio preview</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">Listen to any version directly in the app with waveform visualization.</p>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Audio preview
+          </h3>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            Listen to any version directly in the app with waveform
+            visualization.
+          </p>
         </div>
 
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6M12 9v6" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 12h6M12 9v6"
+              />
+            </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Track changes</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">See what changed between versions — tracks added, removed, or renamed.</p>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Track changes
+          </h3>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            See what changed between versions — tracks added, removed, or
+            renamed.
+          </p>
         </div>
 
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Instant recovery</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">Restore any version with one click. Never lose a creative direction again.</p>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Instant recovery
+          </h3>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            Restore any version with one click. Never lose a creative direction
+            again.
+          </p>
         </div>
 
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
+              />
+            </svg>
           </div>
           <h3 class="text-[14px] font-semibold text-text-primary">Branching</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">Fork your project into branches. Explore ideas without risk.</p>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            Fork your project into branches. Explore ideas without risk.
+          </p>
         </div>
 
         <div class="bg-surface p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay">
-            <svg class="h-4 w-4 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7" /><path stroke-linecap="round" stroke-linejoin="round" d="M9 4h6l1 3H8L9 4z" /></svg>
+          <div
+            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+          >
+            <svg
+              class="h-4 w-4 text-teal"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 4h6l1 3H8L9 4z"
+              />
+            </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Disk awareness</h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">Monitor storage usage per project. Prune old versions to reclaim space.</p>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Disk awareness
+          </h3>
+          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
+            Monitor storage usage per project. Prune old versions to reclaim
+            space.
+          </p>
         </div>
-
       </div>
     </section>
 
     <!-- CTA -->
     <section class="mx-auto max-w-5xl px-6 py-24">
-      <div class="relative overflow-hidden rounded-xl border border-edge bg-surface-raised p-12 text-center">
-        <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal/[0.06] via-transparent to-transparent"></div>
-        <h2 class="relative text-[clamp(1.5rem,3vw,2rem)] font-bold tracking-[-0.03em] text-text-primary">
+      <div
+        class="relative rounded-xl border border-edge bg-surface-raised p-12 text-center"
+      >
+        <div
+          class="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal/[0.06] via-transparent to-transparent"
+        ></div>
+        <h2
+          class="relative text-[clamp(1.5rem,3vw,2rem)] font-bold tracking-[-0.03em] text-text-primary"
+        >
           Stop losing work.
         </h2>
-        <p class="relative mx-auto mt-3 max-w-sm text-[15px] text-text-secondary">
+        <p
+          class="relative mx-auto mt-3 max-w-sm text-[15px] text-text-secondary"
+        >
           Free and open source. macOS and Windows.
         </p>
-        <div class="relative mt-6 inline-block" data-dropdown>
-          <button class="inline-flex h-10 items-center gap-2 rounded-lg bg-teal px-5 text-[14px] font-medium text-surface transition-opacity hover:opacity-90" data-dropdown-trigger>
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4" /></svg>
-            Download Echoform
-            <svg class="h-3.5 w-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
-          </button>
-          <div class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden w-56 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40" data-dropdown-menu>
-            <a href={dl.macArm} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-arm">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-              <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Apple Silicon</div></div>
-            </a>
-            <a href={dl.macIntel} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="mac-intel">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-              <div><div class="font-medium text-text-primary">macOS</div><div class="text-[11px] text-text-tertiary">Intel</div></div>
-            </a>
-            <div class="border-t border-edge"></div>
-            <a href={dl.win} class="flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary" data-dl="win">
-              <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12V6.75l8-1.25V12H3zm0 .5h8v6.5l-8-1.25V12.5zM11.5 5.4L21 3.75V12H11.5V5.4zm0 7.1H21v8.25l-9.5-1.65V12.5z"/></svg>
-              <div><div class="font-medium text-text-primary">Windows</div><div class="text-[11px] text-text-tertiary">x64</div></div>
-            </a>
-          </div>
-        </div>
+        <DownloadDropdown
+          options={downloads}
+          buttonLabel="Download Echoform"
+          variant="cta"
+        />
       </div>
     </section>
 
     <!-- FOOTER -->
     <footer class="border-t border-edge">
-      <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+      <div
+        class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
+      >
         <div class="flex items-center gap-2 text-[13px] text-text-tertiary">
-          <img src="/echoform.svg" alt="" class="h-4 w-4 opacity-40" />
+          <img src="/echoform.svg" alt="" class="h-4 w-4 opacity-40">
           <span>Echoform</span>
         </div>
-        <a href={repo} class="flex items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary" aria-label="GitHub">
+        <a
+          href={repo}
+          class="flex items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
+          aria-label="GitHub"
+        >
           <Fragment set:html={githubIcon} />
         </a>
       </div>
     </footer>
     <script>
       // Dropdown toggle
-      document.querySelectorAll("[data-dropdown]").forEach((dropdown) => {
+      for (const dropdown of document.querySelectorAll("[data-dropdown]")) {
         const trigger = dropdown.querySelector("[data-dropdown-trigger]");
         const menu = dropdown.querySelector("[data-dropdown-menu]");
-        if (!trigger || !menu) return;
+        if (!(trigger && menu)) {
+          continue;
+        }
 
         trigger.addEventListener("click", (e) => {
           e.stopPropagation();
+
           // Close other dropdowns
-          document.querySelectorAll("[data-dropdown-menu]").forEach((m) => {
-            if (m !== menu) m.classList.add("hidden");
-          });
-          menu.classList.toggle("hidden");
+          for (const item of document.querySelectorAll("[data-dropdown]")) {
+            const itemTrigger = item.querySelector("[data-dropdown-trigger]");
+            const itemMenu = item.querySelector("[data-dropdown-menu]");
+            if (!(itemTrigger && itemMenu) || itemMenu === menu) {
+              continue;
+            }
+
+            itemMenu.classList.add("hidden");
+            itemTrigger.setAttribute("aria-expanded", "false");
+          }
+
+          const isHidden = menu.classList.toggle("hidden");
+          trigger.setAttribute("aria-expanded", String(!isHidden));
         });
-      });
+      }
 
       // Close on outside click
       document.addEventListener("click", () => {
-        document.querySelectorAll("[data-dropdown-menu]").forEach((m) => m.classList.add("hidden"));
+        for (const dropdown of document.querySelectorAll("[data-dropdown]")) {
+          const trigger = dropdown.querySelector("[data-dropdown-trigger]");
+          const menu = dropdown.querySelector("[data-dropdown-menu]");
+          if (!(trigger && menu)) {
+            continue;
+          }
+
+          menu.classList.add("hidden");
+          trigger.setAttribute("aria-expanded", "false");
+        }
       });
 
       // Close on Escape
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
-          document.querySelectorAll("[data-dropdown-menu]").forEach((m) => m.classList.add("hidden"));
+          for (const dropdown of document.querySelectorAll("[data-dropdown]")) {
+            const trigger = dropdown.querySelector("[data-dropdown-trigger]");
+            const menu = dropdown.querySelector("[data-dropdown-menu]");
+            if (!(trigger && menu)) {
+              continue;
+            }
+
+            menu.classList.add("hidden");
+            trigger.setAttribute("aria-expanded", "false");
+          }
         }
       });
 
       // Platform detection — highlight detected platform's option
       const isWin = navigator.platform.indexOf("Win") > -1;
-      const heroLabel = document.getElementById("hero-dl-label");
-      if (heroLabel) {
-        heroLabel.textContent = isWin ? "Download for Windows" : "Download for macOS";
+      for (const label of document.querySelectorAll("[data-download-label]")) {
+        const macLabel = label.getAttribute("data-label-mac");
+        const winLabel = label.getAttribute("data-label-win");
+        if (!(macLabel && winLabel)) {
+          continue;
+        }
+
+        label.textContent = isWin ? winLabel : macLabel;
       }
 
       // Add "recommended" badge to detected platform
       const selector = isWin ? '[data-dl="win"]' : '[data-dl="mac-arm"]';
-      document.querySelectorAll(selector).forEach((el) => {
+      for (const el of document.querySelectorAll(selector)) {
         const badge = document.createElement("span");
         badge.className = "ml-auto text-[10px] font-medium text-teal";
         badge.textContent = "Recommended";
         el.appendChild(badge);
-      });
+      }
     </script>
   </body>
 </html>
