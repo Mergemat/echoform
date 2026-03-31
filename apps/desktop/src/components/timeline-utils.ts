@@ -297,7 +297,8 @@ export function buildChips(save: Save): Chip[] {
     }
     // Arrangement length
     if (sd.arrangementLengthChange) {
-      const delta = sd.arrangementLengthChange.to - sd.arrangementLengthChange.from;
+      const delta =
+        sd.arrangementLengthChange.to - sd.arrangementLengthChange.from;
       const bars = Math.round(Math.abs(delta) / 4);
       chips.push({
         label: `${delta > 0 ? "+" : "\u2212"}${bars} bar${bars === 1 ? "" : "s"}`,
@@ -358,7 +359,11 @@ function isTrivialAutoSave(save: Save): boolean {
     if (sd.tempoChange || sd.timeSignatureChange) {
       return false;
     }
-    if (sd.arrangementLengthChange || sd.sceneCountChange || sd.locatorCountChange) {
+    if (
+      sd.arrangementLengthChange ||
+      sd.sceneCountChange ||
+      sd.locatorCountChange
+    ) {
       return false;
     }
     if (sd.tracksReordered) {

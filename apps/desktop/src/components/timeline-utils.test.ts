@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Idea, Project, Save } from "@/lib/types";
-import type {
-  SetDiff,
-  TrackDiff,
-} from "../../../../packages/server/src/types";
+import type { SetDiff, TrackDiff } from "../../../../packages/server/src/types";
 import {
   buildChips,
   buildTimelineDisplayItems,
@@ -225,10 +222,7 @@ function legacySetDiff(overrides: Partial<SetDiff> = {}): SetDiff {
   } as SetDiff;
 }
 
-function makeSaveWithDiff(
-  setDiff?: SetDiff,
-  changes?: Save["changes"]
-): Save {
+function makeSaveWithDiff(setDiff?: SetDiff, changes?: Save["changes"]): Save {
   return {
     id: "save-bc",
     label: "old save",
