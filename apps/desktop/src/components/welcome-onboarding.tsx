@@ -13,6 +13,7 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { useOnboardingStore } from "@/lib/onboarding-store";
+import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +83,10 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
       <Button
         className="mt-10 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={onNext}
+        onClick={() => {
+          posthog.capture("onboarding_step_completed", { step: "welcome" });
+          onNext();
+        }}
         size="lg"
         type="button"
       >
@@ -125,6 +129,7 @@ function PickFolderStep() {
       return;
     }
     setAddedPath(trimmed);
+    posthog.capture("onboarding_folder_added", { source: "suggestion" });
     sendDaemonCommand({ type: "add-root", path: trimmed });
     sendDaemonCommand({ type: "discover-root-suggestions" });
   };
@@ -139,6 +144,7 @@ function PickFolderStep() {
       if (!selectedPath) {
         return;
       }
+      posthog.capture("onboarding_folder_added", { source: "picker" });
       watchPath(selectedPath);
     } catch (error) {
       const message =
@@ -578,7 +584,14 @@ function HowItWorksStep({ onNext }: { onNext: () => void }) {
       {/* Navigation */}
       <Button
         className="mt-8 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={isLast ? onNext : () => setSubStep((s) => s + 1)}
+        onClick={() => {
+          if (isLast) {
+            posthog.capture("onboarding_completed");
+            onNext();
+          } else {
+            setSubStep((s) => s + 1);
+          }
+        }}
         size="lg"
         type="button"
       >

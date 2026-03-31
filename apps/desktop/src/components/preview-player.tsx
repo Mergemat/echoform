@@ -6,6 +6,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
+import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import type { Project, Save } from "@/lib/types";
 import { getSaveDisplayTitle } from "./timeline-utils";
@@ -224,6 +225,7 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
         pauseAll();
         return;
       }
+      posthog.capture("preview_played", { has_compare: hasCompareRef.current });
       await playAllReady();
     } catch (err) {
       setPlayerState((current) => ({

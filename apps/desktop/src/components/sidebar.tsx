@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAppUpdate } from "@/hooks/use-app-update";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
@@ -146,6 +147,9 @@ export const ProjectItem = memo(function ProjectItem({
               disabled={project.presence === "missing"}
               onClick={(event) => {
                 event.stopPropagation();
+                posthog.capture("watching_toggled", {
+                  watching: !project.watching,
+                });
                 sendDaemonCommand({
                   type: "toggle-watching",
                   projectId: project.id,

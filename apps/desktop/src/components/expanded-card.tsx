@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { basename } from "@/lib/path";
+import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import type { Idea, Project, Save, TrackDiff } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -124,12 +125,15 @@ function useExpandedCardView({
       ...(nextLabel === save.label ? {} : { label: nextLabel }),
     });
   };
-  const handleDelete = () =>
+  const handleDelete = () => {
+    posthog.capture("save_deleted");
     sendDaemonCommand({ type: "delete-save", projectId, saveId: save.id });
+  };
   const handleCreateIdea = () => {
     if (!ideaName.trim()) {
       return;
     }
+    posthog.capture("version_created", { name: ideaName.trim() });
     sendDaemonCommand({
       type: "branch-from-save",
       projectId,
@@ -161,6 +165,7 @@ function useExpandedCardView({
     });
   };
   const handleCompute = async () => {
+    posthog.capture("save_analyzed");
     setState((current) => ({ ...current, computing: true }));
     void fetch(`/api/projects/${projectId}/saves/${save.id}/changes`, {
       method: "POST",
