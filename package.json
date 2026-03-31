@@ -17,7 +17,7 @@
     "dev:server": "bun --watch server/src/server.ts",
     "build": "tsc -b && vite build",
     "build:server": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/echoform-server server/src/server.ts",
-    "build:server:win": "if not exist electron\\bin mkdir electron\\bin && bun build --compile --target=bun-windows-x64 --outfile electron/bin/echoform-server.exe server/src/server.ts",
+    "build:server:win": "mkdir -p electron/bin && bun build --compile --target=bun-windows-x64 --outfile electron/bin/echoform-server.exe server/src/server.ts",
     "dist": "bun run build && bun run build:server && bunx electron-builder --mac dir --publish never",
     "dist:win": "bun run build && bun run build:server:win && bunx electron-builder --win dir --publish never",
     "release": "bun run build && bun run build:server && bunx electron-builder --mac zip dmg --publish never",
