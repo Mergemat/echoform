@@ -1,4 +1,5 @@
 import {
+  ArrowCircleUp,
   Eye,
   EyeSlash,
   FolderSimplePlus,
@@ -19,22 +20,31 @@ import { ProjectSearchCommand } from "@/components/project-search-command";
 import { RootManagerDialog } from "@/components/root-manager-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppUpdate } from "@/hooks/use-app-update";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 
 function projectHealth(project: Project): {
   label: string;
   dotClass: string;
   textClass: string;
-} {
+} | null {
   if (project.presence === "missing") {
     return {
       label: "Missing",
@@ -56,11 +66,7 @@ function projectHealth(project: Project): {
       textClass: "text-white/30",
     };
   }
-  return {
-    label: "Watching",
-    dotClass: "bg-emerald-400 animate-pulse",
-    textClass: "text-emerald-400/70",
-  };
+  return null;
 }
 
 export const ProjectItem = memo(function ProjectItem({
@@ -107,15 +113,24 @@ export const ProjectItem = memo(function ProjectItem({
             {project.name}
           </span>
           <div className="mt-1.5 flex items-center gap-1.5">
-            <div
-              className={cn("size-2 shrink-0 rounded-full", health.dotClass)}
-            />
-            <span className={cn("text-[11px] leading-none", health.textClass)}>
-              {health.label}
-            </span>
+            {health && (
+              <>
+                <div
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    health.dotClass
+                  )}
+                />
+                <span
+                  className={cn("text-[11px] leading-none", health.textClass)}
+                >
+                  {health.label}
+                </span>
+              </>
+            )}
             <span className="ml-auto text-[11px] text-white/20 tabular-nums">
               {project.saves.length > 0
-                ? `${project.saves.length} save${project.saves.length === 1 ? "" : "s"}`
+                ? timeAgo(project.saves.at(-1)?.createdAt)
                 : "No saves"}
             </span>
           </div>
@@ -205,6 +220,56 @@ function FolderManagerButton() {
       </Tooltip>
 
       <RootManagerDialog onOpenChange={setManagerOpen} open={managerOpen} />
+    </>
+  );
+}
+
+function UpdateButton() {
+  const { updateAvailable, version, openUpdate } = useAppUpdate();
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  if (!updateAvailable) {
+    return null;
+  }
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            className="text-emerald-400/70 hover:text-emerald-400"
+            onClick={() => setDialogOpen(true)}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <ArrowCircleUp size={16} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Update available</TooltipContent>
+      </Tooltip>
+
+      <Dialog onOpenChange={setDialogOpen} open={dialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Available</DialogTitle>
+            <DialogDescription>
+              Echoform v{version} is ready. Download and install to update.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                openUpdate();
+                setDialogOpen(false);
+              }}
+              type="button"
+            >
+              Download Update
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -311,7 +376,11 @@ export function AppSidebar() {
                 Echoform
               </h1>
             </div>
-            <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <div
+              className="flex items-center gap-0.5"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            >
+              <UpdateButton />
               <FolderManagerButton />
             </div>
           </div>

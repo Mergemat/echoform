@@ -22,6 +22,9 @@ const useExternalServer = rendererUrl !== null;
 const baseUrl = rendererUrl ?? `http://127.0.0.1:${port}`;
 const appStateFile = "app-state.json";
 
+const GITHUB_REPO = "Mergemat/echoform";
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
@@ -30,6 +33,7 @@ let serverRestartAttempt = 0;
 let serverRestartTimer = null;
 let serverLaunchInFlight = false;
 let isQuitting = false;
+let latestUpdateInfo = null;
 const serverReadyWaiters = new Set();
 
 function sleep(ms, signal) {
@@ -320,6 +324,10 @@ async function prepareWindow() {
 
   await startServer();
   await window.loadURL(baseUrl);
+
+  if (latestUpdateInfo) {
+    window.webContents.send("echoform:update-available", latestUpdateInfo);
+  }
 }
 
 async function showWindow() {
@@ -405,6 +413,66 @@ ipcMain.handle("echoform:pick-folder", async () => {
   return result.filePaths[0] ?? null;
 });
 
+ipcMain.handle("echoform:open-update", (_event, url) => {
+  if (typeof url === "string" && url.startsWith("https://")) {
+    void shell.openExternal(url);
+  }
+});
+
+function compareVersions(current, latest) {
+  const parse = (v) => v.replace(/^v/, "").split(".").map(Number);
+  const c = parse(current);
+  const l = parse(latest);
+  for (let i = 0; i < 3; i++) {
+    if ((l[i] ?? 0) > (c[i] ?? 0)) {
+      return 1;
+    }
+    if ((l[i] ?? 0) < (c[i] ?? 0)) {
+      return -1;
+    }
+  }
+  return 0;
+}
+
+async function checkForUpdate() {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+      {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    if (!response.ok) {
+      return;
+    }
+
+    const release = await response.json();
+    const tagName = release.tag_name;
+    const currentVersion = app.getVersion();
+
+    if (compareVersions(currentVersion, tagName) > 0) {
+      latestUpdateInfo = {
+        version: tagName.replace(/^v/, ""),
+        url: release.html_url,
+      };
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          "echoform:update-available",
+          latestUpdateInfo
+        );
+      }
+    }
+  } catch {
+    // Silently ignore network errors
+  }
+}
+
+function startUpdateChecker() {
+  void checkForUpdate();
+  setInterval(() => void checkForUpdate(), UPDATE_CHECK_INTERVAL_MS);
+}
+
 async function bootstrap() {
   if (process.platform === "darwin" && app.dock) {
     app.dock.hide();
@@ -412,6 +480,7 @@ async function bootstrap() {
 
   createTray();
   createWindow();
+  startUpdateChecker();
   const { hasCompletedFirstLaunch = false } = await readAppState();
 
   if (!hasCompletedFirstLaunch) {
