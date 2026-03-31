@@ -117,16 +117,22 @@ export interface ChangeSummary {
 
 export interface SetDiff {
   addedTracks: { name: string; type: string }[];
+  arrangementLengthChange?: { from: number; to: number } | null;
+  locatorCountChange?: { from: number; to: number } | null;
   modifiedTracks: TrackDiff[];
   removedTracks: { name: string; type: string }[];
+  sceneCountChange?: { from: number; to: number } | null;
   tempoChange: { from: number; to: number } | null;
   timeSignatureChange: { from: string; to: string } | null;
+  tracksReordered?: boolean;
 }
 
 export interface TrackDiff {
   addedClips: string[];
   addedDevices: string[];
   clipCountDelta: number;
+  colorChanged?: boolean;
+  deviceToggles?: { name: string; enabled: boolean }[];
   mixerChanges: string[];
   name: string;
   removedClips: string[];
