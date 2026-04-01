@@ -143,9 +143,15 @@ function corsHeaders(req: Request): HeadersInit | null {
   if (!isAllowedOrigin(origin)) {
     return null;
   }
+
+  const requestedHeaders = req.headers.get("access-control-request-headers");
+  const allowHeaders = requestedHeaders
+    ? requestedHeaders
+    : "Content-Type, X-Echoform-Session-Bootstrap";
+
   return responseHeaders(req, {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": allowHeaders,
   });
 }
 
