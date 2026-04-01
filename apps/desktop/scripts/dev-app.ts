@@ -2,7 +2,10 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const rootDir = dirname(fileURLToPath(import.meta.url)).replace(/\/scripts$/, "");
+const rootDir = dirname(fileURLToPath(import.meta.url)).replace(
+  /\/scripts$/,
+  ""
+);
 const rendererUrl = "http://127.0.0.1:5193";
 const rendererOrigin = new URL(rendererUrl).origin;
 const sessionBootstrapToken = crypto.randomUUID();
