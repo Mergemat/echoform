@@ -2,38 +2,35 @@ import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
-const { exposeEchoformApi, resolvePreloadConfig } = require("./preload.cjs") as {
-  resolvePreloadConfig: (
-    argv?: string[],
-    env?: Record<string, string | undefined>
-  ) => {
-    apiBaseUrl?: string;
-    sessionBootstrapToken?: string;
-  };
-  exposeEchoformApi: (
-    electron: {
-      contextBridge?: { exposeInMainWorld?: ReturnType<typeof vi.fn> };
-      ipcRenderer?: {
-        invoke: ReturnType<typeof vi.fn>;
-        on: ReturnType<typeof vi.fn>;
-        removeListener: ReturnType<typeof vi.fn>;
-      };
-    },
-    preloadConfig?: {
+const { exposeEchoformApi, resolvePreloadConfig } =
+  require("./preload.cjs") as {
+    resolvePreloadConfig: (
+      argv?: string[],
+      env?: Record<string, string | undefined>
+    ) => {
       apiBaseUrl?: string;
       sessionBootstrapToken?: string;
-    }
-  ) => void;
-};
+    };
+    exposeEchoformApi: (
+      electron: {
+        contextBridge?: { exposeInMainWorld?: ReturnType<typeof vi.fn> };
+        ipcRenderer?: {
+          invoke: ReturnType<typeof vi.fn>;
+          on: ReturnType<typeof vi.fn>;
+          removeListener: ReturnType<typeof vi.fn>;
+        };
+      },
+      preloadConfig?: {
+        apiBaseUrl?: string;
+        sessionBootstrapToken?: string;
+      }
+    ) => void;
+  };
 
 describe("preload", () => {
   it("reads the bootstrap token from additional arguments", () => {
     const config = resolvePreloadConfig(
-      [
-        "electron",
-        "app",
-        "--echoform-session-bootstrap-token=shared-token",
-      ],
+      ["electron", "app", "--echoform-session-bootstrap-token=shared-token"],
       {}
     );
 

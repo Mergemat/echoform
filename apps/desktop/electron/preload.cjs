@@ -45,7 +45,8 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
     onUpdateAvailable: (callback) => {
       const handler = (_event, info) => callback(info);
       renderer.on("echoform:update-available", handler);
-      return () => renderer.removeListener("echoform:update-available", handler);
+      return () =>
+        renderer.removeListener("echoform:update-available", handler);
     },
     openUpdate: (url) => renderer.invoke("echoform:open-update", url),
   });
