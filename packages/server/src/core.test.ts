@@ -445,17 +445,31 @@ describe("EchoformService file-bound branches", () => {
     const state = await svc.loadState();
     const project = state.projects[0]!;
     const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
     const isoDaysAgo = (days: number, hour = 0, minute = 0) => {
-      const date = new Date(now - days * 24 * 60 * 60 * 1000);
+      const date = new Date(now - days * dayMs);
       date.setUTCHours(hour, minute, 0, 0);
       return date.toISOString();
     };
+    // Compute two timestamps guaranteed to be in the same ISO week (Mon–Sun),
+    // both > 30 days old, to avoid the test breaking when the fixed offsets
+    // 44/45 straddle a Monday boundary.
+    const anchorDate = new Date(now - 40 * dayMs);
+    anchorDate.setUTCHours(0, 0, 0, 0);
+    const mondayOfWeek = new Date(anchorDate);
+    mondayOfWeek.setUTCDate(
+      anchorDate.getUTCDate() - ((anchorDate.getUTCDay() + 6) % 7)
+    );
+    mondayOfWeek.setUTCHours(8, 10, 0, 0);
+    const tuesdayOfWeek = new Date(mondayOfWeek);
+    tuesdayOfWeek.setUTCDate(mondayOfWeek.getUTCDate() + 1);
+    tuesdayOfWeek.setUTCHours(9, 20, 0, 0);
     const createdAtById = new Map<string, string>([
       [baseAutoSave.id, isoDaysAgo(90, 0, 0)],
       [dayAutoASave.id, isoDaysAgo(10, 8, 10)],
       [dayAutoBSave.id, isoDaysAgo(10, 9, 20)],
-      [weekAutoASave.id, isoDaysAgo(45, 8, 10)],
-      [weekAutoBSave.id, isoDaysAgo(44, 8, 10)],
+      [weekAutoASave.id, mondayOfWeek.toISOString()],
+      [weekAutoBSave.id, tuesdayOfWeek.toISOString()],
       [recentAutoSave.id, isoDaysAgo(1, 12, 0)],
       [manualSave.id, new Date(now).toISOString()],
     ]);
