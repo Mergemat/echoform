@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/release-it@19/schema/release-it.json",
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "push": false,
+    "requireCleanWorkingDir": true,
+    "requireUpstream": false,
+    "tagName": "v${version}"
+  },
+  "github": {
+    "release": false
+  },
+  "hooks": {
+    "before:bump": "bun run --cwd ../.. check",
+    "after:bump": "bun install --cwd ../.."
+  },
+  "npm": {
+    "publish": false
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "infile": "../../CHANGELOG.md",
+      "preset": "conventionalcommits"
+    }
+  }
+}

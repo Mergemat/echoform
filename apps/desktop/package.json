@@ -1,7 +1,7 @@
 {
   "name": "echoform",
   "private": true,
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Desktop version history for Ableton projects with previews and recovery.",
   "author": "b.omarov",
   "type": "module",
@@ -10,7 +10,7 @@
     "dev": "bun run dev:app",
     "dev:app": "bun run scripts/dev-app.ts",
     "dev:client": "node ./node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5193 --strictPort",
-    "dev:server": "bun --watch ../../packages/server/src/server.ts",
+    "dev:server": "bun run --cwd ../../packages/server dev",
     "build": "tsc -b && vite build",
     "build:server": "mkdir -p electron/bin && bun build --compile --target=bun --outfile electron/bin/echoform-server ../../packages/server/src/server.ts",
     "build:server:mac-arm64": "mkdir -p electron/bin && bun build --compile --target=bun-darwin-arm64 --outfile electron/bin/echoform-server ../../packages/server/src/server.ts",
@@ -22,13 +22,11 @@
     "release:mac-x64": "bun run build:server:mac-x64 && bunx electron-builder --mac zip dmg --x64 --publish never",
     "release": "bun run build && bun run release:mac-arm64 && bun run release:mac-x64",
     "release:win": "bun run build && bun run build:server:win && bunx electron-builder --win nsis zip --publish never",
-    "release:ship": "bun run scripts/release.ts",
     "lint": "ultracite check",
     "format": "ultracite fix",
-    "test": "bun run test:client && bun run test:server",
+    "test": "bun run test:client",
     "test:client": "vitest --run",
-    "test:server": "bun --cwd ../../packages/server test",
-    "typecheck": "tsc --noEmit && bunx tsc --noEmit -p ../../packages/server/tsconfig.json",
+    "typecheck": "tsc --noEmit",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "build": {

@@ -8,8 +8,11 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "ultracite check",
-    "fix": "ultracite fix"
+    "lint": "ultracite check",
+    "format": "ultracite fix",
+    "fix": "bun run format",
+    "typecheck": "astro check",
+    "check": "bun run lint && bun run typecheck && bun run build"
   },
   "dependencies": {
     "astro": "^6.1.2",
@@ -19,7 +22,9 @@
     "@fontsource-variable/jetbrains-mono": "^5.2.5"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.4",
     "@biomejs/biome": "2.4.9",
+    "typescript": "~6.0.2",
     "ultracite": "7.4.0"
   }
 }

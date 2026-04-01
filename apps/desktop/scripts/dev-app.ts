@@ -80,7 +80,7 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
-  launch("bun", ["--watch", "../../packages/server/src/server.ts"], {
+  launch("bun", ["run", "dev:server"], {
     ECHOFORM_HOST: "127.0.0.1",
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
     ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,

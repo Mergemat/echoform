@@ -5,10 +5,13 @@ import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+const shouldUploadSourcemaps =
+  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_UPLOAD_RELEASE === "1";
+
 // https://vite.dev/config/
 export default defineConfig({
   build: {
-    sourcemap: process.env.SENTRY_AUTH_TOKEN ? "hidden" : false,
+    sourcemap: shouldUploadSourcemaps ? "hidden" : false,
   },
   plugins: [
     react(),
@@ -16,10 +19,14 @@ export default defineConfig({
       presets: [reactCompilerPreset()],
     }),
     tailwindcss(),
-    sentryVitePlugin({
-      org: "base-hn",
-      project: "4511141666816080",
-    }),
+    ...(shouldUploadSourcemaps
+      ? [
+          sentryVitePlugin({
+            org: "base-hn",
+            project: "4511141666816080",
+          }),
+        ]
+      : []),
   ],
   resolve: {
     alias: {
