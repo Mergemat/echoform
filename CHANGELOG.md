@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.20](https://github.com/Mergemat/echoform/compare/v0.0.19...v0.0.20) (2026-04-01)
+
+### Features
+
+* **desktop:** refine analytics instrumentation ([0e9356c](https://github.com/Mergemat/echoform/commit/0e9356c795249260fcbe323ecd34db38e2e33480))
+
 ## [0.0.19](https://github.com/Mergemat/echoform/compare/v0.0.18...v0.0.19) (2026-04-01)
 
 ### Bug Fixes
