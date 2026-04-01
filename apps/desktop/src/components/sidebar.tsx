@@ -88,6 +88,11 @@ export const ProjectItem = memo(function ProjectItem({
       return;
     }
     event.preventDefault();
+    handleSelect();
+  };
+
+  const handleSelect = () => {
+    posthog.capture("project_selected", { source: "sidebar" });
     closePreviewPlayer();
     selectProject(project.id);
   };
@@ -100,10 +105,7 @@ export const ProjectItem = memo(function ProjectItem({
           ? "bg-white/[0.08] text-white shadow-sm shadow-white/[0.02]"
           : "text-white/50 hover:bg-white/[0.04] hover:text-white/70"
       )}
-      onClick={() => {
-        closePreviewPlayer();
-        selectProject(project.id);
-      }}
+      onClick={handleSelect}
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
@@ -264,6 +266,7 @@ function UpdateButton() {
           <DialogFooter>
             <Button
               onClick={() => {
+                posthog.capture("update_download_started");
                 openUpdate();
                 setDialogOpen(false);
               }}

@@ -2,6 +2,7 @@ import { Waveform } from "@phosphor-icons/react";
 import { DiskUsagePanel } from "@/components/disk-usage-panel";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,9 @@ export function ProjectHeader() {
             if (!targetIdeaId) {
               return;
             }
+            posthog.capture("idea_opened_in_ableton", {
+              source: "project_header",
+            });
             sendDaemonCommand({
               type: "open-idea",
               projectId: project.id,
@@ -99,6 +103,9 @@ export function ProjectHeader() {
             if (!targetIdeaId) {
               return;
             }
+            posthog.capture("idea_revealed_in_finder", {
+              source: "project_header",
+            });
             sendDaemonCommand({
               type: "reveal-idea-file",
               projectId: project.id,

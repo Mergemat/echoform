@@ -126,14 +126,14 @@ function useExpandedCardView({
     });
   };
   const handleDelete = () => {
-    posthog.capture("save_deleted");
+    posthog.capture("save_deleted", { auto: save.auto });
     sendDaemonCommand({ type: "delete-save", projectId, saveId: save.id });
   };
   const handleCreateIdea = () => {
     if (!ideaName.trim()) {
       return;
     }
-    posthog.capture("version_created", { name: ideaName.trim() });
+    posthog.capture("version_created");
     sendDaemonCommand({
       type: "branch-from-save",
       projectId,
@@ -165,7 +165,7 @@ function useExpandedCardView({
     });
   };
   const handleCompute = async () => {
-    posthog.capture("save_analyzed");
+    posthog.capture("save_analysis_requested");
     setState((current) => ({ ...current, computing: true }));
     void fetch(`/api/projects/${projectId}/saves/${save.id}/changes`, {
       method: "POST",

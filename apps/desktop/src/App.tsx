@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { PreviewPlayer } from "@/components/preview-player";
 import { ProjectHeader } from "@/components/project-header";
 import { AppSidebar } from "@/components/sidebar";
@@ -9,6 +10,7 @@ import { usePreviewStatusToasts } from "@/hooks/use-preview-status-toasts";
 import { useSidebarLayout } from "@/hooks/use-sidebar-layout";
 import { useConnectionStore } from "@/lib/connection-store";
 import { useOnboardingStore } from "@/lib/onboarding-store";
+import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -64,8 +66,21 @@ function App() {
   const previewSave =
     selectedProject?.saves.find((save) => save.id === previewPlayerSaveId) ??
     null;
+  const readyCapturedRef = useRef(false);
 
   usePreviewStatusToasts(projects);
+
+  useEffect(() => {
+    if (readyCapturedRef.current || !(connected && snapshotReceived)) {
+      return;
+    }
+
+    readyCapturedRef.current = true;
+    posthog.capture("app_ready", {
+      project_count: projects.length,
+      onboarding_completed: onboardingStep === "done",
+    });
+  }, [connected, onboardingStep, projects.length, snapshotReceived]);
 
   // Show loading screen while waiting for initial connection + snapshot
   if (!(connected && snapshotReceived)) {

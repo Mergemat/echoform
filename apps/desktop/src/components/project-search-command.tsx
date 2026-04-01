@@ -19,6 +19,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 import type { DiscoveredProject, Project } from "@/lib/types";
@@ -273,6 +274,7 @@ export function ProjectSearchCommand({
   }, [discoveredProjects, normalizedSearch]);
 
   function handleSelect(id: string) {
+    posthog.capture("project_selected", { source: "search" });
     closePreviewPlayer();
     selectProject(id);
     setSearch("");
@@ -281,6 +283,7 @@ export function ProjectSearchCommand({
   }
 
   function handleTrack(path: string, name: string) {
+    posthog.capture("project_tracked", { source: "search" });
     sendDaemonCommand({ type: "track-project", projectPath: path, name });
     setSearch("");
     setDiscoveryStartedAt(null);
