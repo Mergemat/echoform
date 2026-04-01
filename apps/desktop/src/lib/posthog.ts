@@ -29,7 +29,9 @@ let lastProfileProperties: Record<string, number> | null = null;
 
 export function syncAppProfile(properties: Record<string, number>) {
   const nextProfile = Object.fromEntries(
-    Object.entries(properties).sort(([left], [right]) => left.localeCompare(right))
+    Object.entries(properties).sort(([left], [right]) =>
+      left.localeCompare(right)
+    )
   );
 
   if (

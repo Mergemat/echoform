@@ -276,7 +276,9 @@ export function RootManagerDialog({
                         aria-label={`Remove ${root.name}`}
                         className="rounded-md"
                         onClick={() => {
-                          posthog.capture("root_removed", { context: "manager" });
+                          posthog.capture("root_removed", {
+                            context: "manager",
+                          });
                           sendDaemonCommand({
                             type: "remove-root",
                             rootId: root.id,
