@@ -14,12 +14,17 @@ const DISALLOWED_ORIGIN = "http://evil.example.com";
 let serverProcess: Subprocess;
 let sessionCookie: string;
 let tmpDir: string;
+const SESSION_BOOTSTRAP_TOKEN = "test-bootstrap-token";
 
 async function waitForServer(timeoutMs = 5000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${BASE}/api/session`);
+      const res = await fetch(`${BASE}/api/session`, {
+        headers: {
+          "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+        },
+      });
       if (res.ok) {
         return;
       }
@@ -34,13 +39,19 @@ async function waitForServer(timeoutMs = 5000): Promise<void> {
 /** Bootstrap a session and return the cookie string for authenticated requests. */
 async function getSessionCookie(): Promise<string> {
   const res = await fetch(`${BASE}/api/session`, {
-    headers: { Origin: ALLOWED_ORIGIN },
+    headers: {
+      Origin: ALLOWED_ORIGIN,
+      "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+    },
   });
   expect(res.status).toBe(200);
   const setCookie = res.headers.get("set-cookie");
   expect(setCookie).toBeTruthy();
   // Extract just the cookie key=value (before any attributes like Path, HttpOnly)
-  return setCookie?.split(";")[0]!;
+  if (!setCookie) {
+    throw new Error("Missing session cookie");
+  }
+  return setCookie.split(";")[0];
 }
 
 beforeAll(async () => {
@@ -50,6 +61,8 @@ beforeAll(async () => {
     cwd: tmpDir,
     env: {
       ...process.env,
+      ECHOFORM_HOST: "127.0.0.1",
+      ECHOFORM_SESSION_BOOTSTRAP_TOKEN: SESSION_BOOTSTRAP_TOKEN,
       PORT: String(TEST_PORT),
     },
     stdout: "pipe",
@@ -100,13 +113,25 @@ describe("Origin allowlist", () => {
 
   test("/api/session from disallowed origin returns 403", async () => {
     const res = await fetch(`${BASE}/api/session`, {
-      headers: { Origin: DISALLOWED_ORIGIN },
+      headers: {
+        Origin: DISALLOWED_ORIGIN,
+        "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+      },
     });
     expect(res.status).toBe(403);
   });
 
-  test("/api/session without origin succeeds (same-origin)", async () => {
+  test("/api/session without bootstrap token returns 403", async () => {
     const res = await fetch(`${BASE}/api/session`);
+    expect(res.status).toBe(403);
+  });
+
+  test("/api/session with bootstrap token succeeds", async () => {
+    const res = await fetch(`${BASE}/api/session`, {
+      headers: {
+        "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+      },
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeTruthy();
   });
@@ -134,7 +159,10 @@ describe("Origin allowlist", () => {
 describe("Session cookie auth", () => {
   test("/api/session sets HttpOnly SameSite=Strict cookie", async () => {
     const res = await fetch(`${BASE}/api/session`, {
-      headers: { Origin: ALLOWED_ORIGIN },
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+      },
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-credentials")).toBe("true");
@@ -175,6 +203,16 @@ describe("Session cookie auth", () => {
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toBe("Forbidden");
+  });
+
+  test("/api/session with wrong bootstrap token returns 403", async () => {
+    const res = await fetch(`${BASE}/api/session`, {
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        "X-Echoform-Session-Bootstrap": "wrong-token",
+      },
+    });
+    expect(res.status).toBe(403);
   });
 });
 

@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const rootDir = import.meta.dir.replace(/\/scripts$/, "");
+const rootDir = dirname(fileURLToPath(import.meta.url)).replace(/\/scripts$/, "");
 const rendererUrl = "http://127.0.0.1:5193";
 const rendererOrigin = new URL(rendererUrl).origin;
+const sessionBootstrapToken = crypto.randomUUID();
 const processes: ReturnType<typeof spawn>[] = [];
 let shuttingDown = false;
 
@@ -49,7 +52,7 @@ async function waitFor(url: string, label: string): Promise<void> {
     } catch (error) {
       lastError = error;
     }
-    await Bun.sleep(250);
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   throw lastError instanceof Error
@@ -75,7 +78,9 @@ process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
   launch("bun", ["--watch", "../../packages/server/src/server.ts"], {
+    ECHOFORM_HOST: "127.0.0.1",
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
+    ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
   });
   await waitFor("http://127.0.0.1:3001/api/session", "Echoform server");
   launch("bun", ["run", "dev:client"]);
@@ -84,6 +89,7 @@ async function main() {
   launch("bunx", ["electron", "electron/main.mjs"], {
     ECHOFORM_API_URL: "http://127.0.0.1:3001",
     ECHOFORM_RENDERER_URL: rendererUrl,
+    ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
   });
 }
 

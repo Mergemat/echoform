@@ -7,10 +7,14 @@ import type { WsCommand, WsEvent } from "./types";
 import { ProjectWatcher, RootWatcher } from "./watcher";
 
 const PORT = Number(process.env.PORT || 3001);
+const HOST = process.env.ECHOFORM_HOST?.trim() || "127.0.0.1";
 const service = new EchoformService(resolveStateDir());
 const clients = new Set<{ send: (data: string) => void }>();
 const SESSION_COOKIE_NAME = "echoform_session";
 const SESSION_TOKEN = crypto.randomUUID();
+const SESSION_BOOTSTRAP_HEADER = "x-echoform-session-bootstrap";
+const SESSION_BOOTSTRAP_TOKEN =
+  process.env.ECHOFORM_SESSION_BOOTSTRAP_TOKEN?.trim() || null;
 const STATIC_DIR = resolve(
   process.env.ECHOFORM_STATIC_DIR ??
     process.env.ABLEGIT_STATIC_DIR ??
@@ -99,8 +103,20 @@ function parseCookies(req: Request): Map<string, string> {
   );
 }
 
+function isLoopbackRequest(req: Request): boolean {
+  const url = new URL(req.url);
+  return url.hostname === "127.0.0.1" || url.hostname === "localhost";
+}
+
 function isAuthorized(req: Request): boolean {
   return parseCookies(req).get(SESSION_COOKIE_NAME) === SESSION_TOKEN;
+}
+
+function hasValidBootstrapToken(req: Request): boolean {
+  return (
+    SESSION_BOOTSTRAP_TOKEN !== null &&
+    req.headers.get(SESSION_BOOTSTRAP_HEADER) === SESSION_BOOTSTRAP_TOKEN
+  );
 }
 
 function createSessionCookie(req: Request): string {
@@ -415,6 +431,7 @@ async function serveStatic(
 // ── Start ───────────────────────────────────────────────────────────
 
 Bun.serve({
+  hostname: HOST,
   port: PORT,
   async fetch(req, server) {
     const url = new URL(req.url);
@@ -432,6 +449,9 @@ Bun.serve({
       const origin = req.headers.get("origin");
       if (origin && !isAllowedOrigin(origin)) {
         return new Response("Forbidden", { status: 403 });
+      }
+      if (!isLoopbackRequest(req) || !hasValidBootstrapToken(req)) {
+        return jsonResponse(req, { error: "Forbidden" }, 403);
       }
       return jsonResponse(req, { ok: true }, 200, {
         "Set-Cookie": createSessionCookie(req),

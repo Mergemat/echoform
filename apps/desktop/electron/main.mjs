@@ -25,6 +25,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
 const monorepoRoot = dirname(dirname(projectRoot));
 const port = Number(process.env.PORT || 3001);
+const sessionBootstrapToken = crypto.randomUUID();
 const rendererUrl = process.env.ECHOFORM_RENDERER_URL?.trim() || null;
 const useExternalServer = rendererUrl !== null;
 const baseUrl = rendererUrl ?? `http://127.0.0.1:${port}`;
@@ -221,9 +222,11 @@ async function startServer() {
     env: {
       ...process.env,
       PORT: String(port),
+      ECHOFORM_HOST: "127.0.0.1",
       ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
       ECHOFORM_STATE_DIR: stateRoot,
       ABLEGIT_STATE_DIR: legacyStateRoot,
+      ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
     },
     stdio: "inherit",
   });
@@ -298,7 +301,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: join(__dirname, "preload.cjs"),
-      sandbox: false,
+      sandbox: true,
     },
   });
 
