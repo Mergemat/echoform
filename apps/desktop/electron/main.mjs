@@ -33,6 +33,7 @@ const appStateFile = "app-state.json";
 
 const GITHUB_REPO = "Mergemat/echoform";
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const UPDATE_URL_HOST = "github.com";
 
 let mainWindow = null;
 let tray = null;
@@ -425,8 +426,21 @@ ipcMain.handle("echoform:pick-folder", async () => {
 });
 
 ipcMain.handle("echoform:open-update", (_event, url) => {
-  if (typeof url === "string" && url.startsWith("https://")) {
-    void shell.openExternal(url);
+  if (typeof url !== "string") {
+    return;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol === "https:" &&
+      parsed.hostname === UPDATE_URL_HOST &&
+      parsed.pathname.startsWith(`/${GITHUB_REPO}/releases/`)
+    ) {
+      void shell.openExternal(parsed.toString());
+    }
+  } catch {
+    // Ignore invalid update URLs.
   }
 });
 
