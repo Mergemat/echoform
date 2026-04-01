@@ -1,19 +1,49 @@
 {
-	"name": "echoform-monorepo",
-	"packageManager": "bun@1.3.9",
-	"private": true,
-	"scripts": {
-		"dev": "bun run --cwd apps/desktop dev",
-		"dev:web": "bun run --cwd apps/web dev",
-		"build": "bun run --cwd apps/desktop build",
-		"build:web": "bun run --cwd apps/web build",
-		"test": "bun run --cwd apps/desktop test",
-		"lint": "bun run --cwd apps/desktop lint",
-		"typecheck": "bun run --cwd apps/desktop typecheck",
-		"check": "bun run --cwd apps/desktop check"
-	},
-	"workspaces": [
-		"apps/*",
-		"packages/*"
-	]
+  "name": "echoform-monorepo",
+  "packageManager": "bun@1.3.9",
+  "private": true,
+  "scripts": {
+    "dev": "bun run dev:desktop",
+    "dev:desktop": "bun run --cwd apps/desktop dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:server": "bun run --cwd packages/server dev",
+    "build": "bun run build:desktop && bun run build:web",
+    "build:desktop": "bun run --cwd apps/desktop build",
+    "build:web": "bun run --cwd apps/web build",
+    "build:server": "bun run --cwd apps/desktop build:server",
+    "dist": "bun run --cwd apps/desktop dist",
+    "dist:win": "bun run --cwd apps/desktop dist:win",
+    "package:mac": "bun run --cwd apps/desktop release",
+    "package:win": "bun run --cwd apps/desktop release:win",
+    "test": "bun run test:desktop && bun run test:server",
+    "test:desktop": "bun run --cwd apps/desktop test",
+    "test:client": "bun run --cwd apps/desktop test:client",
+    "test:server": "bun run --cwd packages/server test",
+    "lint": "bun run lint:desktop && bun run lint:web",
+    "lint:desktop": "bun run --cwd apps/desktop lint",
+    "lint:web": "bun run --cwd apps/web lint",
+    "format": "bun run format:desktop && bun run format:web",
+    "format:desktop": "bun run --cwd apps/desktop format",
+    "format:web": "bun run --cwd apps/web format",
+    "typecheck": "bun run typecheck:desktop && bun run typecheck:web && bun run typecheck:server",
+    "typecheck:desktop": "bun run --cwd apps/desktop typecheck",
+    "typecheck:web": "bun run --cwd apps/web typecheck",
+    "typecheck:server": "bun run --cwd packages/server typecheck",
+    "check": "bun run check:desktop && bun run check:web && bun run check:server",
+    "check:desktop": "bun run --cwd apps/desktop check",
+    "check:web": "bun run --cwd apps/web check",
+    "check:server": "bun run --cwd packages/server check",
+    "release": "bun run scripts/release.mjs",
+    "release:patch": "bun run scripts/release.mjs patch",
+    "release:minor": "bun run scripts/release.mjs minor",
+    "release:major": "bun run scripts/release.mjs major"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@release-it/conventional-changelog": "^10.0.1",
+    "release-it": "^19.0.6"
+  }
 }

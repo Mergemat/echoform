@@ -27,22 +27,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Lint
-        run: bun run lint
-        working-directory: apps/desktop
+      - name: Check desktop app
+        run: bun run check:desktop
 
-      - name: Typecheck
-        run: bun run typecheck
-        working-directory: apps/desktop
+      - name: Check marketing site
+        run: bun run check:web
 
-      - name: Run client tests
-        run: bun run test:client
-        working-directory: apps/desktop
-
-      - name: Run server tests
-        run: bun run test:server
-        working-directory: apps/desktop
-
-      - name: Build app
-        run: bun run build
-        working-directory: apps/desktop
+      - name: Check server package
+        run: bun run check:server

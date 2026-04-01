@@ -89,12 +89,19 @@ const jsonLd = {
     <meta property="og:description" content={description}>
     <meta property="og:url" content={canonicalUrl.toString()}>
     <meta property="og:image" content={socialImageUrl.toString()}>
-    <meta property="og:image:alt" content="Echoform desktop app showing project history, saved versions, and change previews.">
+    <meta
+      property="og:image:alt"
+      content="Echoform desktop app showing project history, saved versions, and change previews."
+    >
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content={title}>
     <meta name="twitter:description" content={description}>
     <meta name="twitter:image" content={socialImageUrl.toString()}>
-    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script
+      is:inline
+      type="application/ld+json"
+      set:html={JSON.stringify(jsonLd)}
+    />
   </head>
   <body>
     <!-- NAV -->
