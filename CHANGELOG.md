@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.18](https://github.com/Mergemat/echoform/compare/v0.0.17...v0.0.18) (2026-04-01)
+
+### Bug Fixes
+
+* **desktop:** stabilize daemon startup in dev and production ([2385da8](https://github.com/Mergemat/echoform/commit/2385da80ff23d89d0876908d78c844b188e0d4dc))
+
 ## [0.0.17](https://github.com/Mergemat/echoform/compare/v0.0.16...v0.0.17) (2026-04-01)
 
 ### Bug Fixes
