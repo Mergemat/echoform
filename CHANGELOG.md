@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.19](https://github.com/Mergemat/echoform/compare/v0.0.18...v0.0.19) (2026-04-01)
+
+### Bug Fixes
+
+* **desktop:** restore packaged session bootstrap ([5d56995](https://github.com/Mergemat/echoform/commit/5d56995bedfba51d171ff58b8573697fe84e0f9b))
+
 ## [0.0.18](https://github.com/Mergemat/echoform/compare/v0.0.17...v0.0.18) (2026-04-01)
 
 ### Bug Fixes
