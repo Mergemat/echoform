@@ -19,16 +19,26 @@ import {
   shell,
   Tray,
 } from "electron";
-import { getServerRestartDelayMs } from "./server-supervisor.mjs";
+import {
+  getServerRestartDelayMs,
+  resolveAvailablePort,
+} from "./server-supervisor.mjs";
+import {
+  DEFAULT_SERVER_HOST,
+  DEFAULT_SERVER_PORT,
+  resolveStartupConfig,
+} from "./startup-config.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(__dirname);
 const monorepoRoot = dirname(dirname(projectRoot));
-const port = Number(process.env.PORT || 3001);
-const sessionBootstrapToken = crypto.randomUUID();
-const rendererUrl = process.env.ECHOFORM_RENDERER_URL?.trim() || null;
+const startupConfig = resolveStartupConfig(process.env);
+const defaultPort = Number(process.env.PORT || DEFAULT_SERVER_PORT);
+const serverHost = DEFAULT_SERVER_HOST;
+const sessionBootstrapToken = startupConfig.sessionBootstrapToken;
+const rendererUrl = startupConfig.rendererUrl;
+const apiBaseUrlOverride = startupConfig.apiBaseUrlOverride;
 const useExternalServer = rendererUrl !== null;
-const baseUrl = rendererUrl ?? `http://127.0.0.1:${port}`;
 const appStateFile = "app-state.json";
 
 const GITHUB_REPO = "Mergemat/echoform";
@@ -44,7 +54,16 @@ let serverRestartTimer = null;
 let serverLaunchInFlight = false;
 let isQuitting = false;
 let latestUpdateInfo = null;
+let port = defaultPort;
 const serverReadyWaiters = new Set();
+
+function getBaseUrl() {
+  return rendererUrl ?? `http://${serverHost}:${port}`;
+}
+
+function getApiBaseUrl() {
+  return apiBaseUrlOverride ?? `http://${serverHost}:${port}`;
+}
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -161,7 +180,11 @@ async function waitForServer(signal) {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/api/session`);
+      const response = await fetch(`${getApiBaseUrl()}/api/session`, {
+        headers: {
+          "X-Echoform-Session-Bootstrap": sessionBootstrapToken,
+        },
+      });
       if (response.ok) {
         return;
       }
@@ -218,12 +241,16 @@ async function startServer() {
   const launchAbort = new AbortController();
   let stopped = false;
 
+  if (app.isPackaged) {
+    port = await resolveAvailablePort(defaultPort, serverHost);
+  }
+
   serverProcess = spawn(server.command, server.args, {
     cwd: server.cwd,
     env: {
       ...process.env,
       PORT: String(port),
-      ECHOFORM_HOST: "127.0.0.1",
+      ECHOFORM_HOST: serverHost,
       ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
       ECHOFORM_STATE_DIR: stateRoot,
       ABLEGIT_STATE_DIR: legacyStateRoot,
@@ -330,12 +357,12 @@ const loadingHtml = join(__dirname, "loading.html");
 
 async function prepareWindow() {
   const window = createWindow();
-  if (window.webContents.getURL() === `${baseUrl}/`) {
+  if (window.webContents.getURL() === `${getBaseUrl()}/`) {
     return;
   }
 
   await startServer();
-  await window.loadURL(baseUrl);
+  await window.loadURL(getBaseUrl());
 
   if (latestUpdateInfo) {
     window.webContents.send("echoform:update-available", latestUpdateInfo);
@@ -345,7 +372,7 @@ async function prepareWindow() {
 async function showWindow() {
   const window = createWindow();
   const currentUrl = window.webContents.getURL();
-  const isShowingApp = currentUrl === `${baseUrl}/`;
+  const isShowingApp = currentUrl === `${getBaseUrl()}/`;
 
   if (isShowingApp) {
     window.show();

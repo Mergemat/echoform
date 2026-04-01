@@ -153,6 +153,24 @@ describe("Origin allowlist", () => {
     expect(res.headers.get("set-cookie")).toBeTruthy();
   });
 
+  test("/api/session preflight allows the bootstrap header for allowed origins", async () => {
+    const res = await fetch(`${BASE}/api/session`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "X-Echoform-Session-Bootstrap",
+      },
+    });
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN);
+    expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(res.headers.get("access-control-allow-headers")).toContain(
+      "X-Echoform-Session-Bootstrap"
+    );
+  });
+
   test("API response includes correct CORS header for allowed origin", async () => {
     const res = await fetch(`${BASE}/api/projects`, {
       headers: authedHeaders(),

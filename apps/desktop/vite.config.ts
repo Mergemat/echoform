@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 
 const shouldUploadSourcemaps =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_UPLOAD_RELEASE === "1";
+const daemonPort = process.env.ECHOFORM_DEV_SERVER_PORT?.trim() || "3001";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -36,11 +37,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/ws": {
-        target: "ws://localhost:3001",
+        target: `ws://127.0.0.1:${daemonPort}`,
         ws: true,
       },
       "/api": {
-        target: "http://localhost:3001",
+        target: `http://127.0.0.1:${daemonPort}`,
       },
     },
   },

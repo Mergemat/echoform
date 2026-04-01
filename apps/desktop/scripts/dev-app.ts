@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveAvailablePort } from "../electron/server-supervisor.mjs";
 
 const rootDir = dirname(fileURLToPath(import.meta.url)).replace(
   /\/scripts$/,
   ""
 );
+const devStateDir = join(rootDir, ".echoform-state");
+const legacyDevStateDir = join(rootDir, ".ablegit-state");
+const serverHost = "127.0.0.1";
+const defaultServerPort = 3001;
 const rendererUrl = "http://127.0.0.1:5193";
 const rendererOrigin = new URL(rendererUrl).origin;
 const sessionBootstrapToken = crypto.randomUUID();
@@ -40,14 +45,18 @@ function launch(
   return child;
 }
 
-async function waitFor(url: string, label: string): Promise<void> {
+async function waitFor(
+  url: string,
+  label: string,
+  init?: RequestInit
+): Promise<void> {
   const timeoutMs = 20_000;
   const startedAt = Date.now();
   let lastError: unknown = null;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, init);
       if (response.ok) {
         return;
       }
@@ -80,17 +89,29 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
+  const serverPort = await resolveAvailablePort(defaultServerPort, serverHost);
+  const serverBaseUrl = `http://${serverHost}:${serverPort}`;
+
   launch("bun", ["run", "dev:server"], {
-    ECHOFORM_HOST: "127.0.0.1",
+    PORT: String(serverPort),
+    ECHOFORM_HOST: serverHost,
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
     ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
+    ECHOFORM_STATE_DIR: devStateDir,
+    ABLEGIT_STATE_DIR: legacyDevStateDir,
   });
-  await waitFor("http://127.0.0.1:3001/api/session", "Echoform server");
-  launch("bun", ["run", "dev:client"]);
+  await waitFor(`${serverBaseUrl}/api/session`, "Echoform server", {
+    headers: {
+      "X-Echoform-Session-Bootstrap": sessionBootstrapToken,
+    },
+  });
+  launch("bun", ["run", "dev:client"], {
+    ECHOFORM_DEV_SERVER_PORT: String(serverPort),
+  });
   await waitFor(rendererUrl, "Vite client");
 
   launch("bunx", ["electron", "electron/main.mjs"], {
-    ECHOFORM_API_URL: "http://127.0.0.1:3001",
+    ECHOFORM_API_URL: serverBaseUrl,
     ECHOFORM_RENDERER_URL: rendererUrl,
     ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
   });
