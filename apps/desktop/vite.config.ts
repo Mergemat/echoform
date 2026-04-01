@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 // https://vite.dev/config/
 export default defineConfig({
   build: {
-    sourcemap: true,
+    sourcemap: process.env.SENTRY_AUTH_TOKEN ? "hidden" : false,
   },
   plugins: [
     react(),

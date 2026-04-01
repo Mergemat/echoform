@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
@@ -14,6 +14,8 @@ const DISALLOWED_ORIGIN = "http://evil.example.com";
 let serverProcess: Subprocess;
 let sessionCookie: string;
 let tmpDir: string;
+let uploadProjectId: string;
+let uploadSaveId: string;
 const SESSION_BOOTSTRAP_TOKEN = "test-bootstrap-token";
 
 async function waitForServer(timeoutMs = 5000): Promise<void> {
@@ -71,6 +73,21 @@ beforeAll(async () => {
 
   await waitForServer();
   sessionCookie = await getSessionCookie();
+
+  const { EchoformService } = await import("./core");
+  const stateDir = join(tmpDir, "upload-test-state");
+  const projectDir = join(tmpDir, "upload-test-project");
+  await mkdir(projectDir, { recursive: true });
+  await writeFile(join(projectDir, "song.als"), "upload-fixture");
+
+  const service = new EchoformService(stateDir);
+  const project = await service.trackProject({ projectPath: projectDir });
+  const { save } = await service.createSave(project.id, { label: "Upload fixture" });
+  if (!save) {
+    throw new Error("Failed to create upload test save");
+  }
+  uploadProjectId = project.id;
+  uploadSaveId = save.id;
 }, 10_000);
 
 afterAll(async () => {
@@ -321,6 +338,33 @@ describe("Path traversal protection", () => {
 });
 
 // ── 5. toggleWatching Service ───────────────────────────────────────
+
+describe("Preview upload hardening", () => {
+  test("preview upload rejects oversized files", async () => {
+    const formData = new FormData();
+    formData.set(
+      "file",
+      new File([new Uint8Array(50 * 1024 * 1024 + 1)], "preview.wav", {
+        type: "audio/wav",
+      })
+    );
+
+    const res = await fetch(
+      `${BASE}/api/projects/${uploadProjectId}/saves/${uploadSaveId}/preview/upload`,
+      {
+        method: "POST",
+        headers: authedHeaders(),
+        body: formData,
+      }
+    );
+
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toBe("file too large (max 50MB)");
+  });
+});
+
+// ── 6. toggleWatching Service ───────────────────────────────────────
 
 describe("toggleWatching service", () => {
   test("toggleWatching persists watching state", async () => {

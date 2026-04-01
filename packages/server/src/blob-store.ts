@@ -81,6 +81,33 @@ function manifestFilePath(projectPath: string, saveId: string): string {
 
 // ── Blob operations ─────────────────────────────────────────────────
 
+const BLOB_STABILITY_POLL_MS = 100;
+const BLOB_STABILITY_MAX_ATTEMPTS = 10;
+
+/**
+ * Wait until a file's size and mtime are stable across two consecutive polls.
+ * This guards against reading a file that is still being written (e.g. a WAV
+ * file Ableton is rendering). Throws if the file never settles within the
+ * timeout window (BLOB_STABILITY_MAX_ATTEMPTS × BLOB_STABILITY_POLL_MS).
+ */
+async function waitForFileStability(filePath: string): Promise<void> {
+  let prev = await stat(filePath);
+  for (let attempt = 0; attempt < BLOB_STABILITY_MAX_ATTEMPTS; attempt++) {
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, BLOB_STABILITY_POLL_MS)
+    );
+    const next = await stat(filePath);
+    if (next.size === prev.size && next.mtimeMs === prev.mtimeMs) {
+      return;
+    }
+    prev = next;
+  }
+  throw new Error(
+    `File is still being written and did not stabilise: ${filePath}. ` +
+      `Try saving again after the render completes.`
+  );
+}
+
 /**
  * Store a file as a content-addressed blob.
  * Returns the SHA-256 hash and byte size.
@@ -90,6 +117,7 @@ export async function storeBlob(
   projectPath: string,
   filePath: string
 ): Promise<{ hash: string; size: number }> {
+  await waitForFileStability(filePath);
   const content = await readFile(filePath);
   const hash = createHash("sha256").update(content).digest("hex");
   const dest = blobFilePath(projectPath, hash);

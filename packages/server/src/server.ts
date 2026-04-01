@@ -36,6 +36,7 @@ const allowedOrigins = new Set([
     .filter(Boolean) ?? []),
 ]);
 const PREVIEW_POLL_MS = 1500;
+const MAX_PREVIEW_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function broadcast(event: WsEvent) {
   const data = JSON.stringify(event);
@@ -582,6 +583,15 @@ Bun.serve({
         const file = formData.get("file");
         if (!(file && file instanceof File)) {
           return jsonResponse(req, { error: "file field required" }, 400);
+        }
+        if (file.size > MAX_PREVIEW_UPLOAD_BYTES) {
+          return jsonResponse(
+            req,
+            {
+              error: `file too large (max ${Math.floor(MAX_PREVIEW_UPLOAD_BYTES / (1024 * 1024))}MB)`,
+            },
+            413
+          );
         }
         const fileData = await file.arrayBuffer();
         const preview = await service.uploadPreview(
