@@ -326,6 +326,12 @@ function createWindow() {
         : undefined,
     backgroundColor: "#0f1014",
     webPreferences: {
+      additionalArguments: [
+        `--echoform-session-bootstrap-token=${sessionBootstrapToken}`,
+        ...(apiBaseUrlOverride
+          ? [`--echoform-api-base-url=${apiBaseUrlOverride}`]
+          : []),
+      ],
       contextIsolation: true,
       nodeIntegration: false,
       preload: join(__dirname, "preload.cjs"),
