@@ -5,6 +5,10 @@ type ConnectionListener = (connected: boolean) => void;
 
 const API_URL =
   typeof window === "undefined" ? "" : (window.echoform?.apiBaseUrl ?? "");
+const SESSION_BOOTSTRAP_TOKEN =
+  typeof window === "undefined"
+    ? ""
+    : (window.echoform?.sessionBootstrapToken ?? "");
 const RECONNECT_DELAY_MS = 2000;
 
 let socket: WebSocket | null = null;
@@ -58,6 +62,15 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY_MS);
 }
 
+function getBootstrapHeaders(): HeadersInit | undefined {
+  if (!SESSION_BOOTSTRAP_TOKEN) {
+    return undefined;
+  }
+  return {
+    "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,
+  };
+}
+
 async function connectDaemonClient() {
   if (
     socket &&
@@ -70,6 +83,7 @@ async function connectDaemonClient() {
   try {
     const res = await fetch(`${API_URL}/api/session`, {
       credentials: API_URL ? "include" : "same-origin",
+      headers: getBootstrapHeaders(),
     });
     if (!res.ok) {
       throw new Error("Session bootstrap failed");

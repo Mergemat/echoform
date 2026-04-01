@@ -2,6 +2,7 @@ declare global {
   interface Window {
     echoform?: {
       apiBaseUrl?: string;
+      sessionBootstrapToken?: string;
       pickFolder?: () => Promise<string | null>;
       getUpdateInfo?: () => Promise<{
         version: string;
