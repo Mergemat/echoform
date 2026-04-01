@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { posthog } from "@/lib/posthog";
 import type { PreviewStatus, Project } from "@/lib/types";
 
 export function usePreviewStatusToasts(projects: Project[]) {
@@ -14,6 +15,7 @@ export function usePreviewStatusToasts(projects: Project[]) {
         next.set(save.id, save.previewStatus);
         const was = prev.get(save.id);
         if (was === "pending" && save.previewStatus === "ready") {
+          posthog.capture("preview_attached", { auto: save.auto });
           toast.success(`Preview attached to "${save.label}"`);
         }
       }

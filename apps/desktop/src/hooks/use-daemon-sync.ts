@@ -7,7 +7,7 @@ import {
   subscribeConnection,
   subscribeDaemonEvents,
 } from "@/lib/daemon-client";
-import { posthog } from "@/lib/posthog";
+import { posthog, syncAppProfile } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 
@@ -19,18 +19,11 @@ export function useDaemonSync() {
       switch (event.type) {
         case "snapshot":
           store.applySnapshot(event.projects, event.roots, event.activity);
-          posthog.capture("app_snapshot_received", {
+          syncAppProfile({
             project_count: event.projects.length,
             root_count: event.roots.length,
             total_saves: event.projects.reduce(
-              (sum, p) => sum + p.saves.length,
-              0
-            ),
-          });
-          posthog.setPersonProperties({
-            project_count: event.projects.length,
-            total_saves: event.projects.reduce(
-              (sum, p) => sum + p.saves.length,
+              (sum, project) => sum + project.saves.length,
               0
             ),
           });
@@ -41,14 +34,10 @@ export function useDaemonSync() {
         case "auto-saved":
           posthog.capture("save_created", {
             auto: true,
-            label: event.save.label,
           });
           toast.success(`Auto-saved ${event.save.label}`);
           return;
         case "change-detected":
-          posthog.capture("change_detected", {
-            project_name: event.projectName,
-          });
           toast.info(`Changes detected in ${event.projectName}`);
           return;
         case "discovered-projects":

@@ -2,6 +2,7 @@ import { GitFork, MusicNotes, Waveform } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -155,6 +156,7 @@ function useTimelineView() {
       if (!project) {
         return;
       }
+      posthog.capture("idea_opened_in_ableton", { source: "timeline" });
       sendDaemonCommand({ type: "open-idea", projectId: project.id, ideaId });
     },
     [project, setActiveIdea]
@@ -261,26 +263,32 @@ function useTimelineView() {
             </div>
             <div className="flex shrink-0 gap-1.5">
               <Button
-                onClick={() =>
+                onClick={() => {
+                  posthog.capture("idea_opened_in_ableton", {
+                    source: "pending_open_banner",
+                  });
                   sendDaemonCommand({
                     type: "open-idea",
                     projectId: project.id,
                     ideaId: pendingOpen.ideaId,
-                  })
-                }
+                  });
+                }}
                 size="sm"
                 variant="ghost"
               >
                 Open Again
               </Button>
               <Button
-                onClick={() =>
+                onClick={() => {
+                  posthog.capture("idea_revealed_in_finder", {
+                    source: "pending_open_banner",
+                  });
                   sendDaemonCommand({
                     type: "reveal-idea-file",
                     projectId: project.id,
                     ideaId: pendingOpen.ideaId,
-                  })
-                }
+                  });
+                }}
                 size="sm"
                 variant="ghost"
               >
@@ -315,13 +323,16 @@ function useTimelineView() {
                 </Button>
               )}
               <Button
-                onClick={() =>
+                onClick={() => {
+                  posthog.capture("idea_opened_in_ableton", {
+                    source: "drift_banner",
+                  });
                   sendDaemonCommand({
                     type: "open-idea",
                     projectId: project.id,
                     ideaId: project.currentIdeaId,
-                  })
-                }
+                  });
+                }}
                 size="sm"
                 variant="ghost"
               >

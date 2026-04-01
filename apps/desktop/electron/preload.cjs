@@ -15,6 +15,10 @@ function readAdditionalArgument(argv, name) {
 
 function resolvePreloadConfig(argv = process.argv, env = process.env) {
   return {
+    appVersion:
+      readAdditionalArgument(argv, "echoform-app-version") ||
+      env.npm_package_version ||
+      undefined,
     apiBaseUrl:
       readAdditionalArgument(argv, "echoform-api-base-url") ||
       env.ECHOFORM_API_URL ||
@@ -39,6 +43,12 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
 
   bridge.exposeInMainWorld("echoform", {
     apiBaseUrl: preloadConfig.apiBaseUrl,
+    runtime: {
+      appVersion: preloadConfig.appVersion,
+      arch: process.arch,
+      electronVersion: process.versions.electron,
+      platform: process.platform,
+    },
     sessionBootstrapToken: preloadConfig.sessionBootstrapToken,
     pickFolder: () => renderer.invoke("echoform:pick-folder"),
     getUpdateInfo: () => renderer.invoke("echoform:get-update-info"),

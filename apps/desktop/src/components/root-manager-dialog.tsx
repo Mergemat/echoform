@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
 
 /** Show only the meaningful tail of a path, replacing ~/Library/Mobile Documents/com~apple~CloudDocs with iCloud */
@@ -67,6 +68,7 @@ export function RootManagerDialog({
     if (!nextPath) {
       return;
     }
+    posthog.capture("root_added", { context: "manager", source: "picker" });
     sendDaemonCommand({ type: "add-root", path: nextPath });
     sendDaemonCommand({
       type: "discover-root-suggestions",
@@ -197,6 +199,10 @@ export function RootManagerDialog({
                       <Button
                         className="rounded-lg text-xs"
                         onClick={() => {
+                          posthog.capture("root_added", {
+                            context: "manager",
+                            source: "suggestion",
+                          });
                           sendDaemonCommand({
                             type: "add-root",
                             path: suggestion.path,
@@ -270,6 +276,7 @@ export function RootManagerDialog({
                         aria-label={`Remove ${root.name}`}
                         className="rounded-md"
                         onClick={() => {
+                          posthog.capture("root_removed", { context: "manager" });
                           sendDaemonCommand({
                             type: "remove-root",
                             rootId: root.id,

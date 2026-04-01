@@ -83,10 +83,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
       <Button
         className="mt-10 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={() => {
-          posthog.capture("onboarding_step_completed", { step: "welcome" });
-          onNext();
-        }}
+        onClick={onNext}
         size="lg"
         type="button"
       >
@@ -123,13 +120,13 @@ function PickFolderStep() {
     };
   }, [rootSuggestionsLoaded]);
 
-  const watchPath = (path: string) => {
+  const watchPath = (path: string, source: "picker" | "suggestion") => {
     const trimmed = path.trim();
     if (!trimmed) {
       return;
     }
     setAddedPath(trimmed);
-    posthog.capture("onboarding_folder_added", { source: "suggestion" });
+    posthog.capture("root_added", { context: "onboarding", source });
     sendDaemonCommand({ type: "add-root", path: trimmed });
     sendDaemonCommand({ type: "discover-root-suggestions" });
   };
@@ -144,8 +141,7 @@ function PickFolderStep() {
       if (!selectedPath) {
         return;
       }
-      posthog.capture("onboarding_folder_added", { source: "picker" });
-      watchPath(selectedPath);
+      watchPath(selectedPath, "picker");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to open folder picker";
@@ -225,7 +221,7 @@ function PickFolderStep() {
                   ) : (
                     <Button
                       className="shrink-0 rounded-lg text-[11px]"
-                      onClick={() => watchPath(suggestion.path)}
+                      onClick={() => watchPath(suggestion.path, "suggestion")}
                       size="sm"
                       type="button"
                       variant="secondary"
@@ -611,6 +607,10 @@ export function WelcomeOnboarding() {
   const roots = useStore((s) => s.roots);
   const projects = useStore((s) => s.projects);
   const [transitioning, setTransitioning] = useState(false);
+
+  useEffect(() => {
+    posthog.capture("onboarding_started");
+  }, []);
 
   // Auto-advance to "how-it-works" once a root is added and projects are discovered
   useEffect(() => {

@@ -558,6 +558,9 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
               className="max-w-[260px] flex-1 rounded-lg text-xs"
               onChange={(event) => {
                 const nextId = event.target.value;
+                posthog.capture("preview_compare_selected", {
+                  enabled: nextId.length > 0,
+                });
                 pauseAll();
                 currentTimeRef.current = 0;
                 const nextLane = nextId ? "b" : "a";

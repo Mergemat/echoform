@@ -8,6 +8,7 @@ const { exposeEchoformApi, resolvePreloadConfig } =
       argv?: string[],
       env?: Record<string, string | undefined>
     ) => {
+      appVersion?: string;
       apiBaseUrl?: string;
       sessionBootstrapToken?: string;
     };
@@ -21,6 +22,7 @@ const { exposeEchoformApi, resolvePreloadConfig } =
         };
       },
       preloadConfig?: {
+        appVersion?: string;
         apiBaseUrl?: string;
         sessionBootstrapToken?: string;
       }
@@ -50,9 +52,11 @@ describe("preload", () => {
     const config = resolvePreloadConfig([], {
       ECHOFORM_API_URL: "http://127.0.0.1:3001",
       ECHOFORM_SESSION_BOOTSTRAP_TOKEN: "env-token",
+      npm_package_version: "0.0.19",
     });
 
     expect(config).toEqual({
+      appVersion: "0.0.19",
       apiBaseUrl: "http://127.0.0.1:3001",
       sessionBootstrapToken: "env-token",
     });
@@ -70,6 +74,7 @@ describe("preload", () => {
         ipcRenderer: { invoke, on, removeListener },
       },
       {
+        appVersion: "0.0.19",
         apiBaseUrl: "http://127.0.0.1:3001",
         sessionBootstrapToken: "shared-token",
       }
@@ -79,6 +84,12 @@ describe("preload", () => {
       "echoform",
       expect.objectContaining({
         apiBaseUrl: "http://127.0.0.1:3001",
+        runtime: expect.objectContaining({
+          appVersion: "0.0.19",
+          arch: process.arch,
+          electronVersion: process.versions.electron,
+          platform: process.platform,
+        }),
         sessionBootstrapToken: "shared-token",
       })
     );

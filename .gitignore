@@ -15,3 +15,4 @@ dist
 release
 apps/desktop/electron/bin
 *.bun-build
+opencode.json

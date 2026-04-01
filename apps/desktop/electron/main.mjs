@@ -327,6 +327,7 @@ function createWindow() {
     backgroundColor: "#0f1014",
     webPreferences: {
       additionalArguments: [
+        `--echoform-app-version=${app.getVersion()}`,
         `--echoform-session-bootstrap-token=${sessionBootstrapToken}`,
         ...(apiBaseUrlOverride
           ? [`--echoform-api-base-url=${apiBaseUrlOverride}`]

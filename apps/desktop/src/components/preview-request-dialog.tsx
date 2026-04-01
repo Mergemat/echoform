@@ -5,7 +5,7 @@ import {
   MusicNote,
 } from "@phosphor-icons/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { sendDaemonCommand } from "@/lib/daemon-client";
+import { posthog } from "@/lib/posthog";
 import type { Idea, PreviewRequestResult, Save } from "@/lib/types";
 import { getSaveDisplayTitle } from "./timeline-utils";
 
@@ -67,6 +68,7 @@ export function PreviewRequestDialog({
     uploading: false,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const requestTrackedRef = useRef(false);
   const queryKey = previewRequestQueryKey(projectId, save.id);
   const previewQuery = useQuery({
     queryKey,
@@ -84,7 +86,22 @@ export function PreviewRequestDialog({
     ui.actionError ??
     (previewQuery.error instanceof Error ? previewQuery.error.message : null);
 
+  useEffect(() => {
+    if (!open) {
+      requestTrackedRef.current = false;
+      return;
+    }
+    if (!(preview && !requestTrackedRef.current)) {
+      return;
+    }
+    requestTrackedRef.current = true;
+    posthog.capture("preview_requested", {
+      mode: save.previewStatus === "ready" ? "replace" : "add",
+    });
+  }, [open, preview, save.previewStatus]);
+
   const handleRevealFolder = () => {
+    posthog.capture("preview_folder_revealed");
     setUi((current) => ({
       ...current,
       actionError: null,
@@ -343,6 +360,9 @@ export function PreviewRequestDialog({
                 if (!idea) {
                   return;
                 }
+                posthog.capture("idea_opened_in_ableton", {
+                  source: "preview_request_dialog",
+                });
                 sendDaemonCommand({
                   type: "open-idea",
                   projectId,

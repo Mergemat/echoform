@@ -6,6 +6,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { posthog } from "@/lib/posthog";
 import type { DiskUsage, DiskUsageSave } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -210,6 +211,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const handleOpenChange = (next: boolean) => {
+    if (next) {
+      posthog.capture("storage_panel_opened");
+    }
     setState((current) => ({
       ...current,
       actionMsg: next ? current.actionMsg : null,
@@ -228,6 +232,10 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
     }));
     void pruneSaves(projectId, days)
       .then(async (deleted) => {
+        posthog.capture("auto_saves_pruned", {
+          deleted_count: deleted,
+          older_than_days: days,
+        });
         const nextActionMsg =
           deleted === 0
             ? `No auto-saves older than ${days}d.`
@@ -258,6 +266,9 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
     }));
     void compactStorage(projectId)
       .then(async (deleted) => {
+        posthog.capture("storage_compacted", {
+          deleted_count: deleted,
+        });
         const nextActionMsg =
           deleted === 0
             ? "No auto-saves were eligible for compaction."
