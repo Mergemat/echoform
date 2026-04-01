@@ -80,7 +80,9 @@ describe("resolveAvailablePort", () => {
     });
     serversToClose.delete(reservedServer);
 
-    await expect(resolveAvailablePort(preferredPort)).resolves.toBe(preferredPort);
+    await expect(resolveAvailablePort(preferredPort)).resolves.toBe(
+      preferredPort
+    );
   });
 
   it("falls back when the preferred port is occupied", async () => {
