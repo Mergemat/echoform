@@ -53,16 +53,16 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       <div className="mt-10 flex flex-col gap-4 text-left">
         {[
           {
-            title: "Point at your folders",
             desc: "Echoform finds every Ableton project inside.",
+            title: "Point at your folders",
           },
           {
-            title: "Work like you always do",
             desc: "Changes are captured silently in the background.",
+            title: "Work like you always do",
           },
           {
-            title: "Go back anytime",
             desc: "Browse checkpoints, compare changes, or recover an earlier moment.",
+            title: "Go back anytime",
           },
         ].map((item, i) => (
           <div className="flex items-start gap-3" key={item.title}>
@@ -127,7 +127,7 @@ function PickFolderStep() {
     }
     setAddedPath(trimmed);
     posthog.capture("root_added", { context: "onboarding", source });
-    sendDaemonCommand({ type: "add-root", path: trimmed });
+    sendDaemonCommand({ path: trimmed, type: "add-root" });
     sendDaemonCommand({ type: "discover-root-suggestions" });
   };
 
@@ -255,44 +255,44 @@ function PickFolderStep() {
 
 const TIMELINE_ENTRIES = [
   {
-    time: "2:41 PM",
-    label: "Added bass track",
-    head: true,
     auto: false,
     chips: [
-      { text: "+Bass", color: "emerald" as const },
-      { text: "~Mixer", color: "amber" as const },
+      { color: "emerald" as const, text: "+Bass" },
+      { color: "amber" as const, text: "~Mixer" },
     ],
+    head: true,
+    label: "Added bass track",
+    time: "2:41 PM",
   },
   {
-    time: "2:38 PM",
-    label: "Adjusted EQ on drums",
-    head: false,
     auto: false,
-    chips: [{ text: "~Drums", color: "amber" as const }],
+    chips: [{ color: "amber" as const, text: "~Drums" }],
+    head: false,
+    label: "Adjusted EQ on drums",
+    time: "2:38 PM",
   },
   {
-    time: "2:30 PM",
-    label: "Auto-snapshot",
-    head: false,
     auto: true,
     chips: [],
+    head: false,
+    label: "Auto-snapshot",
+    time: "2:30 PM",
   },
   {
-    time: "2:12 PM",
-    label: "New vocal take",
-    head: false,
     auto: false,
     chips: [
-      { text: "+Vocals", color: "emerald" as const },
-      { text: "-Scratch", color: "red" as const },
+      { color: "emerald" as const, text: "+Vocals" },
+      { color: "red" as const, text: "-Scratch" },
     ],
+    head: false,
+    label: "New vocal take",
+    time: "2:12 PM",
   },
 ];
 
 const CHIP_STYLES = {
-  emerald: "text-emerald-400/80 bg-emerald-400/10 border-emerald-400/15",
   amber: "text-amber-400/80 bg-amber-400/10 border-amber-400/15",
+  emerald: "text-emerald-400/80 bg-emerald-400/10 border-emerald-400/15",
   red: "text-red-400/80 bg-red-400/10 border-red-400/15",
 };
 
@@ -314,7 +314,7 @@ function MockTimeline() {
             className="absolute top-0 bottom-0 left-[22px] w-px bg-white/[0.05]"
             style={
               i === 0
-                ? { top: "50%", backgroundColor: "rgba(255,255,255,0.05)" }
+                ? { backgroundColor: "rgba(255,255,255,0.05)", top: "50%" }
                 : i === TIMELINE_ENTRIES.length - 1
                   ? { bottom: "50%" }
                   : undefined
@@ -381,12 +381,12 @@ function MockTimeline() {
 
 function MockTabs() {
   const tabs = [
-    { name: "Summer Beat.als", saves: 24, active: true, current: true },
+    { active: true, current: true, name: "Summer Beat.als", saves: 24 },
     {
-      name: "Summer Beat (vocal mix).als",
-      saves: 8,
       active: false,
       current: false,
+      name: "Summer Beat (vocal mix).als",
+      saves: 8,
     },
   ];
 
@@ -419,9 +419,9 @@ function MockTabs() {
       {/* Fake timeline entries beneath */}
       <div className="px-4 py-3">
         {[
-          { label: "Latest checkpoint", dim: false },
-          { label: "Earlier today", dim: true },
-          { label: "Yesterday", dim: true },
+          { dim: false, label: "Latest checkpoint" },
+          { dim: true, label: "Earlier today" },
+          { dim: true, label: "Yesterday" },
         ].map((row) => (
           <div className="flex items-center gap-2.5 py-2" key={row.label}>
             <div
@@ -449,12 +449,12 @@ function MockTabs() {
 
 function MockRecovery() {
   const projectCopies = [
-    { name: "Working project", checkpoints: 24, current: true, active: true },
+    { active: true, checkpoints: 24, current: true, name: "Working project" },
     {
-      name: "Recovered checkpoint",
+      active: false,
       checkpoints: 1,
       current: false,
-      active: false,
+      name: "Recovered checkpoint",
     },
   ];
 
@@ -516,19 +516,19 @@ function MockRecovery() {
 
 const HOW_IT_WORKS_STEPS = [
   {
-    title: "Checkpoints",
     desc: "Every save in Ableton creates a checkpoint. Select one to inspect what changed.",
     mockup: MockTimeline,
+    title: "Checkpoints",
   },
   {
-    title: "Tabs",
     desc: "Multiple .als files in one project each get their own tab.",
     mockup: MockTabs,
+    title: "Tabs",
   },
   {
-    title: "Branch safely",
     desc: "Continue from any checkpoint in a separate working copy. Your current project stays untouched.",
     mockup: MockRecovery,
+    title: "Branch safely",
   },
 ];
 

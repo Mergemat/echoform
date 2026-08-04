@@ -103,9 +103,9 @@ function useTimelineView() {
       try {
         await sendDaemonCommand(
           {
-            type: "open-idea",
-            projectId: project.id,
             ideaId,
+            projectId: project.id,
+            type: "open-idea",
           },
           { reportError: false }
         );
@@ -231,9 +231,9 @@ function useTimelineView() {
                     source: "pending_open_banner",
                   });
                   sendDaemonCommand({
-                    type: "open-idea",
-                    projectId: project.id,
                     ideaId: pendingOpen.ideaId,
+                    projectId: project.id,
+                    type: "open-idea",
                   });
                 }}
                 size="sm"
@@ -247,9 +247,9 @@ function useTimelineView() {
                     source: "pending_open_banner",
                   });
                   sendDaemonCommand({
-                    type: "reveal-idea-file",
-                    projectId: project.id,
                     ideaId: pendingOpen.ideaId,
+                    projectId: project.id,
+                    type: "reveal-idea-file",
                   });
                 }}
                 size="sm"
@@ -275,8 +275,8 @@ function useTimelineView() {
                 <Button
                   onClick={() =>
                     sendDaemonCommand({
-                      type: "adopt-drift-file",
                       projectId: project.id,
+                      type: "adopt-drift-file",
                     })
                   }
                   size="sm"
@@ -291,9 +291,9 @@ function useTimelineView() {
                     source: "drift_banner",
                   });
                   sendDaemonCommand({
-                    type: "open-idea",
-                    projectId: project.id,
                     ideaId: project.currentIdeaId,
+                    projectId: project.id,
+                    type: "open-idea",
                   });
                 }}
                 size="sm"

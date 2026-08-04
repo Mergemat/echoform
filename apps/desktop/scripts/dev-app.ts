@@ -92,11 +92,11 @@ async function main() {
   const serverBaseUrl = `http://${serverHost}:${serverPort}`;
 
   launch("bun", ["run", "dev:server"], {
-    PORT: String(serverPort),
-    ECHOFORM_HOST: serverHost,
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
+    ECHOFORM_HOST: serverHost,
     ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
     ECHOFORM_STATE_DIR: devStateDir,
+    PORT: String(serverPort),
   });
   await waitFor(`${serverBaseUrl}/api/session`, "Echoform server", {
     headers: {

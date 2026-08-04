@@ -41,10 +41,10 @@ import {
 import { TrackThumbnail } from "./track-thumbnail";
 
 const TTRACK: Record<string, string> = {
-  midi: "MIDI",
   audio: "Audio",
-  return: "Return",
   group: "Group",
+  midi: "MIDI",
+  return: "Return",
 };
 
 /** Fingerprint a track's changes so identical edits can be grouped. */
@@ -78,7 +78,7 @@ function groupModifiedTracks(tracks: TrackDiff[]): TrackGroup[] {
     if (existing) {
       existing.tracks.push(t);
     } else {
-      const g: TrackGroup = { tracks: [t], key: k };
+      const g: TrackGroup = { key: k, tracks: [t] };
       map.set(k, g);
       groups.push(g);
     }
@@ -109,8 +109,6 @@ function useExpandedCardView({
   const projectId = project.id;
   const editRequestGenerationRef = useRef(0);
   const [state, setState] = useState({
-    recoveryError: null as string | null,
-    recovering: false,
     computing: false,
     deleteError: null as string | null,
     deleting: false,
@@ -121,10 +119,12 @@ function useExpandedCardView({
     noteVal: save.note,
     pinError: null as string | null,
     pinPending: false,
+    recovering: false,
+    recoveryError: null as string | null,
     showAdvancedRecovery: false,
     showDeleteConfirm: false,
-    showRecoveryForm: false,
     showPreviewDialog: false,
+    showRecoveryForm: false,
   });
   const {
     recoveryError,
@@ -162,9 +162,9 @@ function useExpandedCardView({
     try {
       await sendDaemonCommand(
         {
-          type: "update-save",
           projectId,
           saveId: save.id,
+          type: "update-save",
           ...(nextNote === save.note ? {} : { note: nextNote }),
           ...(nextLabel === save.label ? {} : { label: nextLabel }),
         },
@@ -201,9 +201,9 @@ function useExpandedCardView({
     try {
       await sendDaemonCommand(
         {
-          type: "delete-save",
           projectId,
           saveId: save.id,
+          type: "delete-save",
         },
         { reportError: false }
       );
@@ -233,10 +233,10 @@ function useExpandedCardView({
     try {
       await sendDaemonCommand(
         {
-          type: "recover-save",
+          open: true,
           projectId,
           saveId: save.id,
-          open: true,
+          type: "recover-save",
         },
         { reportError: false }
       );
@@ -280,10 +280,10 @@ function useExpandedCardView({
     try {
       await sendDaemonCommand(
         {
-          type: "update-save",
+          pinned: !save.pinned,
           projectId,
           saveId: save.id,
-          pinned: !save.pinned,
+          type: "update-save",
         },
         { reportError: false }
       );

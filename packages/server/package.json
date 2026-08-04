@@ -10,10 +10,10 @@
     "check": "bun run typecheck && bun run test"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.11",
+    "@types/bun": "^1.3.14",
     "@types/cheerio": "^1.0.0",
     "@types/xml2js": "^0.4.14",
-    "typescript": "~6.0.2"
+    "typescript": "~7.0.2"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

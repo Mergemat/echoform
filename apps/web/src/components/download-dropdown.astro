@@ -29,29 +29,29 @@ const {
 const menuItemClass =
   "flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-primary";
 const variantClassMap = {
-  nav: {
-    wrapper: "relative z-40",
+  cta: {
     button:
-      "inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal px-3.5 text-[13px] font-medium text-surface transition-opacity hover:opacity-90",
-    menu: "absolute right-0 top-full mt-2 hidden w-56 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40",
-    chevron: "h-3 w-3 opacity-70",
-    showDownloadIcon: false,
+      "inline-flex h-10 items-center gap-2 rounded-lg bg-teal px-5 text-[14px] font-medium text-surface transition-opacity hover:opacity-90",
+    chevron: "h-3.5 w-3.5 opacity-70",
+    menu: "absolute bottom-full left-1/2 z-9999 mb-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40",
+    showDownloadIcon: true,
+    wrapper: "relative mt-6 inline-block z-80",
   },
   hero: {
-    wrapper: "relative z-40",
     button:
       "inline-flex h-10 items-center gap-2 rounded-lg bg-teal px-5 text-[14px] font-medium text-surface transition-opacity hover:opacity-90",
+    chevron: "h-3.5 w-3.5 opacity-70",
     menu: "absolute left-1/2 top-full mt-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40",
-    chevron: "h-3.5 w-3.5 opacity-70",
     showDownloadIcon: true,
+    wrapper: "relative z-40",
   },
-  cta: {
-    wrapper: "relative mt-6 inline-block z-80",
+  nav: {
     button:
-      "inline-flex h-10 items-center gap-2 rounded-lg bg-teal px-5 text-[14px] font-medium text-surface transition-opacity hover:opacity-90",
-    menu: "absolute bottom-full left-1/2 z-9999 mb-2 hidden w-56 -translate-x-1/2 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40",
-    chevron: "h-3.5 w-3.5 opacity-70",
-    showDownloadIcon: true,
+      "inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal px-3.5 text-[13px] font-medium text-surface transition-opacity hover:opacity-90",
+    chevron: "h-3 w-3 opacity-70",
+    menu: "absolute right-0 top-full mt-2 hidden w-56 overflow-hidden rounded-lg border border-edge bg-surface-raised shadow-xl shadow-black/40",
+    showDownloadIcon: false,
+    wrapper: "relative z-40",
   },
 } as const;
 
@@ -68,11 +68,11 @@ const chevronIcon = `<svg class="${variantClasses.chevron}" fill="none" viewBox=
 
 <div class={variantClasses.wrapper} data-dropdown>
   <button
-    type="button"
+    aria-expanded="false"
+    aria-haspopup="true"
     class={variantClasses.button}
     data-dropdown-trigger
-    aria-haspopup="true"
-    aria-expanded="false"
+    type="button"
   >
     {variantClasses.showDownloadIcon && (
       <span class="contents" set:html={downloadIcon} />

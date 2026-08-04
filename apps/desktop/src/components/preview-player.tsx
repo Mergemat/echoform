@@ -49,22 +49,22 @@ function relativeDate(iso: string): string {
     return `${diffDays}d ago`;
   }
   return date.toLocaleDateString(undefined, {
-    month: "short",
     day: "numeric",
+    month: "short",
   });
 }
 
 const WS_OPTS = {
-  height: 32,
-  barWidth: 2,
+  backend: "WebAudio" as const,
   barGap: 1,
   barRadius: 1,
-  waveColor: "rgba(255, 255, 255, 0.15)",
-  progressColor: "rgba(255, 255, 255, 0.45)",
+  barWidth: 2,
   cursorColor: "rgba(255, 255, 255, 0.5)",
   cursorWidth: 1,
+  height: 32,
   normalize: true,
-  backend: "WebAudio" as const,
+  progressColor: "rgba(255, 255, 255, 0.45)",
+  waveColor: "rgba(255, 255, 255, 0.15)",
 };
 
 // ── Component ────────────────────────────────────────────────────────

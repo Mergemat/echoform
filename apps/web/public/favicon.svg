@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <rect width="256" height="256" rx="64" fill="#0f1115" />
+<svg fill="none" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <rect fill="#0f1115" height="256" rx="64" width="256" />
   <path d="M128 24L224 72L128 120L32 72L128 24Z" fill="#fff" />
-  <path opacity=".8" d="M32 88L120 132V164L32 120V88Z" fill="#fff" />
-  <path opacity=".5" d="M32 136L120 180V212L32 168V136Z" fill="#fff" />
-  <path opacity=".6" d="M136 132L224 88V120L136 164V132Z" fill="#fff" />
-  <path opacity=".3" d="M136 180L224 136V168L136 212V180Z" fill="#fff" />
+  <path d="M32 88L120 132V164L32 120V88Z" fill="#fff" opacity=".8" />
+  <path d="M32 136L120 180V212L32 168V136Z" fill="#fff" opacity=".5" />
+  <path d="M136 132L224 88V120L136 164V132Z" fill="#fff" opacity=".6" />
+  <path d="M136 180L224 136V168L136 212V180Z" fill="#fff" opacity=".3" />
 </svg>

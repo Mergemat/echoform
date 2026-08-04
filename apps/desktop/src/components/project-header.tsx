@@ -10,28 +10,28 @@ import { cn } from "@/lib/utils";
 function projectHealth(project: Project) {
   if (project.presence === "missing") {
     return {
-      label: "Missing on disk",
       dotClass: "bg-amber-400",
+      label: "Missing on disk",
       textClass: "text-amber-400/70",
     };
   }
   if (project.watchError) {
     return {
-      label: "Watcher error",
       dotClass: "bg-red-400",
+      label: "Watcher error",
       textClass: "text-red-400/70",
     };
   }
   if (!project.watching) {
     return {
-      label: "Paused",
       dotClass: "bg-white/20",
+      label: "Paused",
       textClass: "text-white/25",
     };
   }
   return {
-    label: "Watching",
     dotClass: "bg-emerald-400 animate-pulse",
+    label: "Watching",
     textClass: "text-emerald-400/70",
   };
 }
@@ -84,9 +84,9 @@ export function ProjectHeader() {
               source: "project_header",
             });
             sendDaemonCommand({
-              type: "open-idea",
-              projectId: project.id,
               ideaId: targetIdeaId,
+              projectId: project.id,
+              type: "open-idea",
             });
           }}
           size="sm"
@@ -107,9 +107,9 @@ export function ProjectHeader() {
               source: "project_header",
             });
             sendDaemonCommand({
-              type: "reveal-idea-file",
-              projectId: project.id,
               ideaId: targetIdeaId,
+              projectId: project.id,
+              type: "reveal-idea-file",
             });
           }}
           size="sm"

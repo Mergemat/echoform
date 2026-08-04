@@ -41,10 +41,10 @@ vi.mock("@/lib/store", () => ({
     getState: () => ({
       applyProjectUpdate: vi.fn(),
       applySnapshot: vi.fn(),
-      setDiscoveredProjects: vi.fn(),
-      setRootSuggestions: vi.fn(),
       projects: [],
       selectedProjectId: null,
+      setDiscoveredProjects: vi.fn(),
+      setRootSuggestions: vi.fn(),
     }),
   },
 }));
@@ -73,22 +73,22 @@ describe("useDaemonSync recovery feedback", () => {
     await waitFor(() => expect(daemonEventListener).not.toBeNull());
 
     daemonEventListener?.({
-      type: "recovery-created",
       recovery: {
         activeSetPath: "/Music/Echoform Recoveries/Demo/song.als",
         openError: null,
-        recoveredProjectId: "recovered-project-1",
         recoveredPath: "/Music/Echoform Recoveries/Demo",
+        recoveredProjectId: "recovered-project-1",
         sourceProjectId: "project-1",
         sourceSaveId: "save-1",
       },
+      type: "recovery-created",
     });
 
     expect(toastSuccess).toHaveBeenCalledWith(
       "New branch opened in Ableton",
       expect.objectContaining({
-        description: "/Music/Echoform Recoveries/Demo",
         action: expect.objectContaining({ label: "Reveal" }),
+        description: "/Music/Echoform Recoveries/Demo",
       })
     );
     const toastOptions = toastSuccess.mock.calls[0]?.[1];
@@ -103,15 +103,15 @@ describe("useDaemonSync recovery feedback", () => {
     await waitFor(() => expect(daemonEventListener).not.toBeNull());
 
     daemonEventListener?.({
-      type: "recovery-created",
       recovery: {
         activeSetPath: "/Music/Echoform Recoveries/Demo/song.als",
         openError: "Ableton is unavailable",
-        recoveredProjectId: "recovered-project-1",
         recoveredPath: "/Music/Echoform Recoveries/Demo",
+        recoveredProjectId: "recovered-project-1",
         sourceProjectId: "project-1",
         sourceSaveId: "save-1",
       },
+      type: "recovery-created",
     });
 
     expect(toastWarning).toHaveBeenCalledWith(

@@ -24,13 +24,13 @@ export function useAppUpdate() {
   }, []);
 
   return {
-    updateAvailable: update !== null,
-    version: update?.version ?? null,
-    url: update?.url ?? null,
     openUpdate: () => {
       if (update?.url) {
         void window.echoform?.openUpdate?.(update.url);
       }
     },
+    updateAvailable: update !== null,
+    url: update?.url ?? null,
+    version: update?.version ?? null,
   };
 }

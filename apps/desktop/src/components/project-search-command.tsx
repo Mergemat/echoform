@@ -97,29 +97,29 @@ interface HealthInfo {
 function projectHealth(project: Project): HealthInfo {
   if (project.presence === "missing") {
     return {
-      label: "Missing",
-      icon: <Warning className="size-3" weight="fill" />,
       className: "text-amber-400",
+      icon: <Warning className="size-3" weight="fill" />,
+      label: "Missing",
     };
   }
   if (project.watchError) {
     return {
-      label: "Error",
-      icon: <Warning className="size-3" weight="fill" />,
       className: "text-red-400",
+      icon: <Warning className="size-3" weight="fill" />,
+      label: "Error",
     };
   }
   if (!project.watching) {
     return {
-      label: "Paused",
-      icon: <Pause className="size-3" weight="fill" />,
       className: "text-white/30",
+      icon: <Pause className="size-3" weight="fill" />,
+      label: "Paused",
     };
   }
   return {
-    label: "Watching",
-    icon: <Circle className="size-2" weight="fill" />,
     className: "text-emerald-400",
+    icon: <Circle className="size-2" weight="fill" />,
+    label: "Watching",
   };
 }
 
@@ -284,7 +284,7 @@ export function ProjectSearchCommand({
 
   function handleTrack(path: string, name: string) {
     posthog.capture("project_tracked", { source: "search" });
-    sendDaemonCommand({ type: "track-project", projectPath: path, name });
+    sendDaemonCommand({ name, projectPath: path, type: "track-project" });
     setSearch("");
     setDiscoveryStartedAt(null);
     onOpenChange(false);

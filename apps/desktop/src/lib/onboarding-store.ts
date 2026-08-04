@@ -17,10 +17,10 @@ interface OnboardingStore {
 export const useOnboardingStore = create<OnboardingStore>()(
   persist(
     (set) => ({
-      step: "welcome",
-      setStep: (step) => set({ step }),
       complete: () => set({ step: "done" }),
       reset: () => set({ step: "welcome" }),
+      setStep: (step) => set({ step }),
+      step: "welcome",
     }),
     {
       name: "echoform-onboarding",
