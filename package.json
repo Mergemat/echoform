@@ -1,6 +1,6 @@
 {
   "name": "echoform-monorepo",
-  "packageManager": "bun@1.3.9",
+  "packageManager": "bun@1.3.14",
   "private": true,
   "scripts": {
     "dev": "bun run dev:desktop",
@@ -44,20 +44,24 @@
     "packages/*"
   ],
   "overrides": {
-    "@xmldom/xmldom": "0.8.13",
+    "@xmldom/xmldom": "0.9.10",
+    "brace-expansion": "5.0.9",
     "defu": "6.1.7",
     "electron-builder-squirrel-windows": "26.15.3",
-    "fast-uri": "3.1.5",
+    "fast-uri": "4.1.2",
     "form-data": "4.0.6",
     "hono": "4.13.0",
-    "js-yaml": "4.3.1",
+    "ip-address": "10.4.0",
+    "js-yaml": "5.2.3",
+    "lodash": "4.18.1",
     "sharp": "0.35.3",
     "svgo": "4.0.2",
     "tar": "7.5.22",
-    "tmp": "0.2.7"
+    "tmp": "0.2.7",
+    "undici": "8.10.0"
   },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^10.0.6",
-    "release-it": "^19.2.4"
+    "@release-it/conventional-changelog": "^12.0.0",
+    "release-it": "^21.0.1"
   }
 }

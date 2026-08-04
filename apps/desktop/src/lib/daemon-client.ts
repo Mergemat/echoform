@@ -135,7 +135,7 @@ function getWsUrl() {
 
   const locationLike =
     typeof window === "undefined"
-      ? { protocol: "http:", host: "localhost" }
+      ? { host: "localhost", protocol: "http:" }
       : window.location;
   const wsProtocol = locationLike.protocol === "https:" ? "wss:" : "ws:";
   return `${wsProtocol}//${locationLike.host}/ws`;
@@ -160,7 +160,7 @@ function scheduleReconnect(generation: number) {
 
 function getBootstrapHeaders(): HeadersInit | undefined {
   if (!SESSION_BOOTSTRAP_TOKEN) {
-    return undefined;
+    return;
   }
   return {
     "X-Echoform-Session-Bootstrap": SESSION_BOOTSTRAP_TOKEN,

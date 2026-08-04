@@ -62,18 +62,18 @@ export function formatDateTime(iso: string): string {
     return `${day} ${time}`;
   }
   return `${d.toLocaleDateString(undefined, {
-    month: "short",
     day: "numeric",
+    month: "short",
   })} ${time}`;
 }
 
 function formatSaveTitle(iso: string, options?: { compact?: boolean }): string {
   return new Date(iso).toLocaleString(undefined, {
-    month: "short",
     day: "numeric",
-    year: options?.compact ? undefined : "numeric",
     hour: "numeric",
     minute: "2-digit",
+    month: "short",
+    year: options?.compact ? undefined : "numeric",
   });
 }
 
@@ -118,14 +118,14 @@ export function buildChips(save: Save): Chip[] {
   if (sd) {
     if (sd.tempoChange) {
       chips.push({
-        label: `${sd.tempoChange.from}\u2192${sd.tempoChange.to} bpm`,
         kind: "change",
+        label: `${sd.tempoChange.from}\u2192${sd.tempoChange.to} bpm`,
       });
     }
     if (sd.timeSignatureChange) {
       chips.push({
-        label: `${sd.timeSignatureChange.from}\u2192${sd.timeSignatureChange.to}`,
         kind: "change",
+        label: `${sd.timeSignatureChange.from}\u2192${sd.timeSignatureChange.to}`,
       });
     }
     const addByType: Record<string, number> = {};
@@ -137,28 +137,28 @@ export function buildChips(save: Save): Chip[] {
       remByType[t.type] = (remByType[t.type] ?? 0) + 1;
     }
     const TL: Record<string, string> = {
-      midi: "MIDI",
       audio: "Audio",
-      return: "Return",
       group: "Group",
+      midi: "MIDI",
+      return: "Return",
     };
     for (const [type, count] of Object.entries(addByType)) {
-      chips.push({ label: `+${count} ${TL[type] ?? type}`, kind: "add" });
+      chips.push({ kind: "add", label: `+${count} ${TL[type] ?? type}` });
     }
     for (const [type, count] of Object.entries(remByType)) {
       chips.push({
-        label: `\u2212${count} ${TL[type] ?? type}`,
         kind: "remove",
+        label: `\u2212${count} ${TL[type] ?? type}`,
       });
     }
     const renames = sd.modifiedTracks.filter((t) => t.renamedFrom);
     if (renames.length === 1) {
       chips.push({
-        label: `\u201c${renames[0]?.renamedFrom}\u201d\u2192\u201c${renames[0]?.name}\u201d`,
         kind: "change",
+        label: `\u201c${renames[0]?.renamedFrom}\u201d\u2192\u201c${renames[0]?.name}\u201d`,
       });
     } else if (renames.length >= 2) {
-      chips.push({ label: `${renames.length} tracks renamed`, kind: "change" });
+      chips.push({ kind: "change", label: `${renames.length} tracks renamed` });
     }
     let totalDeviceAdds = 0;
     let totalDeviceRemoves = 0;
@@ -169,13 +169,13 @@ export function buildChips(save: Save): Chip[] {
     const deviceDelta = totalDeviceAdds - totalDeviceRemoves;
     if (deviceDelta !== 0) {
       chips.push({
-        label: `${deviceDelta > 0 ? "+" : ""}${deviceDelta} device${Math.abs(deviceDelta) === 1 ? "" : "s"}`,
         kind: deviceDelta > 0 ? "add" : "remove",
+        label: `${deviceDelta > 0 ? "+" : ""}${deviceDelta} device${Math.abs(deviceDelta) === 1 ? "" : "s"}`,
       });
     } else if (totalDeviceAdds > 0) {
       chips.push({
-        label: `${totalDeviceAdds} device${totalDeviceAdds === 1 ? "" : "s"} replaced`,
         kind: "change",
+        label: `${totalDeviceAdds} device${totalDeviceAdds === 1 ? "" : "s"} replaced`,
       });
     }
     let clipDelta = 0;
@@ -184,19 +184,19 @@ export function buildChips(save: Save): Chip[] {
     }
     if (clipDelta !== 0) {
       chips.push({
-        label: `${clipDelta > 0 ? "+" : ""}${clipDelta} clip${Math.abs(clipDelta) === 1 ? "" : "s"}`,
         kind: clipDelta > 0 ? "add" : "remove",
+        label: `${clipDelta > 0 ? "+" : ""}${clipDelta} clip${Math.abs(clipDelta) === 1 ? "" : "s"}`,
       });
     }
     if (sd.modifiedTracks.some((t) => t.mixerChanges.length > 0)) {
-      chips.push({ label: "mixer changes", kind: "neutral" });
+      chips.push({ kind: "neutral", label: "mixer changes" });
     }
     // Track color changes
     const colorChanges = sd.modifiedTracks.filter((t) => t.colorChanged).length;
     if (colorChanges > 0) {
       chips.push({
-        label: `${colorChanges} track${colorChanges === 1 ? "" : "s"} recolored`,
         kind: "change",
+        label: `${colorChanges} track${colorChanges === 1 ? "" : "s"} recolored`,
       });
     }
     // Device enable/disable toggles
@@ -206,8 +206,8 @@ export function buildChips(save: Save): Chip[] {
     }
     if (toggleCount > 0) {
       chips.push({
-        label: `${toggleCount} device${toggleCount === 1 ? "" : "s"} toggled`,
         kind: "change",
+        label: `${toggleCount} device${toggleCount === 1 ? "" : "s"} toggled`,
       });
     }
     // Arrangement length
@@ -216,29 +216,29 @@ export function buildChips(save: Save): Chip[] {
         sd.arrangementLengthChange.to - sd.arrangementLengthChange.from;
       const bars = Math.round(Math.abs(delta) / 4);
       chips.push({
-        label: `${delta > 0 ? "+" : "\u2212"}${bars} bar${bars === 1 ? "" : "s"}`,
         kind: delta > 0 ? "add" : "remove",
+        label: `${delta > 0 ? "+" : "\u2212"}${bars} bar${bars === 1 ? "" : "s"}`,
       });
     }
     // Scene count
     if (sd.sceneCountChange) {
       const delta = sd.sceneCountChange.to - sd.sceneCountChange.from;
       chips.push({
-        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} scene${Math.abs(delta) === 1 ? "" : "s"}`,
         kind: delta > 0 ? "add" : "remove",
+        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} scene${Math.abs(delta) === 1 ? "" : "s"}`,
       });
     }
     // Locator / cue point count
     if (sd.locatorCountChange) {
       const delta = sd.locatorCountChange.to - sd.locatorCountChange.from;
       chips.push({
-        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} locator${Math.abs(delta) === 1 ? "" : "s"}`,
         kind: delta > 0 ? "add" : "remove",
+        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} locator${Math.abs(delta) === 1 ? "" : "s"}`,
       });
     }
     // Track reorder
     if (sd.tracksReordered) {
-      chips.push({ label: "tracks reordered", kind: "change" });
+      chips.push({ kind: "change", label: "tracks reordered" });
     }
   }
   if (save.changes) {
@@ -246,14 +246,14 @@ export function buildChips(save: Save): Chip[] {
     const removed = save.changes.removedFiles.filter((f) => !isAls(f));
     if (added.length > 0) {
       chips.push({
-        label: `+${added.length} file${added.length === 1 ? "" : "s"}`,
         kind: "add",
+        label: `+${added.length} file${added.length === 1 ? "" : "s"}`,
       });
     }
     if (removed.length > 0) {
       chips.push({
-        label: `\u2212${removed.length} file${removed.length === 1 ? "" : "s"}`,
         kind: "remove",
+        label: `\u2212${removed.length} file${removed.length === 1 ? "" : "s"}`,
       });
     }
   }
@@ -322,16 +322,16 @@ function buildDisplayItems(
         const key = group[0]?.id;
         if (expandedGroups.has(key)) {
           for (const s of group) {
-            items.push({ type: "save", save: s });
+            items.push({ save: s, type: "save" });
           }
         } else {
-          items.push({ type: "group", saves: group, key });
+          items.push({ key, saves: group, type: "group" });
         }
         i = j;
         continue;
       }
     }
-    items.push({ type: "save", save });
+    items.push({ save, type: "save" });
     i++;
   }
   return items;

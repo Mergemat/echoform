@@ -39,9 +39,9 @@ async function pruneSaves(
   olderThanDays: number
 ): Promise<number> {
   const res = await fetch(`/api/projects/${projectId}/prune`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ olderThanDays }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
   });
   const data = await res.json();
   if (!res.ok) {
@@ -183,10 +183,10 @@ function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
 // ── Main panel ───────────────────────────────────────────────────────
 
 const PRUNE_OPTIONS = [
-  { label: "7d", days: 7 },
-  { label: "14d", days: 14 },
-  { label: "30d", days: 30 },
-  { label: "90d", days: 90 },
+  { days: 7, label: "7d" },
+  { days: 14, label: "14d" },
+  { days: 30, label: "30d" },
+  { days: 90, label: "90d" },
 ];
 
 export function DiskUsagePanel({ projectId }: { projectId: string }) {
@@ -196,11 +196,11 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
 function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
   const [state, setState] = useState({
     actionMsg: null as string | null,
+    compacting: false,
     confirmAction: null as
       | { kind: "compact" }
       | { days: number; kind: "prune" }
       | null,
-    compacting: false,
     error: null as string | null,
     loading: false,
     open: false,
@@ -290,8 +290,8 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
     setState((current) => ({
       ...current,
       actionMsg: null,
-      confirmAction: null,
       compacting: true,
+      confirmAction: null,
     }));
     void compactStorage(projectId)
       .then(async (deleted) => {

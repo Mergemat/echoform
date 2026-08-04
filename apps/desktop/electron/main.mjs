@@ -132,15 +132,15 @@ function resolveServerProcess() {
     const binaryName =
       process.platform === "win32" ? "echoform-server.exe" : "echoform-server";
     return {
-      command: join(process.resourcesPath, "bin", binaryName),
       args: [],
+      command: join(process.resourcesPath, "bin", binaryName),
       cwd: process.resourcesPath,
     };
   }
 
   return {
-    command: "bun",
     args: ["packages/server/src/server.ts"],
+    command: "bun",
     cwd: monorepoRoot,
   };
 }
@@ -248,11 +248,11 @@ async function startServer() {
     cwd: server.cwd,
     env: {
       ...process.env,
-      PORT: String(port),
       ECHOFORM_HOST: serverHost,
-      ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
-      ECHOFORM_STATE_DIR: stateRoot,
       ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
+      ECHOFORM_STATE_DIR: stateRoot,
+      ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
+      PORT: String(port),
     },
     stdio: "inherit",
   });
@@ -309,20 +309,19 @@ function createWindow() {
   }
 
   mainWindow = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 720,
-    show: false,
     autoHideMenuBar: true,
+    backgroundColor: "#0f1014",
+    height: 900,
     icon: join(__dirname, "icon.png"),
+    minHeight: 720,
+    minWidth: 1100,
+    show: false,
     title: "Echoform",
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     titleBarOverlay:
       process.platform === "win32"
-        ? { color: "#0f1014", symbolColor: "#ffffff", height: 36 }
+        ? { color: "#0f1014", height: 36, symbolColor: "#ffffff" }
         : undefined,
-    backgroundColor: "#0f1014",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     webPreferences: {
       additionalArguments: [
         `--echoform-app-version=${app.getVersion()}`,
@@ -336,6 +335,7 @@ function createWindow() {
       preload: join(__dirname, "preload.cjs"),
       sandbox: true,
     },
+    width: 1360,
   });
 
   mainWindow.on("close", (event) => {
@@ -411,18 +411,18 @@ function createTray() {
 
   const trayMenu = Menu.buildFromTemplate([
     {
-      label: "Open Echoform",
       click: () => {
         void showWindow();
       },
+      label: "Open Echoform",
     },
     { type: "separator" },
     {
-      label: "Quit",
       click: () => {
         isQuitting = true;
         app.quit();
       },
+      label: "Quit",
     },
   ]);
 
@@ -444,10 +444,10 @@ function createTray() {
 ipcMain.handle("echoform:pick-folder", async () => {
   const parentWindow = mainWindow ?? BrowserWindow.getFocusedWindow() ?? null;
   const result = await dialog.showOpenDialog(parentWindow, {
-    title: "Choose a project folder",
     buttonLabel: "Choose Folder",
     defaultPath: app.getPath("music"),
     properties: ["openDirectory", "createDirectory"],
+    title: "Choose a project folder",
   });
 
   if (result.canceled) {
@@ -519,8 +519,8 @@ async function checkForUpdate() {
 
     if (compareVersions(currentVersion, tagName) > 0) {
       latestUpdateInfo = {
-        version: tagName.replace(/^v/, ""),
         url: release.html_url,
+        version: tagName.replace(/^v/, ""),
       };
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(

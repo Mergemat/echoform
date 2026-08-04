@@ -9,53 +9,53 @@ import {
 
 function makeIdea(id: string, fields: Partial<Idea> = {}): Idea {
   return {
+    baseSaveId: "",
+    createdAt: "2024-01-01T00:00:00Z",
+    headSaveId: "",
     id,
     name: id,
-    createdAt: "2024-01-01T00:00:00Z",
     setPath: "song.als",
-    baseSaveId: "",
-    headSaveId: "",
     ...fields,
   };
 }
 
 function makeSave(id: string, ideaId: string, createdAt: string): Save {
   return {
-    id,
-    label: id,
-    note: "",
-    pinned: false,
-    createdAt,
-    ideaId,
-    previewRefs: [],
-    previewStatus: "none",
-    previewMime: null,
-    previewRequestedAt: null,
-    previewUpdatedAt: null,
-    projectHash: id,
     auto: false,
+    createdAt,
+    id,
+    ideaId,
+    label: id,
     metadata: {
       activeSetPath: "song.als",
-      setFiles: ["song.als"],
       audioFiles: 0,
       fileCount: 1,
-      sizeBytes: 100,
       modifiedAt: createdAt,
+      setFiles: ["song.als"],
+      sizeBytes: 100,
     },
+    note: "",
+    pinned: false,
+    previewMime: null,
+    previewRefs: [],
+    previewRequestedAt: null,
+    previewStatus: "none",
+    previewUpdatedAt: null,
+    projectHash: id,
   };
 }
 
 describe("buildTimelineDisplayItems", () => {
   it("shows only the focused set's checkpoints, newest first", () => {
     const mainIdea = makeIdea("idea-main", {
-      name: "Main",
       baseSaveId: "save-1",
       headSaveId: "save-2",
+      name: "Main",
     });
     const secondIdea = makeIdea("idea-second", {
-      name: "Alternate mix",
       baseSaveId: "save-3",
       headSaveId: "save-3",
+      name: "Alternate mix",
       setPath: "alternate-mix.als",
     });
     const saves = [
@@ -64,22 +64,22 @@ describe("buildTimelineDisplayItems", () => {
       makeSave("save-3", "idea-second", "2024-01-03T00:00:00Z"),
     ];
     const project: Project = {
-      id: "proj-1",
-      name: "Demo",
       adapter: "ableton",
       continuedFrom: null,
+      createdAt: "2024-01-01T00:00:00Z",
+      currentIdeaId: "idea-second",
+      driftStatus: null,
+      id: "proj-1",
+      ideas: [mainIdea, secondIdea],
+      lastSeenAt: "2024-01-03T00:00:00Z",
+      name: "Demo",
+      pendingOpen: null,
+      presence: "active",
       projectPath: "/tmp/demo",
       rootIds: [],
-      presence: "active",
-      watchError: null,
-      lastSeenAt: "2024-01-03T00:00:00Z",
-      createdAt: "2024-01-01T00:00:00Z",
-      updatedAt: "2024-01-03T00:00:00Z",
-      currentIdeaId: "idea-second",
-      pendingOpen: null,
-      driftStatus: null,
-      ideas: [mainIdea, secondIdea],
       saves,
+      updatedAt: "2024-01-03T00:00:00Z",
+      watchError: null,
       watching: true,
     };
 
@@ -105,9 +105,9 @@ describe("getSaveDisplayTitle", () => {
   it("prefers a custom label when present", () => {
     expect(
       getSaveDisplayTitle({
-        label: "Chorus bounce",
-        customLabel: true,
         createdAt: "2024-01-03T14:45:00Z",
+        customLabel: true,
+        label: "Chorus bounce",
       })
     ).toBe("Chorus bounce");
   });
@@ -115,8 +115,8 @@ describe("getSaveDisplayTitle", () => {
   it("falls back to a timestamp when the label is not custom", () => {
     expect(
       getSaveDisplayTitle({
-        label: "3 files changed",
         createdAt: "2024-01-03T14:45:00Z",
+        label: "3 files changed",
       })
     ).not.toBe("3 files changed");
   });
@@ -124,29 +124,29 @@ describe("getSaveDisplayTitle", () => {
 
 function makeSaveWithDiff(setDiff?: SetDiff, changes?: Save["changes"]): Save {
   return {
-    id: "save-bc",
-    label: "old save",
-    note: "",
-    pinned: false,
-    createdAt: "2024-01-01T00:00:00Z",
-    ideaId: "idea-1",
-    previewRefs: [],
-    previewStatus: "none",
-    previewMime: null,
-    previewRequestedAt: null,
-    previewUpdatedAt: null,
-    projectHash: "abc",
     auto: false,
-    setDiff,
     changes,
+    createdAt: "2024-01-01T00:00:00Z",
+    id: "save-bc",
+    ideaId: "idea-1",
+    label: "old save",
     metadata: {
       activeSetPath: "song.als",
-      setFiles: ["song.als"],
       audioFiles: 0,
       fileCount: 1,
-      sizeBytes: 100,
       modifiedAt: "2024-01-01T00:00:00Z",
+      setFiles: ["song.als"],
+      sizeBytes: 100,
     },
+    note: "",
+    pinned: false,
+    previewMime: null,
+    previewRefs: [],
+    previewRequestedAt: null,
+    previewStatus: "none",
+    previewUpdatedAt: null,
+    projectHash: "abc",
+    setDiff,
   };
 }
 
@@ -159,33 +159,33 @@ describe("buildChips", () => {
       sizeDelta: 1024,
     });
 
-    expect(buildChips(save)).toEqual([{ label: "+1 file", kind: "add" }]);
+    expect(buildChips(save)).toEqual([{ kind: "add", label: "+1 file" }]);
   });
 
   it("produces chips for tempo, tracks, devices, clips, mixer, color, toggles, arrangement, scenes, locators, reorder", () => {
     const save = makeSaveWithDiff({
-      tempoChange: { from: 120, to: 128 },
-      timeSignatureChange: { from: "4/4", to: "3/4" },
       addedTracks: [{ name: "Lead", type: "midi" }],
-      removedTracks: [{ name: "Old Pad", type: "audio" }],
+      arrangementLengthChange: { from: 64, to: 128 },
+      locatorCountChange: { from: 2, to: 4 },
       modifiedTracks: [
         {
-          name: "Bass",
-          type: "audio",
           addedClips: ["clip-1"],
-          removedClips: [],
           addedDevices: ["Compressor"],
-          removedDevices: [],
           clipCountDelta: 1,
-          mixerChanges: ["volume"],
           colorChanged: true,
-          deviceToggles: [{ name: "EQ Eight", enabled: false }],
+          deviceToggles: [{ enabled: false, name: "EQ Eight" }],
+          mixerChanges: ["volume"],
+          name: "Bass",
+          removedClips: [],
+          removedDevices: [],
           renamedFrom: "Old Bass",
+          type: "audio",
         },
       ],
-      arrangementLengthChange: { from: 64, to: 128 },
+      removedTracks: [{ name: "Old Pad", type: "audio" }],
       sceneCountChange: { from: 8, to: 10 },
-      locatorCountChange: { from: 2, to: 4 },
+      tempoChange: { from: 120, to: 128 },
+      timeSignatureChange: { from: "4/4", to: "3/4" },
       tracksReordered: true,
     });
     const chips = buildChips(save);

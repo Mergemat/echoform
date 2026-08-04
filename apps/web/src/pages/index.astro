@@ -36,26 +36,26 @@ const dl = {
 
 const downloads = [
   {
-    id: "mac-arm",
-    href: dl.macArm,
-    platform: "macOS",
     architecture: "Apple Silicon",
+    href: dl.macArm,
     icon: "apple",
-  },
-  {
-    id: "mac-intel",
-    href: dl.macIntel,
+    id: "mac-arm",
     platform: "macOS",
-    architecture: "Intel",
-    icon: "apple",
   },
   {
-    id: "win",
-    href: dl.win,
-    platform: "Windows",
+    architecture: "Intel",
+    href: dl.macIntel,
+    icon: "apple",
+    id: "mac-intel",
+    platform: "macOS",
+  },
+  {
     architecture: "x64",
-    icon: "windows",
     dividerBefore: true,
+    href: dl.win,
+    icon: "windows",
+    id: "win",
+    platform: "Windows",
   },
 ] as const;
 
@@ -63,49 +63,49 @@ const githubIcon = `<svg class="h-4 w-4" viewBox="0 0 1024 1024" fill="currentCo
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "Echoform",
   applicationCategory: "MultimediaApplication",
-  operatingSystem: "macOS, Windows",
   description,
-  url: siteUrl.toString(),
+  downloadUrl: dl.macArm,
   image: socialImageUrl.toString(),
+  name: "Echoform",
+  operatingSystem: "macOS, Windows",
+  sameAs: [repo],
   screenshot: socialImageUrl.toString(),
   softwareVersion: version,
-  downloadUrl: dl.macArm,
-  sameAs: [repo],
+  url: siteUrl.toString(),
 };
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
     <title>{title}</title>
-    <meta name="description" content={description}>
-    <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#0f1115">
-    <link rel="canonical" href={canonicalUrl.toString()}>
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="manifest" href="/site.webmanifest">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Echoform">
-    <meta property="og:title" content={title}>
-    <meta property="og:description" content={description}>
-    <meta property="og:url" content={canonicalUrl.toString()}>
-    <meta property="og:image" content={socialImageUrl.toString()}>
+    <meta content={description} name="description">
+    <meta content="index, follow" name="robots">
+    <meta content="#0f1115" name="theme-color">
+    <link href={canonicalUrl.toString()} rel="canonical">
+    <link href="/favicon.ico" rel="icon" sizes="any">
+    <link href="/favicon.svg" rel="icon" type="image/svg+xml">
+    <link href="/apple-touch-icon.png" rel="apple-touch-icon">
+    <link href="/site.webmanifest" rel="manifest">
+    <meta content="website" property="og:type">
+    <meta content="Echoform" property="og:site_name">
+    <meta content={title} property="og:title">
+    <meta content={description} property="og:description">
+    <meta content={canonicalUrl.toString()} property="og:url">
+    <meta content={socialImageUrl.toString()} property="og:image">
     <meta
-      property="og:image:alt"
       content="Echoform desktop app showing project history, checkpoints, and change previews."
+      property="og:image:alt"
     >
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content={title}>
-    <meta name="twitter:description" content={description}>
-    <meta name="twitter:image" content={socialImageUrl.toString()}>
+    <meta content="summary_large_image" name="twitter:card">
+    <meta content={title} name="twitter:title">
+    <meta content={description} name="twitter:description">
+    <meta content={socialImageUrl.toString()} name="twitter:image">
     <script
-      is:inline
       type="application/ld+json"
+      is:inline
       set:html={JSON.stringify(jsonLd)}
     />
   </head>
@@ -117,23 +117,23 @@ const jsonLd = {
       <div
         class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
       >
-        <a href="/" class="flex items-center gap-2.5 text-text-primary">
-          <img src="/echoform.svg" alt="" class="h-6 w-6">
+        <a class="flex items-center gap-2.5 text-text-primary" href="/">
+          <img alt="" class="h-6 w-6" src="/echoform.svg">
           <span class="text-[15px] font-semibold tracking-[-0.02em]"
             >Echoform</span
           >
         </a>
         <div class="flex items-center gap-4">
           <a
-            href={repo}
-            class="flex items-center justify-center text-text-secondary transition-colors hover:text-text-primary"
             aria-label="GitHub"
+            class="flex items-center justify-center text-text-secondary transition-colors hover:text-text-primary"
+            href={repo}
           >
             <Fragment set:html={githubIcon} />
           </a>
           <DownloadDropdown
-            options={downloads}
             buttonLabel="Download"
+            options={downloads}
             variant="nav"
           />
         </div>
@@ -175,11 +175,11 @@ const jsonLd = {
 
         <div class="mt-8 flex flex-col items-center gap-3">
           <DownloadDropdown
-            options={downloads}
             buttonLabel="Download for macOS"
-            variant="hero"
             dynamicLabel={true}
             macLabel="Download for macOS"
+            options={downloads}
+            variant="hero"
             winLabel="Download for Windows"
           />
         </div>
@@ -191,12 +191,12 @@ const jsonLd = {
         >
           <div class="relative aspect-[16/9] bg-surface-raised">
             <img
-              src="/screenshot.webp"
               alt="Echoform desktop app showing project history, checkpoints, and change previews."
               class="h-full w-full object-cover object-top"
-              loading="eager"
               decoding="async"
               fetchpriority="high"
+              loading="eager"
+              src="/screenshot.webp"
             >
             <div
               class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/12 to-transparent"
@@ -222,14 +222,14 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
           </div>
@@ -249,19 +249,19 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
               />
               <path
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
           </div>
@@ -281,19 +281,19 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"
               />
               <path
+                d="M9 12h6M12 9v6"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M9 12h6M12 9v6"
               />
             </svg>
           </div>
@@ -313,14 +313,14 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M13 10V3L4 14h7v7l9-11h-7z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M13 10V3L4 14h7v7l9-11h-7z"
               />
             </svg>
           </div>
@@ -339,14 +339,14 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
               />
             </svg>
           </div>
@@ -366,19 +366,19 @@ const jsonLd = {
             <svg
               class="h-4 w-4 text-teal"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               stroke-width="2"
+              viewBox="0 0 24 24"
             >
               <path
+                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7"
               />
               <path
+                d="M9 4h6l1 3H8L9 4z"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                d="M9 4h6l1 3H8L9 4z"
               />
             </svg>
           </div>
@@ -412,8 +412,8 @@ const jsonLd = {
           Free and open source. macOS and Windows.
         </p>
         <DownloadDropdown
-          options={downloads}
           buttonLabel="Download Echoform"
+          options={downloads}
           variant="cta"
         />
       </div>
@@ -425,13 +425,13 @@ const jsonLd = {
         class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
       >
         <div class="flex items-center gap-2 text-[13px] text-text-tertiary">
-          <img src="/echoform.svg" alt="" class="h-4 w-4 opacity-40">
+          <img alt="" class="h-4 w-4 opacity-40" src="/echoform.svg">
           <span>Echoform</span>
         </div>
         <a
-          href={repo}
-          class="flex items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
           aria-label="GitHub"
+          class="flex items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
+          href={repo}
         >
           <Fragment set:html={githubIcon} />
         </a>

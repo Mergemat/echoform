@@ -22,13 +22,17 @@
         "noVoid": "off"
       },
       "performance": {
+        "noAwaitInLoops": "off",
+        "noJsxPropsBind": "off",
         "noNamespaceImport": "off",
         "useTopLevelRegex": "off"
       },
       "style": {
         "noExportedImports": "off",
+        "noIncrementDecrement": "off",
         "noNestedTernary": "off",
         "noNonNullAssertion": "off",
+        "useDestructuring": "off",
         "useDefaultSwitchClause": "off",
         "useFilenamingConvention": "off"
       },
@@ -38,7 +42,12 @@
         "noEvolvingTypes": "off",
         "noExplicitAny": "off",
         "noImplicitAnyLet": "off",
+        "noLeakedRender": "off",
+        "noNestedPromises": "off",
         "noNonNullAssertedOptionalChain": "off",
+        "noReactForwardRef": "off",
+        "noShadow": "off",
+        "noUnnecessaryConditions": "off",
         "useAwait": "off"
       }
     }

@@ -6,8 +6,8 @@ export function resolveStartupConfig(
   createToken = () => crypto.randomUUID()
 ) {
   return {
-    rendererUrl: env.ECHOFORM_RENDERER_URL?.trim() || null,
     apiBaseUrlOverride: env.ECHOFORM_API_URL?.trim() || null,
+    rendererUrl: env.ECHOFORM_RENDERER_URL?.trim() || null,
     sessionBootstrapToken:
       env.ECHOFORM_SESSION_BOOTSTRAP_TOKEN?.trim() || createToken(),
   };

@@ -54,7 +54,6 @@ export function useDaemonSync() {
           const { openError, recoveredPath } = event.recovery;
           const revealPath = window.echoform?.revealPath;
           const options = {
-            description: recoveredPath,
             action: revealPath
               ? {
                   label: "Reveal",
@@ -69,6 +68,7 @@ export function useDaemonSync() {
                   },
                 }
               : undefined,
+            description: recoveredPath,
           };
           if (openError) {
             toast.warning("Branch created, but Ableton did not open", {

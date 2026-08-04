@@ -6,7 +6,7 @@ function readAdditionalArgument(argv, name) {
   const prefix = `--${name}=`;
   const match = argv.find((arg) => arg.startsWith(prefix));
   if (!match) {
-    return undefined;
+    return;
   }
 
   const value = match.slice(prefix.length);
@@ -15,13 +15,13 @@ function readAdditionalArgument(argv, name) {
 
 function resolvePreloadConfig(argv = process.argv, env = process.env) {
   return {
-    appVersion:
-      readAdditionalArgument(argv, "echoform-app-version") ||
-      env.npm_package_version ||
-      undefined,
     apiBaseUrl:
       readAdditionalArgument(argv, "echoform-api-base-url") ||
       env.ECHOFORM_API_URL ||
+      undefined,
+    appVersion:
+      readAdditionalArgument(argv, "echoform-app-version") ||
+      env.npm_package_version ||
       undefined,
     sessionBootstrapToken:
       readAdditionalArgument(argv, "echoform-session-bootstrap-token") ||
@@ -43,15 +43,6 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
 
   bridge.exposeInMainWorld("echoform", {
     apiBaseUrl: preloadConfig.apiBaseUrl,
-    runtime: {
-      appVersion: preloadConfig.appVersion,
-      arch: process.arch,
-      electronVersion: process.versions.electron,
-      platform: process.platform,
-    },
-    sessionBootstrapToken: preloadConfig.sessionBootstrapToken,
-    pickFolder: () => renderer.invoke("echoform:pick-folder"),
-    revealPath: (path) => renderer.invoke("echoform:reveal-path", path),
     getUpdateInfo: () => renderer.invoke("echoform:get-update-info"),
     onUpdateAvailable: (callback) => {
       const handler = (_event, info) => callback(info);
@@ -60,12 +51,21 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
         renderer.removeListener("echoform:update-available", handler);
     },
     openUpdate: (url) => renderer.invoke("echoform:open-update", url),
+    pickFolder: () => renderer.invoke("echoform:pick-folder"),
+    revealPath: (path) => renderer.invoke("echoform:reveal-path", path),
+    runtime: {
+      appVersion: preloadConfig.appVersion,
+      arch: process.arch,
+      electronVersion: process.versions.electron,
+      platform: process.platform,
+    },
+    sessionBootstrapToken: preloadConfig.sessionBootstrapToken,
   });
 }
 
 exposeEchoformApi({ contextBridge, ipcRenderer });
 
 module.exports = {
-  resolvePreloadConfig,
   exposeEchoformApi,
+  resolvePreloadConfig,
 };

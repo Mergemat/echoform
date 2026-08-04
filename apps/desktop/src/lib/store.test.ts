@@ -8,36 +8,36 @@ import { useStore } from "@/lib/store";
 import type { Idea, Project, Save } from "@/lib/types";
 
 const makeIdea = (id: string): Idea => ({
+  baseSaveId: "save-1",
+  createdAt: "2024-01-01T00:00:00Z",
+  headSaveId: "save-1",
   id,
   name: `Idea ${id}`,
-  createdAt: "2024-01-01T00:00:00Z",
   setPath: "project.als",
-  baseSaveId: "save-1",
-  headSaveId: "save-1",
 });
 
 const makeSave = (id: string, ideaId: string): Save => ({
-  id,
-  label: `Save ${id}`,
-  note: "",
-  pinned: false,
-  createdAt: "2024-01-01T00:00:00Z",
-  ideaId,
-  previewRefs: [],
-  previewStatus: "none",
-  previewMime: null,
-  previewRequestedAt: null,
-  previewUpdatedAt: null,
-  projectHash: "abc123",
   auto: false,
+  createdAt: "2024-01-01T00:00:00Z",
+  id,
+  ideaId,
+  label: `Save ${id}`,
   metadata: {
     activeSetPath: "/project.als",
-    setFiles: [],
     audioFiles: 0,
     fileCount: 1,
-    sizeBytes: 1024,
     modifiedAt: "2024-01-01T00:00:00Z",
+    setFiles: [],
+    sizeBytes: 1024,
   },
+  note: "",
+  pinned: false,
+  previewMime: null,
+  previewRefs: [],
+  previewRequestedAt: null,
+  previewStatus: "none",
+  previewUpdatedAt: null,
+  projectHash: "abc123",
 });
 
 const makeProject = (
@@ -45,22 +45,22 @@ const makeProject = (
   saves: Save[] = [],
   ideas: Idea[] = []
 ): Project => ({
-  id,
-  name: `Project ${id}`,
   adapter: "ableton",
   continuedFrom: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  currentIdeaId: ideas[0]?.id ?? "idea-1",
+  driftStatus: null,
+  id,
+  ideas,
+  lastSeenAt: "2024-01-01T00:00:00Z",
+  name: `Project ${id}`,
+  pendingOpen: null,
+  presence: "active",
   projectPath: `/projects/${id}`,
   rootIds: [],
-  presence: "active",
-  watchError: null,
-  lastSeenAt: "2024-01-01T00:00:00Z",
-  createdAt: "2024-01-01T00:00:00Z",
-  updatedAt: "2024-01-01T00:00:00Z",
-  currentIdeaId: ideas[0]?.id ?? "idea-1",
-  pendingOpen: null,
-  driftStatus: null,
-  ideas,
   saves,
+  updatedAt: "2024-01-01T00:00:00Z",
+  watchError: null,
   watching: false,
 });
 
@@ -68,15 +68,15 @@ describe("useStore", () => {
   beforeEach(() => {
     act(() => {
       useStore.setState({
-        projects: [],
-        selectedProjectId: null,
-        selectedSaveId: null,
         activeIdeaId: null,
-        roots: [],
         activity: [],
-        rootSuggestions: [],
         compare: null,
         discoveredProjects: [],
+        projects: [],
+        rootSuggestions: [],
+        roots: [],
+        selectedProjectId: null,
+        selectedSaveId: null,
       });
     });
   });
@@ -128,10 +128,10 @@ describe("useStore", () => {
   it("selectProject() clears project-scoped selection state", () => {
     act(() =>
       useStore.setState({
-        selectedProjectId: "other",
-        selectedSaveId: "save-1",
         activeIdeaId: "idea-1",
         compare: {} as never,
+        selectedProjectId: "other",
+        selectedSaveId: "save-1",
       })
     );
 
@@ -180,10 +180,10 @@ describe("useStore", () => {
 
     act(() =>
       useStore.setState({
+        activeIdeaId: idea2.id,
         projects: [project1, project2],
         selectedProjectId: "proj-2",
         selectedSaveId: "save-2",
-        activeIdeaId: idea2.id,
       })
     );
 
@@ -203,18 +203,18 @@ describe("useStore", () => {
 
     act(() =>
       useStore.setState({
+        activeIdeaId: oldIdea.id,
         projects: [project],
         selectedProjectId: project.id,
         selectedSaveId: save.id,
-        activeIdeaId: oldIdea.id,
       })
     );
 
     act(() =>
       useStore.getState().applyProjectUpdate({
         ...project,
-        saves: [],
         currentIdeaId: nextIdea.id,
+        saves: [],
       })
     );
 

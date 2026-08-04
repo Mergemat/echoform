@@ -56,8 +56,8 @@ describe("preload", () => {
     });
 
     expect(config).toEqual({
-      appVersion: "0.0.19",
       apiBaseUrl: "http://127.0.0.1:3001",
+      appVersion: "0.0.19",
       sessionBootstrapToken: "env-token",
     });
   });
@@ -74,8 +74,8 @@ describe("preload", () => {
         ipcRenderer: { invoke, on, removeListener },
       },
       {
-        appVersion: "0.0.19",
         apiBaseUrl: "http://127.0.0.1:3001",
+        appVersion: "0.0.19",
         sessionBootstrapToken: "shared-token",
       }
     );

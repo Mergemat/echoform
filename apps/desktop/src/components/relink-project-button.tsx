@@ -23,7 +23,7 @@ export function RelinkProjectButton({ projectId }: { projectId: string }) {
       }
       setRelinking(true);
       await sendDaemonCommand(
-        { type: "relink-project", projectId, projectPath },
+        { projectId, projectPath, type: "relink-project" },
         { reportError: false }
       );
       setSuccess(true);

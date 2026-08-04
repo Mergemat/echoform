@@ -48,22 +48,22 @@ function projectHealth(project: Project): {
 } | null {
   if (project.presence === "missing") {
     return {
-      label: "Missing",
       dotClass: "bg-amber-400",
+      label: "Missing",
       textClass: "text-amber-400/80",
     };
   }
   if (project.watchError) {
     return {
-      label: "Error",
       dotClass: "bg-red-400",
+      label: "Error",
       textClass: "text-red-400/80",
     };
   }
   if (!project.watching) {
     return {
-      label: "Paused",
       dotClass: "bg-white/20",
+      label: "Paused",
       textClass: "text-white/30",
     };
   }
@@ -153,8 +153,8 @@ export const ProjectItem = memo(function ProjectItem({
                   watching: !project.watching,
                 });
                 sendDaemonCommand({
-                  type: "toggle-watching",
                   projectId: project.id,
+                  type: "toggle-watching",
                   watching: !project.watching,
                 });
               }}

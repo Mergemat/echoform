@@ -69,7 +69,7 @@ export function RootManagerDialog({
       return;
     }
     posthog.capture("root_added", { context: "manager", source: "picker" });
-    sendDaemonCommand({ type: "add-root", path: nextPath });
+    sendDaemonCommand({ path: nextPath, type: "add-root" });
     sendDaemonCommand({
       type: "discover-root-suggestions",
     });
@@ -204,8 +204,8 @@ export function RootManagerDialog({
                             source: "suggestion",
                           });
                           sendDaemonCommand({
-                            type: "add-root",
                             path: suggestion.path,
+                            type: "add-root",
                           });
                           sendDaemonCommand({
                             type: "discover-root-suggestions",
@@ -280,8 +280,8 @@ export function RootManagerDialog({
                             context: "manager",
                           });
                           sendDaemonCommand({
-                            type: "remove-root",
                             rootId: root.id,
+                            type: "remove-root",
                           });
                           sendDaemonCommand({
                             type: "discover-root-suggestions",

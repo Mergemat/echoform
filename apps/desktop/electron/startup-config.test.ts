@@ -27,8 +27,8 @@ describe("startup config", () => {
 
   it("keeps renderer and api URLs distinct", () => {
     const config = resolveStartupConfig({
-      ECHOFORM_RENDERER_URL: "http://127.0.0.1:5193",
       ECHOFORM_API_URL: "http://127.0.0.1:61669",
+      ECHOFORM_RENDERER_URL: "http://127.0.0.1:5193",
     });
 
     expect(config.rendererUrl).toBe("http://127.0.0.1:5193");

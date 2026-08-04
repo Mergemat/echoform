@@ -78,10 +78,10 @@ const ABLETON_COLORS: string[] = [
 
 // Fallback colors by track type when the Ableton index is missing or -1
 const TYPE_FALLBACK: Record<string, string> = {
-  midi: "#5480E4",
   audio: "#FFA529",
-  return: "#1AFF2F",
   group: "#886CE4",
+  midi: "#5480E4",
+  return: "#1AFF2F",
 };
 
 function trackColor(track: TrackSummaryItem): string {
@@ -99,7 +99,7 @@ function flattenTracks(
   return tracks.flatMap((track, index) => {
     const key = `${parentKey}/${track.type}:${track.name}:${index}`;
     return [
-      { key, track, depth },
+      { depth, key, track },
       ...flattenTracks(track.children ?? [], key, depth + 1),
     ];
   });
@@ -127,7 +127,7 @@ function flattenTracksShallow(
   return tracks.flatMap((track, index) => {
     const key = `${parentKey}/${track.type}:${track.name}:${index}`;
     return [
-      { key, track, depth },
+      { depth, key, track },
       ...(depth < maxDepth
         ? flattenTracksShallow(track.children ?? [], maxDepth, key, depth + 1)
         : []),
@@ -181,9 +181,9 @@ export function TrackThumbnail({
                 className="rounded-full"
                 key={key}
                 style={{
+                  backgroundColor: trackColor(track),
                   height: "2px",
                   marginLeft: `${indent}px`,
-                  backgroundColor: trackColor(track),
                   opacity: track.type === "group" ? 0.45 : 0.35,
                 }}
                 title={trackTitle(track)}
@@ -216,14 +216,14 @@ export function TrackThumbnail({
               <div
                 className="absolute top-0 bottom-0 rounded-[1px]"
                 style={{
-                  left: `${indent}px`,
-                  right: "0px",
                   backgroundColor: trackColor(track),
-                  opacity: track.type === "group" ? 0.55 : 0.4,
                   boxShadow:
                     track.type === "group"
                       ? "inset 0 0 0 0.5px rgba(255,255,255,0.08)"
                       : undefined,
+                  left: `${indent}px`,
+                  opacity: track.type === "group" ? 0.55 : 0.4,
+                  right: "0px",
                 }}
               />
             </div>

@@ -77,8 +77,8 @@ function App() {
 
     readyCapturedRef.current = true;
     posthog.capture("app_ready", {
-      project_count: projects.length,
       onboarding_completed: onboardingStep === "done",
+      project_count: projects.length,
     });
   }, [connected, onboardingStep, projects.length, snapshotReceived]);
 

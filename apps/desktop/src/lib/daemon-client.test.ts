@@ -90,14 +90,14 @@ describe("daemon command acknowledgements", () => {
     expect(firstWire.requestId).toEqual(expect.any(String));
     expect(secondWire.requestId).not.toBe(firstWire.requestId);
 
-    ws.receive({ type: "command-ack", requestId: secondWire.requestId });
+    ws.receive({ requestId: secondWire.requestId, type: "command-ack" });
     await expect(second).resolves.toEqual({ requestId: secondWire.requestId });
 
     ws.receive({
-      type: "command-error",
-      requestId: firstWire.requestId,
-      message: "Root scan failed",
       code: "scan-failed",
+      message: "Root scan failed",
+      requestId: firstWire.requestId,
+      type: "command-error",
     });
     await expect(first).rejects.toMatchObject({
       code: "server-error",
@@ -132,8 +132,8 @@ describe("daemon command acknowledgements", () => {
     const wireCommand = JSON.parse(currentSocket.sent[0]!);
     staleSocket.finishClose();
     currentSocket.receive({
-      type: "command-ack",
       requestId: wireCommand.requestId,
+      type: "command-ack",
     });
 
     await expect(command).resolves.toEqual({

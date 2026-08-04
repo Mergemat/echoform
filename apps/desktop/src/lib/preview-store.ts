@@ -29,7 +29,8 @@ interface PreviewStore {
 }
 
 export const usePreviewStore = create<PreviewStore>((set) => ({
-  previewPlayerSaveId: null,
+  closePreviewPlayer: () =>
+    set({ compareSaveId: null, previewPlayerSaveId: null }),
   compareSaveId: null,
 
   openPreviewPlayer: (saveId, project) => {
@@ -40,18 +41,14 @@ export const usePreviewStore = create<PreviewStore>((set) => ({
         autoCompareId = findPreviousPreviewSave(project, save)?.id ?? null;
       }
     }
-    set({ previewPlayerSaveId: saveId, compareSaveId: autoCompareId });
+    set({ compareSaveId: autoCompareId, previewPlayerSaveId: saveId });
   },
-
-  closePreviewPlayer: () =>
-    set({ previewPlayerSaveId: null, compareSaveId: null }),
-
-  setCompareSaveId: (id) => set({ compareSaveId: id }),
+  previewPlayerSaveId: null,
 
   reconcilePreviewPlayer: (projects, selectedProjectId) =>
     set((state) => {
       if (!(state.previewPlayerSaveId && selectedProjectId)) {
-        return { previewPlayerSaveId: null, compareSaveId: null };
+        return { compareSaveId: null, previewPlayerSaveId: null };
       }
 
       const selectedProject = projects.find(
@@ -63,6 +60,8 @@ export const usePreviewStore = create<PreviewStore>((set) => ({
 
       return previewStillExists
         ? state
-        : { previewPlayerSaveId: null, compareSaveId: null };
+        : { compareSaveId: null, previewPlayerSaveId: null };
     }),
+
+  setCompareSaveId: (id) => set({ compareSaveId: id }),
 }));

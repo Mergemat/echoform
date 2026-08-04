@@ -32,9 +32,9 @@ describe("RelinkProjectButton", () => {
     await waitFor(() =>
       expect(sendDaemonCommand).toHaveBeenCalledWith(
         {
-          type: "relink-project",
           projectId: "project-1",
           projectPath: "/Music/Moved Demo",
+          type: "relink-project",
         },
         { reportError: false }
       )

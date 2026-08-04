@@ -126,10 +126,10 @@ describe("historical checkpoint actions", () => {
     await waitFor(() =>
       expect(sendDaemonCommand).toHaveBeenCalledWith(
         {
-          type: "recover-save",
+          open: true,
           projectId: project.id,
           saveId: save.id,
-          open: true,
+          type: "recover-save",
         },
         { reportError: false }
       )
@@ -159,9 +159,9 @@ describe("historical checkpoint actions", () => {
     await waitFor(() =>
       expect(sendDaemonCommand).toHaveBeenCalledWith(
         {
-          type: "delete-save",
           projectId: project.id,
           saveId: save.id,
+          type: "delete-save",
         },
         { reportError: false }
       )
@@ -177,10 +177,10 @@ describe("historical checkpoint actions", () => {
     await waitFor(() =>
       expect(sendDaemonCommand).toHaveBeenCalledWith(
         {
-          type: "update-save",
+          pinned: true,
           projectId: project.id,
           saveId: save.id,
-          pinned: true,
+          type: "update-save",
         },
         { reportError: false }
       )

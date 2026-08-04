@@ -71,10 +71,10 @@ export function PreviewRequestDialog({
   const requestTrackedRef = useRef(false);
   const queryKey = previewRequestQueryKey(projectId, save.id);
   const previewQuery = useQuery({
-    queryKey,
-    queryFn: () => requestPreview(projectId, save.id),
     enabled: open,
     gcTime: 0,
+    queryFn: () => requestPreview(projectId, save.id),
+    queryKey,
     staleTime: 0,
   });
   const preview = previewQuery.data ?? null;
@@ -153,8 +153,8 @@ export function PreviewRequestDialog({
         uploading: true,
       }));
       void fetch(`/api/projects/${projectId}/saves/${save.id}/preview/upload`, {
-        method: "POST",
         body: formData,
+        method: "POST",
       })
         .then(async (res) => {
           const data = await res.json();
@@ -364,9 +364,9 @@ export function PreviewRequestDialog({
                   source: "preview_request_dialog",
                 });
                 sendDaemonCommand({
-                  type: "open-idea",
-                  projectId,
                   ideaId: idea.id,
+                  projectId,
+                  type: "open-idea",
                 });
               }}
               size="sm"

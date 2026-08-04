@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
 }));
 
 vi.mock("@/lib/daemon-client", () => ({
@@ -28,11 +28,11 @@ import { useStore } from "@/lib/store";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 Object.assign(globalThis, {
-  window: dom.window,
   document: dom.window.document,
   HTMLElement: dom.window.HTMLElement,
   Node: dom.window.Node,
   navigator: dom.window.navigator,
+  window: dom.window,
 });
 Object.assign(window, {
   echoform: undefined,
@@ -43,16 +43,16 @@ describe("RootManagerDialog", () => {
     vi.clearAllMocks();
     window.echoform = undefined;
     useStore.setState({
-      projects: [],
-      roots: [],
+      activeIdeaId: null,
       activity: [],
+      compare: null,
+      discoveredProjects: [],
+      projects: [],
       rootSuggestions: [],
       rootSuggestionsLoaded: false,
+      roots: [],
       selectedProjectId: null,
       selectedSaveId: null,
-      activeIdeaId: null,
-      discoveredProjects: [],
-      compare: null,
     });
   });
 
@@ -83,8 +83,8 @@ describe("RootManagerDialog", () => {
 
     await waitFor(() => {
       expect(sendDaemonCommand).toHaveBeenCalledWith({
-        type: "add-root",
         path: "/Users/test/Music/Ableton/My Projects",
+        type: "add-root",
       });
     });
 
