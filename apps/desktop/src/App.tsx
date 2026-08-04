@@ -7,13 +7,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { WelcomeOnboarding } from "@/components/welcome-onboarding";
 import { useDaemonSync } from "@/hooks/use-daemon-sync";
 import { usePreviewStatusToasts } from "@/hooks/use-preview-status-toasts";
-import { useSidebarLayout } from "@/hooks/use-sidebar-layout";
 import { useConnectionStore } from "@/lib/connection-store";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
 
 function AppLoading() {
   return (
@@ -61,8 +59,6 @@ function App() {
   const onboardingStep = useOnboardingStore((s) => s.step);
   const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
   const closePreviewPlayer = usePreviewStore((s) => s.closePreviewPlayer);
-  const { isMobile, onDragEnd, onDragMove, onDragStart, sidebarWidth } =
-    useSidebarLayout();
   const previewSave =
     selectedProject?.saves.find((save) => save.id === previewPlayerSaveId) ??
     null;
@@ -103,55 +99,25 @@ function App() {
   }
 
   return (
-    <div
-      className={cn(
-        "flex h-screen w-screen overflow-hidden bg-background text-foreground",
-        isMobile ? "flex-col" : "flex-row"
-      )}
-    >
-      {/* Sidebar */}
-      <div
-        className={cn(
-          "relative flex min-w-0",
-          isMobile
-            ? "h-[38vh] max-h-[360px] min-h-[240px] w-full shrink-0"
-            : "shrink-0"
-        )}
-        style={isMobile ? undefined : { width: sidebarWidth }}
-      >
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0d0e11] text-foreground">
+      <div className="w-[252px] shrink-0">
         <AppSidebar />
-
-        {/* Drag handle */}
-        {!isMobile && (
-          <div
-            className="group absolute top-0 right-0 bottom-0 z-20 w-[5px] cursor-col-resize"
-            onPointerCancel={onDragEnd}
-            onPointerDown={onDragStart}
-            onPointerMove={onDragMove}
-            onPointerUp={onDragEnd}
-          >
-            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors duration-150 group-hover:bg-white/25" />
-          </div>
-        )}
       </div>
 
-      {/* Main content */}
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ProjectHeader />
-          <div className="min-h-0 flex-1">
-            <Timeline />
-          </div>
-          {selectedProject && previewSave && (
-            <PreviewPlayer
-              key={previewSave.id}
-              onClose={closePreviewPlayer}
-              project={selectedProject}
-              save={previewSave}
-            />
-          )}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ProjectHeader />
+        <div className="min-h-0 flex-1">
+          <Timeline />
         </div>
-      </div>
+        {selectedProject && previewSave && (
+          <PreviewPlayer
+            key={previewSave.id}
+            onClose={closePreviewPlayer}
+            project={selectedProject}
+            save={previewSave}
+          />
+        )}
+      </main>
 
       <ConnectionIndicator />
       <Toaster />

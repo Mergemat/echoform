@@ -23,8 +23,6 @@ function useTimelineView() {
   const toggleSave = useStore((s) => s.toggleSave);
   const setActiveIdea = useStore((s) => s.setActiveIdea);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [ideaActionError, setIdeaActionError] = useState<string | null>(null);
-  const [openingIdeaId, setOpeningIdeaId] = useState<string | null>(null);
   const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
 
   const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
@@ -93,36 +91,6 @@ function useTimelineView() {
     [setActiveIdea]
   );
 
-  const handleOpenIdea = useCallback(
-    async (ideaId: string) => {
-      if (!project) {
-        return;
-      }
-      setIdeaActionError(null);
-      setOpeningIdeaId(ideaId);
-      try {
-        await sendDaemonCommand(
-          {
-            ideaId,
-            projectId: project.id,
-            type: "open-idea",
-          },
-          { reportError: false }
-        );
-        posthog.capture("idea_opened_in_ableton", { source: "timeline" });
-      } catch (error) {
-        setIdeaActionError(
-          error instanceof Error
-            ? error.message
-            : "The set could not be opened."
-        );
-      } finally {
-        setOpeningIdeaId(null);
-      }
-    },
-    [project]
-  );
-
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -146,41 +114,59 @@ function useTimelineView() {
     const isWatching = project.watching && !isMissing;
 
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-4 px-6 text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-white/[0.04]">
-            <MusicNotes className="text-white/15" size={22} weight="bold" />
-          </div>
-          <div className="font-medium text-[15px] text-white/25">
-            {isMissing ? "Project not found" : "No checkpoints yet"}
-          </div>
+      <div className="h-full overflow-y-auto px-8 py-8 pb-24">
+        <div className="mx-auto max-w-[720px]">
+          <MusicNotes className="text-white/20" size={24} weight="bold" />
+          <h3 className="mt-6 max-w-[560px] text-balance font-semibold text-3xl text-white tracking-[-0.035em]">
+            {isMissing
+              ? "Reconnect this project to keep working with its history."
+              : "Make the first checkpoint by saving in Ableton."}
+          </h3>
           {isMissing ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="max-w-[280px] text-[13px] text-white/30 leading-relaxed">
+            <div className="mt-4">
+              <p className="max-w-[58ch] text-pretty text-[14px] text-white/40 leading-relaxed">
                 This project's folder moved or is no longer available. Locate it
                 to reconnect this history to the same project.
+              </p>
+              <div className="mt-6">
+                <RelinkProjectButton projectId={project.id} />
               </div>
-              <RelinkProjectButton projectId={project.id} />
             </div>
           ) : isWatching ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="max-w-[260px] text-[13px] text-white/30 leading-relaxed">
-                Open this project in Ableton and hit{" "}
+            <div>
+              <p className="mt-3 max-w-[58ch] text-pretty text-[14px] text-white/40 leading-relaxed">
+                Echoform is already watching {project.name}. Open the set, work
+                as usual, then save with{" "}
                 <span className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-white/40">
                   ⌘S
                 </span>{" "}
-                — Echoform will capture the save automatically.
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400/50">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400/60" />
-                Listening for changes
+                — its first restorable point will appear here.
+              </p>
+              <div className="mt-12 grid grid-cols-3 gap-3">
+                {[
+                  ["1", "Open the project"],
+                  ["2", "Save with ⌘S"],
+                  ["3", "Return to inspect changes"],
+                ].map(([number, label]) => (
+                  <div
+                    className="rounded-2xl bg-white/[0.025] p-4 shadow-[0_0_0_1px_oklch(1_0_0/0.055)]"
+                    key={number}
+                  >
+                    <div className="font-semibold text-[11px] text-emerald-300/70">
+                      STEP {number}
+                    </div>
+                    <div className="mt-2 text-[13px] text-white/55">
+                      {label}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
-            <div className="max-w-[280px] text-[13px] text-white/15 leading-relaxed">
+            <p className="mt-3 max-w-[58ch] text-pretty text-[14px] text-white/35 leading-relaxed">
               Enable watching to start capturing saves whenever you work on this
               project.
-            </div>
+            </p>
           )}
         </div>
       </div>
@@ -194,21 +180,9 @@ function useTimelineView() {
       {project.ideas.length > 0 && (
         <SetSelector
           activeIdeaId={activeIdeaId}
-          onOpenInAbleton={(ideaId) => void handleOpenIdea(ideaId)}
           onSelect={handleSelectIdea}
-          openDisabled={project.presence === "missing"}
-          openingIdeaId={openingIdeaId}
           project={project}
         />
-      )}
-
-      {ideaActionError && (
-        <div
-          className="border-red-300/15 border-b bg-red-300/[0.06] px-5 py-2 text-red-200/85 text-xs"
-          role="alert"
-        >
-          {ideaActionError}
-        </div>
       )}
 
       {pendingOpen && (
@@ -320,7 +294,7 @@ function useTimelineView() {
       )}
 
       {previewCount > 0 && (
-        <div className="flex items-center gap-2 border-border border-b px-5 py-2">
+        <div className="mx-auto flex w-full max-w-[980px] items-center gap-2 px-8 pb-3">
           <Button
             className={cn(
               "gap-1.5 text-xs",
@@ -342,62 +316,74 @@ function useTimelineView() {
         </div>
       )}
 
-      <div className="scrollbar-thin flex-1 overflow-y-auto">
+      <div className="scrollbar-thin flex-1 overflow-y-auto pb-24">
         {activeSetSaves.length === 0 && (
           <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-white/25">
             No checkpoints for this Ableton set yet.
           </div>
         )}
-        {visibleItems.map((item) => {
-          if (item.type === "group") {
-            return (
-              <div className="px-4" key={`group-${item.key}`}>
-                <GroupCard
-                  expanded={expandedGroups.has(item.key)}
-                  groupKey={item.key}
-                  onToggle={() => toggleGroup(item.key)}
-                  saves={item.saves}
-                />
-              </div>
-            );
-          }
-
-          const save = item.save;
-          const idea = item.idea;
-          const isHead = idea.headSaveId === save.id;
-          const isSelected = save.id === selectedSaveId;
-
-          return (
-            <div className="px-4" key={`save-${save.id}`}>
-              {isSelected ? (
-                <div>
-                  <CollapsedCard
-                    isHead={isHead}
-                    isSelected
-                    onClick={() => toggleSave(save.id)}
-                    project={project}
-                    save={save}
-                  />
-                  <ExpandedCard
-                    idea={idea}
-                    isHead={isHead}
-                    onClose={() => toggleSave(save.id)}
-                    project={project}
-                    save={save}
-                  />
-                </div>
-              ) : (
-                <CollapsedCard
-                  isHead={isHead}
-                  isSelected={false}
-                  onClick={() => toggleSave(save.id)}
-                  project={project}
-                  save={save}
-                />
-              )}
+        {activeSetSaves.length > 0 && (
+          <div className="mx-auto w-full max-w-[980px] px-8 pt-3">
+            <div className="mb-4 flex items-center gap-3">
+              <h3 className="font-semibold text-[12px] text-white/45 uppercase tracking-[0.14em]">
+                Recent activity
+              </h3>
+              <div className="h-px flex-1 bg-white/[0.055]" />
             </div>
-          );
-        })}
+            <div className="space-y-2">
+              {visibleItems.map((item) => {
+                if (item.type === "group") {
+                  return (
+                    <div key={`group-${item.key}`}>
+                      <GroupCard
+                        expanded={expandedGroups.has(item.key)}
+                        groupKey={item.key}
+                        onToggle={() => toggleGroup(item.key)}
+                        saves={item.saves}
+                      />
+                    </div>
+                  );
+                }
+
+                const save = item.save;
+                const idea = item.idea;
+                const isHead = idea.headSaveId === save.id;
+                const isSelected = save.id === selectedSaveId;
+
+                return (
+                  <div key={`save-${save.id}`}>
+                    {isSelected ? (
+                      <div>
+                        <CollapsedCard
+                          isHead={isHead}
+                          isSelected
+                          onClick={() => toggleSave(save.id)}
+                          project={project}
+                          save={save}
+                        />
+                        <ExpandedCard
+                          idea={idea}
+                          isHead={isHead}
+                          onClose={() => toggleSave(save.id)}
+                          project={project}
+                          save={save}
+                        />
+                      </div>
+                    ) : (
+                      <CollapsedCard
+                        isHead={isHead}
+                        isSelected={false}
+                        onClick={() => toggleSave(save.id)}
+                        project={project}
+                        save={save}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
