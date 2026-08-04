@@ -11,7 +11,7 @@
     },
     "apps/desktop": {
       "name": "echoform",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "dependencies": {
         "@sentry/electron": "^7.16.0",
         "@sentry/vite-plugin": "^5.4.0",
@@ -99,7 +99,7 @@
     },
   },
   "overrides": {
-    "@xmldom/xmldom": "0.9.10",
+    "@xmldom/xmldom": "0.8.13",
     "brace-expansion": "5.0.9",
     "defu": "6.1.7",
     "electron-builder-squirrel-windows": "26.15.3",
@@ -1150,7 +1150,7 @@
 
     "@vscode/l10n": ["@vscode/l10n@0.0.18", "", {}, "sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ=="],
 
-    "@xmldom/xmldom": ["@xmldom/xmldom@0.9.10", "", {}, "sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw=="],
+    "@xmldom/xmldom": ["@xmldom/xmldom@0.8.13", "", {}, "sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw=="],
 
     "abbrev": ["abbrev@4.0.0", "", {}, "sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA=="],
 
