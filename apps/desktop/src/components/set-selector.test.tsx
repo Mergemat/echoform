@@ -58,20 +58,19 @@ const project: Project = {
 };
 
 describe("SetSelector", () => {
-  it("opens the selected Ableton set", async () => {
+  it("selects an Ableton set to inspect", async () => {
     const user = userEvent.setup();
-    const onOpenInAbleton = vi.fn();
+    const onSelect = vi.fn();
     render(
       <SetSelector
         activeIdeaId={idea.id}
-        onOpenInAbleton={onOpenInAbleton}
-        onSelect={vi.fn()}
+        onSelect={onSelect}
         project={project}
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Open in Ableton" }));
+    await user.click(screen.getByRole("button", { name: /Main/ }));
 
-    expect(onOpenInAbleton).toHaveBeenCalledWith(idea.id);
+    expect(onSelect).toHaveBeenCalledWith(idea.id);
   });
 });

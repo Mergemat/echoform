@@ -20,7 +20,7 @@ export function GroupCard({
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 border-transparent border-l-2 py-3 pr-4 pl-3 text-left transition-all duration-150 hover:bg-white/[0.02]"
+        "flex w-full items-center gap-2 rounded-xl px-4 py-3 text-left transition-colors duration-100 hover:bg-white/[0.02]"
       )}
       onClick={onToggle}
       type="button"

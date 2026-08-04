@@ -100,38 +100,35 @@ export const ProjectItem = memo(function ProjectItem({
   return (
     <div
       className={cn(
-        "group w-full cursor-pointer select-none rounded-lg px-3 py-2.5 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
+        "group w-full cursor-pointer select-none rounded-xl px-3 py-2.5 text-left transition-[background-color,color,box-shadow] duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
         selected
-          ? "bg-white/[0.08] text-white shadow-sm shadow-white/[0.02]"
-          : "text-white/50 hover:bg-white/[0.04] hover:text-white/70"
+          ? "bg-white/[0.08] text-white shadow-[0_0_0_1px_oklch(1_0_0/0.06)]"
+          : "text-white/45 hover:bg-white/[0.035] hover:text-white/70"
       )}
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            health?.dotClass ?? "bg-emerald-400"
+          )}
+        />
         <div className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-sm leading-tight">
-            {project.name}
-          </span>
-          <div className="mt-1.5 flex items-center gap-1.5">
-            {health && (
-              <>
-                <div
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    health.dotClass
-                  )}
-                />
-                <span
-                  className={cn("text-[11px] leading-none", health.textClass)}
-                >
-                  {health.label}
-                </span>
-              </>
-            )}
-            <span className="ml-auto text-[11px] text-white/20 tabular-nums">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate font-medium text-[12px] leading-tight">
+              {project.name}
+            </span>
+            <span className="text-[10px] text-white/20 tabular-nums">
+              {project.saves.length}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-[10px]">
+            {health && <span className={health.textClass}>{health.label}</span>}
+            <span className="text-white/20 tabular-nums">
               {project.saves.length > 0
                 ? timeAgo(project.saves.at(-1)?.createdAt)
                 : "No checkpoints"}
@@ -143,7 +140,7 @@ export const ProjectItem = memo(function ProjectItem({
           <TooltipTrigger asChild>
             <Button
               className={cn(
-                "shrink-0 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
+                "shrink-0 opacity-0 transition-opacity duration-100 group-focus-within:opacity-100 group-hover:opacity-100",
                 project.watching ? "text-emerald-400" : "text-white/30"
               )}
               disabled={project.presence === "missing"}
@@ -209,21 +206,14 @@ function FolderManagerButton() {
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            className="text-white/25 hover:text-white/60"
-            onClick={handleClick}
-            onPointerDown={handlePointerDown}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <FolderSimplePlus size={16} />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Watch my folders</TooltipContent>
-      </Tooltip>
+      <button
+        className="font-medium text-[11px] text-emerald-300/70 transition-colors duration-100 hover:text-emerald-300"
+        onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        type="button"
+      >
+        Manage folders
+      </button>
 
       <RootManagerDialog onOpenChange={setManagerOpen} open={managerOpen} />
     </>
@@ -311,7 +301,10 @@ const VirtualizedProjectList = memo(function VirtualizedProjectList({
   }
 
   return (
-    <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-1">
+    <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2">
+      <div className="px-2 pb-2 font-semibold text-[10px] text-white/25 uppercase tracking-[0.14em]">
+        Recent projects
+      </div>
       <div className="space-y-0.5">
         {projects.map((project) => (
           <ProjectItem
@@ -370,16 +363,16 @@ export function AppSidebar() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full w-full flex-col overflow-hidden border-border border-r bg-white/[0.015]">
+      <aside className="flex h-full w-full flex-col overflow-hidden border-white/[0.065] border-e bg-white/[0.014]">
         {/* Header – padded below macOS traffic lights */}
-        <div className="shrink-0 px-4 pt-10 pb-3">
+        <div className="shrink-0 px-4 pt-10 pb-4">
           <div
             className="flex items-center justify-between"
             style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
           >
             <div className="flex items-center gap-2">
-              <Logo className="size-4 text-white/90" />
-              <h1 className="font-semibold text-base text-white/90 tracking-tight">
+              <Logo className="size-4 text-white/85" />
+              <h1 className="font-semibold text-[15px] text-white/85 tracking-tight">
                 Echoform
               </h1>
             </div>
@@ -388,19 +381,21 @@ export function AppSidebar() {
               style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
               <UpdateButton />
-              <FolderManagerButton />
+              <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 font-semibold text-[9px] text-emerald-300/70 uppercase tracking-wider">
+                Live
+              </span>
             </div>
           </div>
 
           <button
-            className="mt-3 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-[13px] text-white/25 transition-all duration-150 hover:border-white/[0.1] hover:bg-white/[0.05] hover:text-white/40"
+            className="mt-4 flex h-9 w-full items-center gap-2 rounded-xl bg-white/[0.035] px-3 text-[12px] text-white/25 shadow-[0_0_0_1px_oklch(1_0_0/0.055)] transition-[background-color,color,box-shadow] duration-100 hover:bg-white/[0.055] hover:text-white/45 hover:shadow-[0_0_0_1px_oklch(1_0_0/0.09)]"
             onClick={handleSearchClick}
             onPointerDown={handleSearchPointerDown}
             type="button"
           >
             <MagnifyingGlass className="shrink-0 text-white/20" size={13} />
-            <span className="flex-1 text-left">Search projects...</span>
-            <kbd className="rounded border border-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/15">
+            <span className="flex-1 text-left">Find a project</span>
+            <kbd className="font-mono text-[9px] text-white/15">
               {navigator.platform?.includes("Mac") ? "\u2318K" : "Ctrl+K"}
             </kbd>
           </button>
@@ -412,7 +407,19 @@ export function AppSidebar() {
           projects={sorted}
           selectedProjectId={selectedProjectId}
         />
-      </div>
+
+        <div className="m-3 rounded-xl bg-white/[0.025] p-3 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-white/25">Protected projects</span>
+            <span className="text-white/50 tabular-nums">
+              {projects.length}
+            </span>
+          </div>
+          <div className="mt-2">
+            <FolderManagerButton />
+          </div>
+        </div>
+      </aside>
 
       <ProjectSearchCommand onOpenChange={setSearchOpen} open={searchOpen} />
     </TooltipProvider>

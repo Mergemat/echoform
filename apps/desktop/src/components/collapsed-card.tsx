@@ -1,5 +1,5 @@
-import { Pause, Play } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { Clock, Disc, Pause, Play } from "@phosphor-icons/react";
+import { type KeyboardEvent, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -60,38 +60,49 @@ export function CollapsedCard({
   };
   const hasThumbnail = save.trackSummary && save.trackSummary.length > 0;
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    onClick();
+  };
+
   return (
-    <button
+    <div
+      aria-expanded={isSelected}
       className={cn(
-        "flex min-h-[44px] w-full items-center gap-2.5 py-3 pr-4 pl-4 text-left transition-all duration-150",
+        "flex min-h-[70px] w-full cursor-pointer items-center gap-4 rounded-2xl px-5 py-3.5 text-left transition-[background-color,box-shadow] duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
         isSelected
-          ? "border-white/50 border-l-2 bg-white/[0.06]"
-          : "border-transparent border-l-2 hover:bg-white/[0.03]"
+          ? "bg-white/[0.055] shadow-[0_0_0_1px_oklch(1_0_0/0.075)]"
+          : "hover:bg-white/[0.025]"
       )}
       onClick={onClick}
-      type="button"
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
     >
-      {/* Dot */}
+      {/* Checkpoint kind */}
       <div
         className={cn(
-          "size-2 shrink-0 rounded-full ring-2",
+          "flex size-8 shrink-0 items-center justify-center rounded-xl",
           isSelected
-            ? "bg-white ring-white/20"
+            ? "bg-white/10 text-white/70"
             : isHead
-              ? "bg-emerald-400 ring-emerald-400/20"
-              : save.auto
-                ? "bg-white/15 ring-white/[0.04]"
-                : "bg-white/40 ring-white/10"
+              ? "bg-emerald-400/10 text-emerald-300"
+              : "bg-white/[0.045] text-white/25"
         )}
-      />
+      >
+        {save.auto ? <Clock size={14} /> : <Disc size={14} weight="fill" />}
+      </div>
 
       {/* Label + chips stacked tight */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              "truncate text-[13px] leading-tight",
-              isSelected ? "font-medium text-white/90" : "text-white/55"
+              "truncate font-medium text-[13px] leading-tight",
+              isSelected ? "text-white/90" : "text-white/70"
             )}
           >
             {getSaveDisplayTitle(save)}
@@ -159,7 +170,7 @@ export function CollapsedCard({
             previewPlayerSaveId === save.id ? "Now playing" : "Play preview"
           }
           className={cn(
-            "flex size-6 shrink-0 items-center justify-center rounded-full transition-all",
+            "flex size-7 shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-100 active:scale-[0.96]",
             previewPlayerSaveId === save.id
               ? "bg-white/15 text-white/70"
               : "text-white/20 hover:bg-white/[0.06] hover:text-white/50"
@@ -177,6 +188,6 @@ export function CollapsedCard({
           )}
         </button>
       )}
-    </button>
+    </div>
   );
 }

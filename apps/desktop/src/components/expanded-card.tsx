@@ -339,7 +339,7 @@ function useExpandedCardView({
           : null;
 
   return (
-    <div className="space-y-2 border-white/60 border-l-2 bg-white/[0.05] pt-3 pr-5 pb-4 pl-4">
+    <div className="mt-1.5 space-y-2 rounded-xl bg-black/20 p-4 shadow-[0_0_0_1px_oklch(1_0_0/0.045)]">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <Input
