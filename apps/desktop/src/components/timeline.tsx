@@ -26,6 +26,12 @@ function useTimelineView() {
   const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
 
   const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
+  const selectedSave = project?.saves.find(
+    (save) => save.id === selectedSaveId
+  );
+  const selectedIdea = selectedSave
+    ? project?.ideas.find((idea) => idea.id === selectedSave.ideaId)
+    : undefined;
 
   const displayItems = useMemo(() => {
     if (!project) {
@@ -316,73 +322,72 @@ function useTimelineView() {
         </div>
       )}
 
-      <div className="scrollbar-thin flex-1 overflow-y-auto pb-24">
-        {activeSetSaves.length === 0 && (
-          <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-white/25">
-            No checkpoints for this Ableton set yet.
-          </div>
-        )}
-        {activeSetSaves.length > 0 && (
-          <div className="mx-auto w-full max-w-[980px] px-8 pt-3">
-            <div className="mb-4 flex items-center gap-3">
-              <h3 className="font-semibold text-[12px] text-white/45 uppercase tracking-[0.14em]">
-                Recent activity
-              </h3>
-              <div className="h-px flex-1 bg-white/[0.055]" />
+      <div className="flex min-h-0 flex-1">
+        <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto pb-24">
+          {activeSetSaves.length === 0 && (
+            <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-white/25">
+              No checkpoints for this Ableton set yet.
             </div>
-            <div className="space-y-2">
-              {visibleItems.map((item) => {
-                if (item.type === "group") {
-                  return (
-                    <div key={`group-${item.key}`}>
-                      <GroupCard
-                        expanded={expandedGroups.has(item.key)}
-                        groupKey={item.key}
-                        onToggle={() => toggleGroup(item.key)}
-                        saves={item.saves}
-                      />
-                    </div>
-                  );
-                }
-
-                const save = item.save;
-                const idea = item.idea;
-                const isHead = idea.headSaveId === save.id;
-                const isSelected = save.id === selectedSaveId;
-
-                return (
-                  <div key={`save-${save.id}`}>
-                    {isSelected ? (
-                      <div>
-                        <CollapsedCard
-                          isHead={isHead}
-                          isSelected
-                          onClick={() => toggleSave(save.id)}
-                          project={project}
-                          save={save}
-                        />
-                        <ExpandedCard
-                          idea={idea}
-                          isHead={isHead}
-                          onClose={() => toggleSave(save.id)}
-                          project={project}
-                          save={save}
+          )}
+          {activeSetSaves.length > 0 && (
+            <div
+              className={cn(
+                "mx-auto w-full px-8 pt-3",
+                selectedSave ? "max-w-[720px]" : "max-w-[980px]"
+              )}
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <h3 className="font-semibold text-[12px] text-white/45 uppercase tracking-[0.14em]">
+                  Recent activity
+                </h3>
+                <div className="h-px flex-1 bg-white/[0.055]" />
+              </div>
+              <div className="space-y-2">
+                {visibleItems.map((item) => {
+                  if (item.type === "group") {
+                    return (
+                      <div key={`group-${item.key}`}>
+                        <GroupCard
+                          expanded={expandedGroups.has(item.key)}
+                          groupKey={item.key}
+                          onToggle={() => toggleGroup(item.key)}
+                          saves={item.saves}
                         />
                       </div>
-                    ) : (
-                      <CollapsedCard
-                        isHead={isHead}
-                        isSelected={false}
-                        onClick={() => toggleSave(save.id)}
-                        project={project}
-                        save={save}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  }
+
+                  const save = item.save;
+                  const idea = item.idea;
+                  const isHead = idea.headSaveId === save.id;
+                  const isSelected = save.id === selectedSaveId;
+
+                  return (
+                    <CollapsedCard
+                      isHead={isHead}
+                      isSelected={isSelected}
+                      key={`save-${save.id}`}
+                      onClick={() => toggleSave(save.id)}
+                      project={project}
+                      save={save}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {selectedSave && (
+          <aside className="scrollbar-thin w-[min(48%,560px)] min-w-[420px] shrink-0 overflow-y-auto border-white/[0.065] border-s bg-[#101115]">
+            <ExpandedCard
+              idea={selectedIdea}
+              isHead={selectedIdea?.headSaveId === selectedSave.id}
+              onClose={() => toggleSave(selectedSave.id)}
+              project={project}
+              save={selectedSave}
+            />
+          </aside>
         )}
       </div>
     </div>

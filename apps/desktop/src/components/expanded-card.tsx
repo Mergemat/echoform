@@ -339,11 +339,15 @@ function useExpandedCardView({
           : null;
 
   return (
-    <div className="mt-1.5 space-y-2 rounded-xl bg-black/20 p-4 shadow-[0_0_0_1px_oklch(1_0_0/0.045)]">
-      <div className="flex items-start gap-2">
+    <div className="min-h-full space-y-6 px-6 py-6">
+      <header className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
+          <div className="font-semibold text-[10px] text-emerald-300/65 uppercase tracking-[0.14em]">
+            Checkpoint details
+          </div>
           <Input
-            className="h-auto w-full rounded-none border-0 border-white/[0.08] border-b bg-transparent px-0 pb-1 font-medium text-sm text-white/90 focus-visible:border-white/25 focus-visible:ring-0"
+            aria-label="Checkpoint name"
+            className="mt-1 h-9 w-full rounded-lg border-transparent bg-transparent px-0 font-semibold text-[18px] text-white/90 tracking-[-0.02em] hover:bg-white/[0.025] focus-visible:border-white/10 focus-visible:bg-white/[0.035] focus-visible:px-2 focus-visible:ring-0"
             onBlur={commitEdit}
             onChange={(e) =>
               setState((current) => ({
@@ -353,10 +357,7 @@ function useExpandedCardView({
             }
             value={labelVal}
           />
-          <div className="mt-1 text-[10px] text-white/45 uppercase tracking-[0.12em]">
-            Checkpoint
-          </div>
-          <div className="mt-1.5 flex items-center gap-1.5 text-white/25 text-xs">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-white/30">
             <span>{formatDateTime(save.createdAt)}</span>
             {idea && (
               <>
@@ -381,250 +382,276 @@ function useExpandedCardView({
         >
           <X size={12} />
         </Button>
-      </div>
+      </header>
 
-      <Textarea
-        className="min-h-[36px] w-full resize-none rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/55 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
-        onBlur={commitEdit}
-        onChange={(e) =>
-          setState((current) => ({
-            ...current,
-            noteVal: e.target.value,
-          }))
-        }
-        placeholder="Add a note to this checkpoint..."
-        value={noteVal}
-      />
+      <section>
+        <h4 className="mb-2 font-semibold text-[10px] text-white/30 uppercase tracking-[0.13em]">
+          Note
+        </h4>
+        <Textarea
+          className="min-h-[72px] w-full resize-none rounded-xl border-0 bg-white/[0.035] px-3.5 py-3 text-[12px] text-white/60 leading-relaxed shadow-[0_0_0_1px_oklch(1_0_0/0.055)] placeholder:text-white/20 focus-visible:shadow-[0_0_0_1px_oklch(1_0_0/0.14)] focus-visible:ring-0"
+          onBlur={commitEdit}
+          onChange={(e) =>
+            setState((current) => ({
+              ...current,
+              noteVal: e.target.value,
+            }))
+          }
+          placeholder="What changed or why this point matters..."
+          value={noteVal}
+        />
 
-      {(editPending || editSaved || editError) && (
-        <div
-          className={cn(
-            "text-[11px]",
-            editError ? "text-red-300/85" : "text-white/50"
-          )}
-          role={editError ? "alert" : "status"}
-        >
-          {editError ??
-            (editPending
-              ? "Saving checkpoint details..."
-              : "Checkpoint details saved to history.")}
-        </div>
-      )}
+        {(editPending || editSaved || editError) && (
+          <div
+            className={cn(
+              "mt-2 text-[11px]",
+              editError ? "text-red-300/85" : "text-white/40"
+            )}
+            role={editError ? "alert" : "status"}
+          >
+            {editError ??
+              (editPending
+                ? "Saving checkpoint details..."
+                : "Checkpoint details saved to history.")}
+          </div>
+        )}
+      </section>
 
-      <div className="flex items-center gap-1.5 text-[11px] text-white/30 tabular-nums">
-        <span>{save.metadata.fileCount} files</span>
-        <span className="text-white/10">·</span>
-        <span>{save.metadata.audioFiles} audio</span>
-        <span className="text-white/10">·</span>
-        <span>{formatSize(save.metadata.sizeBytes)}</span>
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          [save.metadata.fileCount, "Files"],
+          [save.metadata.audioFiles, "Audio"],
+          [formatSize(save.metadata.sizeBytes), "Snapshot"],
+        ].map(([value, label]) => (
+          <div className="rounded-xl bg-white/[0.03] px-3 py-3" key={label}>
+            <div className="font-medium text-[14px] text-white/70 tabular-nums">
+              {value}
+            </div>
+            <div className="mt-1 text-[10px] text-white/25 uppercase tracking-wider">
+              {label}
+            </div>
+          </div>
+        ))}
       </div>
 
       {save.trackSummary && save.trackSummary.length > 0 && (
-        <div>
-          <div className="mb-1.5 font-medium text-[11px] text-white/20 uppercase tracking-wider">
-            Tracks ({summarizedTrackCount ?? save.trackSummary.length})
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="font-semibold text-[10px] text-white/30 uppercase tracking-[0.13em]">
+              Track layout
+            </h4>
+            <span className="text-[11px] text-white/25 tabular-nums">
+              {summarizedTrackCount ?? save.trackSummary.length} tracks
+            </span>
           </div>
-          <TrackThumbnail tracks={save.trackSummary} variant="detail" />
-        </div>
+          <div className="rounded-xl bg-white/[0.025] p-3 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
+            <TrackThumbnail tracks={save.trackSummary} variant="detail" />
+          </div>
+        </section>
       )}
 
       {sd && (
-        <div className="space-y-1 text-xs">
-          {sd.tempoChange && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
-                Tempo
-              </span>
-              <span className="font-mono text-white/35 tabular-nums">
-                {sd.tempoChange.from}
-              </span>
-              <span className="text-white/12">→</span>
-              <span className="font-mono text-white/55 tabular-nums">
-                {sd.tempoChange.to}
-              </span>
-              <span className="text-white/15">bpm</span>
-            </div>
-          )}
-          {sd.timeSignatureChange && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
-                Time
-              </span>
-              <span className="font-mono text-white/35 tabular-nums">
-                {sd.timeSignatureChange.from}
-              </span>
-              <span className="text-white/12">→</span>
-              <span className="font-mono text-white/55 tabular-nums">
-                {sd.timeSignatureChange.to}
-              </span>
-            </div>
-          )}
-          {sd.arrangementLengthChange && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
-                Length
-              </span>
-              <span className="font-mono text-white/35 tabular-nums">
-                {Math.round(sd.arrangementLengthChange.from / 4)} bars
-              </span>
-              <span className="text-white/12">→</span>
-              <span className="font-mono text-white/55 tabular-nums">
-                {Math.round(sd.arrangementLengthChange.to / 4)} bars
-              </span>
-            </div>
-          )}
-          {sd.sceneCountChange && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
-                Scenes
-              </span>
-              <span className="font-mono text-white/35 tabular-nums">
-                {sd.sceneCountChange.from}
-              </span>
-              <span className="text-white/12">→</span>
-              <span className="font-mono text-white/55 tabular-nums">
-                {sd.sceneCountChange.to}
-              </span>
-            </div>
-          )}
-          {sd.locatorCountChange && (
-            <div className="flex items-center gap-1 text-[11px]">
-              <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
-                Cues
-              </span>
-              <span className="font-mono text-white/35 tabular-nums">
-                {sd.locatorCountChange.from}
-              </span>
-              <span className="text-white/12">→</span>
-              <span className="font-mono text-white/55 tabular-nums">
-                {sd.locatorCountChange.to}
-              </span>
-            </div>
-          )}
-          {sd.tracksReordered && (
-            <div className="text-[11px] text-white/30">Tracks reordered</div>
-          )}
-          {sd.addedTracks.length > 0 && (
-            <div className="space-y-px">
-              {sd.addedTracks.map((t) => (
-                <div
-                  className="flex items-center gap-1 text-[11px] text-emerald-400/50"
-                  key={`add-${t.type}-${t.name}`}
-                >
-                  <span className="shrink-0">+</span>
-                  <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
-                    {TTRACK[t.type] ?? t.type}
-                  </span>
-                  <span className="truncate text-white/40">{t.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {sd.removedTracks.length > 0 && (
-            <div className="space-y-px">
-              {sd.removedTracks.map((t) => (
-                <div
-                  className="flex items-center gap-1 text-[11px] text-red-400/50"
-                  key={`rem-${t.type}-${t.name}`}
-                >
-                  <span className="shrink-0">−</span>
-                  <span className="shrink-0 text-[9px] text-white/10 uppercase tracking-wider">
-                    {TTRACK[t.type] ?? t.type}
-                  </span>
-                  <span className="truncate text-white/25 line-through">
-                    {t.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {sd.modifiedTracks.length > 0 &&
-            (() => {
-              const groups = groupModifiedTracks(sd.modifiedTracks);
-              return groups.map((g) => {
-                const rep = g.tracks[0]!;
-                const names = g.tracks.map((t) => t.name);
-                const hasDetail =
-                  rep.addedDevices.length > 0 ||
-                  rep.removedDevices.length > 0 ||
-                  rep.deviceToggles.length > 0 ||
-                  rep.colorChanged ||
-                  rep.clipCountDelta !== 0 ||
-                  rep.mixerChanges.length > 0;
-                return (
-                  <div className="space-y-px text-[11px]" key={g.key}>
-                    <div className="flex items-center gap-1 text-white/40">
-                      {g.tracks.length === 1 && (
-                        <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
-                          {TTRACK[rep.type] ?? rep.type}
+        <section>
+          <h4 className="mb-2 font-semibold text-[10px] text-white/30 uppercase tracking-[0.13em]">
+            Changes
+          </h4>
+          <div className="space-y-2 rounded-xl bg-white/[0.025] p-3.5 text-xs shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
+            {sd.tempoChange && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                  Tempo
+                </span>
+                <span className="font-mono text-white/35 tabular-nums">
+                  {sd.tempoChange.from}
+                </span>
+                <span className="text-white/12">→</span>
+                <span className="font-mono text-white/55 tabular-nums">
+                  {sd.tempoChange.to}
+                </span>
+                <span className="text-white/15">bpm</span>
+              </div>
+            )}
+            {sd.timeSignatureChange && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                  Time
+                </span>
+                <span className="font-mono text-white/35 tabular-nums">
+                  {sd.timeSignatureChange.from}
+                </span>
+                <span className="text-white/12">→</span>
+                <span className="font-mono text-white/55 tabular-nums">
+                  {sd.timeSignatureChange.to}
+                </span>
+              </div>
+            )}
+            {sd.arrangementLengthChange && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                  Length
+                </span>
+                <span className="font-mono text-white/35 tabular-nums">
+                  {Math.round(sd.arrangementLengthChange.from / 4)} bars
+                </span>
+                <span className="text-white/12">→</span>
+                <span className="font-mono text-white/55 tabular-nums">
+                  {Math.round(sd.arrangementLengthChange.to / 4)} bars
+                </span>
+              </div>
+            )}
+            {sd.sceneCountChange && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                  Scenes
+                </span>
+                <span className="font-mono text-white/35 tabular-nums">
+                  {sd.sceneCountChange.from}
+                </span>
+                <span className="text-white/12">→</span>
+                <span className="font-mono text-white/55 tabular-nums">
+                  {sd.sceneCountChange.to}
+                </span>
+              </div>
+            )}
+            {sd.locatorCountChange && (
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="w-10 shrink-0 text-white/20 uppercase tracking-wider">
+                  Cues
+                </span>
+                <span className="font-mono text-white/35 tabular-nums">
+                  {sd.locatorCountChange.from}
+                </span>
+                <span className="text-white/12">→</span>
+                <span className="font-mono text-white/55 tabular-nums">
+                  {sd.locatorCountChange.to}
+                </span>
+              </div>
+            )}
+            {sd.tracksReordered && (
+              <div className="text-[11px] text-white/30">Tracks reordered</div>
+            )}
+            {sd.addedTracks.length > 0 && (
+              <div className="space-y-px">
+                {sd.addedTracks.map((t) => (
+                  <div
+                    className="flex items-center gap-1 text-[11px] text-emerald-400/50"
+                    key={`add-${t.type}-${t.name}`}
+                  >
+                    <span className="shrink-0">+</span>
+                    <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
+                      {TTRACK[t.type] ?? t.type}
+                    </span>
+                    <span className="truncate text-white/40">{t.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {sd.removedTracks.length > 0 && (
+              <div className="space-y-px">
+                {sd.removedTracks.map((t) => (
+                  <div
+                    className="flex items-center gap-1 text-[11px] text-red-400/50"
+                    key={`rem-${t.type}-${t.name}`}
+                  >
+                    <span className="shrink-0">−</span>
+                    <span className="shrink-0 text-[9px] text-white/10 uppercase tracking-wider">
+                      {TTRACK[t.type] ?? t.type}
+                    </span>
+                    <span className="truncate text-white/25 line-through">
+                      {t.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {sd.modifiedTracks.length > 0 &&
+              (() => {
+                const groups = groupModifiedTracks(sd.modifiedTracks);
+                return groups.map((g) => {
+                  const rep = g.tracks[0]!;
+                  const names = g.tracks.map((t) => t.name);
+                  const hasDetail =
+                    rep.addedDevices.length > 0 ||
+                    rep.removedDevices.length > 0 ||
+                    rep.deviceToggles.length > 0 ||
+                    rep.colorChanged ||
+                    rep.clipCountDelta !== 0 ||
+                    rep.mixerChanges.length > 0;
+                  return (
+                    <div className="space-y-px text-[11px]" key={g.key}>
+                      <div className="flex items-center gap-1 text-white/40">
+                        {g.tracks.length === 1 && (
+                          <span className="shrink-0 text-[9px] text-white/15 uppercase tracking-wider">
+                            {TTRACK[rep.type] ?? rep.type}
+                          </span>
+                        )}
+                        <span className="truncate">
+                          {g.tracks.length === 1
+                            ? rep.name
+                            : `${names.join(", ")}`}
                         </span>
-                      )}
-                      <span className="truncate">
-                        {g.tracks.length === 1
-                          ? rep.name
-                          : `${names.join(", ")}`}
-                      </span>
-                      {g.tracks.length > 1 && (
-                        <span className="shrink-0 text-[9px] text-white/15">
-                          ({g.tracks.length} tracks)
-                        </span>
-                      )}
-                      {rep.renamedFrom && g.tracks.length === 1 && (
-                        <span className="text-[10px] text-white/15">
-                          ← {rep.renamedFrom}
-                        </span>
-                      )}
-                    </div>
-                    {hasDetail && (
-                      <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
-                        {rep.colorChanged && (
-                          <span className="text-white/30">color changed</span>
-                        )}
-                        {rep.addedDevices.length > 0 && (
-                          <span className="text-emerald-400/40">
-                            +{rep.addedDevices.join(", ")}
+                        {g.tracks.length > 1 && (
+                          <span className="shrink-0 text-[9px] text-white/15">
+                            ({g.tracks.length} tracks)
                           </span>
                         )}
-                        {rep.removedDevices.length > 0 && (
-                          <span className="text-red-400/40">
-                            −{rep.removedDevices.join(", ")}
+                        {rep.renamedFrom && g.tracks.length === 1 && (
+                          <span className="text-[10px] text-white/15">
+                            ← {rep.renamedFrom}
                           </span>
-                        )}
-                        {rep.deviceToggles.length > 0 && (
-                          <span className="text-amber-400/40">
-                            {rep.deviceToggles
-                              .map(
-                                (d) => `${d.name} ${d.enabled ? "on" : "off"}`
-                              )
-                              .join(", ")}
-                          </span>
-                        )}
-                        {rep.clipCountDelta !== 0 && (
-                          <span
-                            className={
-                              rep.clipCountDelta > 0
-                                ? "text-emerald-400/40"
-                                : "text-red-400/40"
-                            }
-                          >
-                            {rep.clipCountDelta > 0 ? "+" : ""}
-                            {rep.clipCountDelta} clips
-                          </span>
-                        )}
-                        {rep.mixerChanges.length > 0 && (
-                          <span>{rep.mixerChanges.join(", ")}</span>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-        </div>
+                      {hasDetail && (
+                        <div className="flex flex-wrap gap-x-2 pl-3 text-[10px] text-white/20">
+                          {rep.colorChanged && (
+                            <span className="text-white/30">color changed</span>
+                          )}
+                          {rep.addedDevices.length > 0 && (
+                            <span className="text-emerald-400/40">
+                              +{rep.addedDevices.join(", ")}
+                            </span>
+                          )}
+                          {rep.removedDevices.length > 0 && (
+                            <span className="text-red-400/40">
+                              −{rep.removedDevices.join(", ")}
+                            </span>
+                          )}
+                          {rep.deviceToggles.length > 0 && (
+                            <span className="text-amber-400/40">
+                              {rep.deviceToggles
+                                .map(
+                                  (d) => `${d.name} ${d.enabled ? "on" : "off"}`
+                                )
+                                .join(", ")}
+                            </span>
+                          )}
+                          {rep.clipCountDelta !== 0 && (
+                            <span
+                              className={
+                                rep.clipCountDelta > 0
+                                  ? "text-emerald-400/40"
+                                  : "text-red-400/40"
+                              }
+                            >
+                              {rep.clipCountDelta > 0 ? "+" : ""}
+                              {rep.clipCountDelta} clips
+                            </span>
+                          )}
+                          {rep.mixerChanges.length > 0 && (
+                            <span>{rep.mixerChanges.join(", ")}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+          </div>
+        </section>
       )}
 
       {needsAnalysis ? (
-        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+        <div className="rounded-xl bg-white/[0.025] p-3.5 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
           <div className="mb-2 text-white/25 text-xs">
             {changes === undefined
               ? "No change data available"
@@ -645,7 +672,7 @@ function useExpandedCardView({
           removedOther.length +
           modifiedOther.length >
         0 ? (
-        <div className="space-y-2 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3">
+        <div className="space-y-2 rounded-xl bg-white/[0.025] p-3.5 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
           {addedAudio.length > 0 && (
             <div>
               <div className="mb-1 font-medium text-[11px] text-emerald-400/60 uppercase tracking-wider">
@@ -715,104 +742,116 @@ function useExpandedCardView({
       )}
 
       <TooltipProvider>
-        <div className="flex items-center gap-1 pt-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={() => {
-                  if (save.previewStatus === "ready") {
-                    openPreviewPlayer(save.id, project);
-                    return;
-                  }
-                  setState((current) => ({
-                    ...current,
-                    showPreviewDialog: true,
-                  }));
-                }}
-                size="sm"
-                variant="outline"
-              >
+        <section>
+          <h4 className="mb-2 font-semibold text-[10px] text-white/30 uppercase tracking-[0.13em]">
+            Actions
+          </h4>
+          <div className="flex flex-wrap items-center gap-1 rounded-xl bg-white/[0.025] p-2 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => {
+                    if (save.previewStatus === "ready") {
+                      openPreviewPlayer(save.id, project);
+                      return;
+                    }
+                    setState((current) => ({
+                      ...current,
+                      showPreviewDialog: true,
+                    }));
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  {save.previewStatus === "ready"
+                    ? previewButtonLabel
+                    : "Add preview to checkpoint"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
                 {save.previewStatus === "ready"
-                  ? previewButtonLabel
-                  : "Add preview to checkpoint"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {save.previewStatus === "ready"
-                ? "Listen to how your track sounded at this point"
-                : "Attach an audio bounce to this checkpoint for playback"}
-            </TooltipContent>
-          </Tooltip>
-          {save.previewStatus === "ready" && (
-            <Button
-              onClick={() =>
-                setState((current) => ({ ...current, showPreviewDialog: true }))
-              }
-              size="sm"
-              variant="ghost"
-            >
-              Replace
-            </Button>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={toggleRecoveryForm} size="sm" variant="ghost">
-                <Copy data-icon="inline-start" size={13} /> Continue from here
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              Recover this checkpoint into a verified copy, then open it in
-              Ableton
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
+                  ? "Listen to how your track sounded at this point"
+                  : "Attach an audio bounce to this checkpoint for playback"}
+              </TooltipContent>
+            </Tooltip>
+            {save.previewStatus === "ready" && (
               <Button
-                aria-label={save.pinned ? "Unpin checkpoint" : "Pin checkpoint"}
-                className={save.pinned ? "text-amber-200/90" : "text-white/50"}
-                disabled={pinPending}
-                onClick={() => void handlePin()}
-                size="icon-sm"
-                variant="ghost"
-              >
-                {pinPending ? (
-                  <CircleNotch className="animate-spin" size={13} />
-                ) : (
-                  <PushPin
-                    size={13}
-                    weight={save.pinned ? "fill" : "regular"}
-                  />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {save.pinned
-                ? "Allow this checkpoint to follow normal retention"
-                : "Protect this checkpoint from automatic cleanup"}
-            </TooltipContent>
-          </Tooltip>
-          <div className="flex-1" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label="Delete checkpoint"
-                className="text-white/35 hover:text-red-300"
                 onClick={() =>
                   setState((current) => ({
                     ...current,
-                    deleteError: null,
-                    showDeleteConfirm: true,
+                    showPreviewDialog: true,
                   }))
                 }
-                size="icon-sm"
+                size="sm"
                 variant="ghost"
               >
-                <TrashSimple size={13} />
+                Replace
               </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Delete checkpoint</TooltipContent>
-          </Tooltip>
-        </div>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={toggleRecoveryForm} size="sm" variant="ghost">
+                  <Copy data-icon="inline-start" size={13} /> Continue from here
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Recover this checkpoint into a verified copy, then open it in
+                Ableton
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={
+                    save.pinned ? "Unpin checkpoint" : "Pin checkpoint"
+                  }
+                  className={
+                    save.pinned ? "text-amber-200/90" : "text-white/50"
+                  }
+                  disabled={pinPending}
+                  onClick={() => void handlePin()}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  {pinPending ? (
+                    <CircleNotch className="animate-spin" size={13} />
+                  ) : (
+                    <PushPin
+                      size={13}
+                      weight={save.pinned ? "fill" : "regular"}
+                    />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {save.pinned
+                  ? "Allow this checkpoint to follow normal retention"
+                  : "Protect this checkpoint from automatic cleanup"}
+              </TooltipContent>
+            </Tooltip>
+            <div className="flex-1" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label="Delete checkpoint"
+                  className="text-white/35 hover:text-red-300"
+                  onClick={() =>
+                    setState((current) => ({
+                      ...current,
+                      deleteError: null,
+                      showDeleteConfirm: true,
+                    }))
+                  }
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <TrashSimple size={13} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Delete checkpoint</TooltipContent>
+            </Tooltip>
+          </div>
+        </section>
       </TooltipProvider>
 
       {previewStatusText && (
@@ -824,64 +863,91 @@ function useExpandedCardView({
         </div>
       )}
 
-      {showRecoveryForm && (
-        <div className="space-y-2.5 rounded-lg border border-white/[0.12] bg-white/[0.05] p-3">
-          <div className="font-medium text-[11px] text-white/70 uppercase tracking-wider">
-            Continue from this checkpoint
-          </div>
-          <div className="text-[11px] text-white/50 leading-snug">
-            Echoform will start a new branch from this exact moment in a
-            separate project folder, open it, and keep your current work
-            untouched.
-          </div>
-          <button
-            aria-expanded={showAdvancedRecovery}
-            className="flex items-center gap-1 text-[11px] text-white/45 hover:text-white/70"
-            onClick={() =>
-              setState((current) => ({
-                ...current,
-                showAdvancedRecovery: !current.showAdvancedRecovery,
-              }))
-            }
-            type="button"
-          >
-            <CaretDown
-              className={cn(
-                "transition-transform",
-                showAdvancedRecovery ? "rotate-0" : "-rotate-90"
-              )}
-              size={11}
-            />
-            Advanced: recovery file and location
-          </button>
-          {showAdvancedRecovery && (
-            <div className="space-y-1 rounded-md bg-black/15 p-2 text-[10px] text-white/50 leading-relaxed">
-              <div>
-                Echoform creates a uniquely named project in Music/Echoform
-                Recoveries, separate from your working project.
+      <Dialog
+        onOpenChange={(open) =>
+          !recovering &&
+          setState((current) => ({
+            ...current,
+            recoveryError: null,
+            showAdvancedRecovery: open ? current.showAdvancedRecovery : false,
+            showRecoveryForm: open,
+          }))
+        }
+        open={showRecoveryForm}
+      >
+        <DialogContent className="gap-0 overflow-hidden rounded-xl border-white/[0.1] bg-[#111215] p-0 sm:max-w-[480px]">
+          <DialogHeader className="px-6 pt-6 pb-4">
+            <DialogTitle className="text-white/90">
+              Continue from this checkpoint
+            </DialogTitle>
+            <DialogDescription className="text-white/50 leading-relaxed">
+              Echoform creates a separate project branch from this exact moment,
+              opens it in Ableton, and leaves your current work untouched.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-6 pb-5">
+            <button
+              aria-expanded={showAdvancedRecovery}
+              className="flex items-center gap-1.5 text-[12px] text-white/45 transition-colors duration-100 hover:text-white/70"
+              onClick={() =>
+                setState((current) => ({
+                  ...current,
+                  showAdvancedRecovery: !current.showAdvancedRecovery,
+                }))
+              }
+              type="button"
+            >
+              <CaretDown
+                className={cn(
+                  "transition-transform duration-150",
+                  showAdvancedRecovery ? "rotate-0" : "-rotate-90"
+                )}
+                size={11}
+              />
+              Advanced: recovery file and location
+            </button>
+            {showAdvancedRecovery && (
+              <div className="mt-3 space-y-2 rounded-lg bg-white/[0.035] p-3 text-[11px] text-white/45 leading-relaxed">
+                <p>
+                  The branch is created in Music/Echoform Recoveries with a
+                  unique name, separate from the working project.
+                </p>
+                <p>
+                  Every file is verified before the Ableton set opens. Existing
+                  files are never overwritten.
+                </p>
               </div>
-              <div>
-                Every file from the checkpoint is verified before its recovered
-                Ableton set opens. Existing files are never overwritten.
+            )}
+            {recoveryError && (
+              <div
+                className="mt-3 rounded-lg bg-red-400/[0.08] px-3 py-2 text-[12px] text-red-300/85"
+                role="alert"
+              >
+                {recoveryError}
               </div>
-            </div>
-          )}
-          {recoveryError && (
-            <div className="text-[11px] text-red-300/85" role="alert">
-              {recoveryError}
-            </div>
-          )}
-          <Button
-            disabled={recovering}
-            onClick={() => void handleRecover()}
-            size="sm"
-            variant="outline"
-          >
-            {recovering && <CircleNotch className="animate-spin" size={13} />}
-            {recovering ? "Creating branch..." : "Create branch and open"}
-          </Button>
-        </div>
-      )}
+            )}
+          </div>
+
+          <DialogFooter className="border-white/[0.07] border-t bg-white/[0.02] px-6 py-4">
+            <Button
+              disabled={recovering}
+              onClick={() => toggleRecoveryForm()}
+              variant="ghost"
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-white text-zinc-950 hover:bg-zinc-200"
+              disabled={recovering}
+              onClick={() => void handleRecover()}
+            >
+              {recovering && <CircleNotch className="animate-spin" size={13} />}
+              {recovering ? "Creating branch..." : "Create branch and open"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         onOpenChange={(open) =>
