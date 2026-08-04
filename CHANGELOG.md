@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.22](https://github.com/Mergemat/echoform/compare/v0.0.21...v0.0.22) (2026-08-04)
+
+### Bug Fixes
+
+* **deps:** restore Astro-compatible js-yaml ([49f60ac](https://github.com/Mergemat/echoform/commit/49f60ac4c22a810c3a9c893e811b406a5bf887e7))
+
 ## [0.0.21](https://github.com/Mergemat/echoform/compare/v0.0.20...v0.0.21) (2026-08-04)
 
 ### Features
