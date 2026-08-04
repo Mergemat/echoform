@@ -1,8 +1,6 @@
-import { createHash } from "node:crypto";
 import {
   access,
   copyFile,
-  cp,
   mkdir,
   readdir,
   readFile,
@@ -16,36 +14,28 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { diffSets, isEmptyDiff } from "./als-diff";
 import type { SetSnapshot } from "./als-parser";
 import { extractTrackSummary, parseAlsFile } from "./als-parser";
-import type { Manifest, ManifestEntry } from "./blob-store";
+import { mapWithConcurrency } from "./async-utils";
+import type { ManifestEntry } from "./blob-store";
 import {
-  createManifest,
-  deleteManifest,
   gcBlobs,
   getBlobPath,
   readManifest,
   resolveProjectStateDir,
-  storeBlob,
+  stageManifestsForDeletion,
 } from "./blob-store";
-import type { AbletonLauncher } from "./branch-files";
+import type { AbletonLauncher } from "./ableton-files";
 import {
   buildAbsolutePathIndex,
-  buildDefaultBranchFileName,
-  buildUniqueBranchSetPath,
   changePathToRelativeSetPath,
   createAbletonLauncher,
-  dirnameOfSetPath,
   normalizeAbsolutePath,
-  normalizeRelativeSetPath,
   resolveProjectFilePath,
-} from "./branch-files";
+} from "./ableton-files";
 import { discoverProjectsInRoot, discoverRootSuggestions } from "./discovery";
-import {
-  LEGACY_STATE_DIR_ENV,
-  LEGACY_STATE_DIRNAME,
-  STATE_DIR_ENV,
-  STATE_DIRNAME,
-} from "./paths";
+import { STATE_DIRNAME } from "./paths";
 import { formatDiffAsLabel } from "./smart-naming";
+import { captureStoredSnapshot, recoverStoredSnapshot } from "./history-store";
+import { StateRepository } from "./state-repository";
 import type {
   ActivityItem,
   AppState,
@@ -60,6 +50,7 @@ import type {
   Project,
   ProjectMetadata,
   RootSuggestion,
+  RecoveryResult,
   Save,
   SetDiff,
   TrackedRoot,
@@ -88,9 +79,6 @@ interface ProjectSnapshot {
 }
 const MAX_ACTIVITY_ITEMS = 80;
 const WALK_CONCURRENCY = 32;
-const ALS_HASH_CONCURRENCY = 4;
-const SAVE_SETTLE_RETRY_MS = 200;
-const SAVE_SETTLE_MAX_ATTEMPTS = 8;
 const AUTO_COMPACT_MAX_AUTO_SAVES = 100;
 const AUTO_COMPACT_MAX_BLOB_STORAGE_BYTES = 2 * 1024 * 1024 * 1024;
 const PREVIEW_FILE_BASENAME = "preview";
@@ -121,6 +109,15 @@ export class AppError extends Error {
   }
 }
 
+function isErrno(error: unknown, code: string): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
+}
+
 function createId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -129,7 +126,7 @@ function createActivity(
   kind: ActivityItem["kind"],
   message: string,
   severity: ActivityItem["severity"],
-  extra: Pick<ActivityItem, "rootId" | "projectId"> = {}
+  extra: Pick<ActivityItem, "rootId" | "projectId"> = {},
 ): ActivityItem {
   return {
     id: createId("activity"),
@@ -185,180 +182,11 @@ function ensureUniqueIdeaName(project: Project, baseName: string): string {
   return `${trimmed} ${n}`;
 }
 
-function buildRecoveredIdeaName(project: Project, fromSave: Save): string {
-  const source = fromSave.label.trim() || "version";
-  return ensureUniqueIdeaName(project, `Recovered ${source}`);
-}
-
-function createBranchIdea(
-  project: Project,
-  fromSave: Save,
-  name: string,
-  setPath: string
-): Idea {
-  const now = new Date().toISOString();
-  return {
-    id: createId("idea"),
-    name: ensureUniqueIdeaName(project, name),
-    createdAt: now,
-    setPath,
-    baseSaveId: fromSave.id,
-    headSaveId: fromSave.id,
-    parentIdeaId: fromSave.ideaId,
-    forkedFromSaveId: fromSave.id,
-  };
-}
-
-function deriveIdeaSetPath(project: Project, idea: Idea): string {
-  if ("setPath" in idea && typeof idea.setPath === "string" && idea.setPath) {
-    return normalizeRelativeSetPath(idea.setPath);
-  }
-  const ideaSaves = project.saves
-    .filter((save) => save.ideaId === idea.id)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const latestIdeaSave = ideaSaves.at(-1);
-  if (latestIdeaSave) {
-    return normalizeRelativeSetPath(latestIdeaSave.metadata.activeSetPath);
-  }
-  if (idea.forkedFromSaveId) {
-    const forkSave = project.saves.find(
-      (save) => save.id === idea.forkedFromSaveId
-    );
-    if (forkSave) {
-      return normalizeRelativeSetPath(forkSave.metadata.activeSetPath);
-    }
-  }
-  if ("activeSetPath" in project && typeof project.activeSetPath === "string") {
-    return normalizeRelativeSetPath(project.activeSetPath);
-  }
-  return "project.als";
-}
-
-function migrateIdea(project: Project, idea: Idea): Idea {
-  return {
-    ...idea,
-    setPath: deriveIdeaSetPath(project, idea),
-    parentIdeaId: idea.parentIdeaId ?? null,
-    forkedFromSaveId: idea.forkedFromSaveId ?? null,
-  };
-}
-
-function migrateSave(save: Save): Save {
-  const previewRefs = Array.isArray(save.previewRefs)
-    ? save.previewRefs.filter((ref): ref is string => Boolean(ref))
-    : [];
-  const previewMime =
-    "previewMime" in save && typeof save.previewMime === "string"
-      ? save.previewMime
-      : inferPreviewMime(previewRefs[0] ?? "");
-  const requestedAt =
-    "previewRequestedAt" in save ? (save.previewRequestedAt ?? null) : null;
-  const updatedAt =
-    "previewUpdatedAt" in save ? (save.previewUpdatedAt ?? null) : null;
-  const previewStatus = derivePreviewStatus({
-    previewRefs,
-    previewStatus:
-      "previewStatus" in save &&
-      typeof save.previewStatus === "string" &&
-      ["none", "pending", "ready", "missing", "error"].includes(
-        save.previewStatus
-      )
-        ? save.previewStatus
-        : previewRefs.length > 0
-          ? "ready"
-          : "none",
-  });
-
-  return {
-    ...save,
-    previewRefs,
-    previewStatus,
-    previewMime,
-    previewRequestedAt: requestedAt,
-    previewUpdatedAt: updatedAt,
-  };
-}
-
-function migrateProject(project: Project): Project {
-  const ideas = project.ideas.map((idea) => migrateIdea(project, idea));
-  const saves = project.saves.map((save) => migrateSave(save));
-  const lastSeenAt =
-    "lastSeenAt" in project && typeof project.lastSeenAt !== "undefined"
-      ? project.lastSeenAt
-      : project.updatedAt;
-  return {
-    ...project,
-    rootIds:
-      ("rootIds" in project && Array.isArray(project.rootIds)
-        ? project.rootIds
-        : []) ?? [],
-    presence:
-      ("presence" in project ? project.presence : "active") === "missing"
-        ? "missing"
-        : "active",
-    watchError: ("watchError" in project ? project.watchError : null) ?? null,
-    lastSeenAt: lastSeenAt ?? null,
-    pendingOpen:
-      ("pendingOpen" in project ? project.pendingOpen : null) ?? null,
-    driftStatus:
-      ("driftStatus" in project ? project.driftStatus : null) ?? null,
-    ideas,
-    saves,
-  };
-}
-
-function migrateState(state: AppState): AppState {
-  return {
-    roots:
-      ("roots" in state ? state.roots : [])
-        ?.filter((root): root is TrackedRoot => Boolean(root?.path))
-        .map((root) => ({
-          id:
-            typeof root.id === "string" && root.id.length > 0
-              ? root.id
-              : createId("root"),
-          path: resolve(root.path),
-          name: root.name || basename(root.path),
-          createdAt: root.createdAt ?? new Date().toISOString(),
-          lastScannedAt: root.lastScannedAt ?? null,
-          lastError: root.lastError ?? null,
-        })) ?? [],
-    projects: state.projects.map(migrateProject),
-    activity:
-      ("activity" in state ? state.activity : [])
-        ?.filter((item): item is ActivityItem => Boolean(item?.message))
-        .slice(0, MAX_ACTIVITY_ITEMS) ?? [],
-  };
-}
-
 // ── Filesystem helpers ──────────────────────────────────────────────
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-
-  async function runWorker(): Promise<void> {
-    while (true) {
-      const index = nextIndex++;
-      if (index >= items.length) {
-        return;
-      }
-      results[index] = await worker(items[index]!);
-    }
-  }
-
-  const concurrency = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: concurrency }, () => runWorker()));
-  return results;
-}
 
 async function walkProject(
   rootPath: string,
-  currentPath = rootPath
+  currentPath = rootPath,
 ): Promise<ProjectSnapshot> {
   const entries = await readdir(currentPath, { withFileTypes: true });
   const files: FileRecord[] = [];
@@ -371,8 +199,7 @@ async function walkProject(
       if (entry.isDirectory()) {
         if (
           entry.name === STATE_DIRNAME ||
-          entry.name === LEGACY_STATE_DIRNAME ||
-          entry.name === "Backup"
+          (currentPath === rootPath && entry.name === "Backup")
         ) {
           return { files: [], emptyDirs: [] };
         }
@@ -397,7 +224,7 @@ async function walkProject(
         ],
         emptyDirs: [],
       };
-    }
+    },
   );
 
   for (const snapshot of snapshots) {
@@ -410,116 +237,13 @@ async function walkProject(
   return { files, emptyDirs };
 }
 
-async function enrichAlsContentHashes(
-  rootPath: string,
-  snapshot: ProjectSnapshot
-): Promise<ProjectSnapshot> {
-  const alsFiles = snapshot.files.filter((file) =>
-    isAlsPath(file.relativePath)
-  );
-  if (alsFiles.length === 0) {
-    return snapshot;
-  }
-
-  const contentHashes = new Map<string, string>();
-  const results = await mapWithConcurrency(
-    alsFiles,
-    ALS_HASH_CONCURRENCY,
-    async (file) => {
-      const content = await readFile(join(rootPath, file.relativePath));
-      return {
-        relativePath: file.relativePath,
-        contentHash: createHash("sha256").update(content).digest("hex"),
-      };
-    }
-  );
-
-  for (const result of results) {
-    contentHashes.set(result.relativePath, result.contentHash);
-  }
-
-  return {
-    emptyDirs: snapshot.emptyDirs,
-    files: snapshot.files.map((file) =>
-      contentHashes.has(file.relativePath)
-        ? {
-            ...file,
-            contentHash: contentHashes.get(file.relativePath),
-          }
-        : file
-    ),
-  };
-}
-
-function hashFiles(files: FileRecord[]): string {
-  const h = createHash("sha256");
-  for (const f of files) {
-    h.update(`file:${f.relativePath}:${f.size}:`);
-    if (isAlsPath(f.relativePath) && f.contentHash) {
-      h.update(`content:${f.contentHash}`);
-    } else {
-      h.update(`mtime:${f.mtimeMs}`);
-    }
-    h.update("\n");
-  }
-  return h.digest("hex");
-}
-
-function hashProject(snapshot: ProjectSnapshot): string {
-  const h = createHash("sha256");
-  for (const f of snapshot.files) {
-    h.update(`file:${f.relativePath}:${f.size}:`);
-    if (isAlsPath(f.relativePath) && f.contentHash) {
-      h.update(`content:${f.contentHash}`);
-    } else {
-      h.update(`mtime:${f.mtimeMs}`);
-    }
-    h.update("\n");
-  }
-  for (const dir of snapshot.emptyDirs) {
-    h.update(`dir:${dir}\n`);
-  }
-  return h.digest("hex");
-}
-
-function hashFilesLegacy(files: FileRecord[]): string {
-  const h = createHash("sha256");
-  for (const f of files) {
-    h.update(`${f.relativePath}:${f.size}:${f.mtimeMs}\n`);
-  }
-  return h.digest("hex");
-}
-
-function hashProjectLegacy(snapshot: ProjectSnapshot): string {
-  const h = createHash("sha256");
-  for (const f of snapshot.files) {
-    h.update(`file:${f.relativePath}:${f.size}:${f.mtimeMs}\n`);
-  }
-  for (const dir of snapshot.emptyDirs) {
-    h.update(`dir:${dir}\n`);
-  }
-  return h.digest("hex");
-}
-
-function matchesProjectHash(
-  snapshot: ProjectSnapshot,
-  expectedHash: string
-): boolean {
-  return (
-    hashProject(snapshot) === expectedHash ||
-    hashFiles(snapshot.files) === expectedHash ||
-    hashProjectLegacy(snapshot) === expectedHash ||
-    hashFilesLegacy(snapshot.files) === expectedHash
-  );
-}
-
 function metadataFromFiles(
   files: FileRecord[],
-  preferred?: string
+  preferred?: string,
 ): ProjectMetadata {
   const setFiles = files
     .filter(
-      (f) => isAlsPath(f.relativePath) && !isBackupRelativePath(f.relativePath)
+      (f) => isAlsPath(f.relativePath) && !isBackupRelativePath(f.relativePath),
     )
     .map((f) => f.relativePath)
     .sort();
@@ -531,7 +255,7 @@ function metadataFromFiles(
       ? preferred
       : detectActiveSet(files, setFiles);
   const audioFiles = files.filter((f) =>
-    AUDIO_EXTENSIONS.has(extname(f.relativePath).toLowerCase())
+    AUDIO_EXTENSIONS.has(extname(f.relativePath).toLowerCase()),
   ).length;
   const sizeBytes = files.reduce((s, f) => s + f.size, 0);
   const latest = files.reduce((m, f) => Math.max(m, f.mtimeMs), 0);
@@ -562,40 +286,26 @@ function manifestFileEntries(entries: ManifestEntry[]): Array<
 > {
   return entries.filter(
     (
-      entry
+      entry,
     ): entry is ManifestEntry & {
       blobHash: string;
       size: number;
       mtimeMs?: number;
       contentHash?: string;
-    } => entry.type !== "dir"
-  );
-}
-
-function buildManifestFileIndex(entries: ManifestEntry[]): Map<
-  string,
-  ManifestEntry & {
-    blobHash: string;
-    size: number;
-    mtimeMs?: number;
-    contentHash?: string;
-  }
-> {
-  return new Map(
-    manifestFileEntries(entries).map((entry) => [entry.relativePath, entry])
+    } => entry.type !== "dir",
   );
 }
 
 /** Build a file-diff summary from two manifest entry lists. */
 function diffManifestEntries(
   prev: ManifestEntry[],
-  curr: ManifestEntry[]
+  curr: ManifestEntry[],
 ): Omit<ChangeSummary, "sizeDelta"> {
   const prevMap = new Map(
-    manifestFileEntries(prev).map((f) => [f.relativePath, f])
+    manifestFileEntries(prev).map((f) => [f.relativePath, f]),
   );
   const currMap = new Map(
-    manifestFileEntries(curr).map((f) => [f.relativePath, f])
+    manifestFileEntries(curr).map((f) => [f.relativePath, f]),
   );
   const addedFiles: string[] = [];
   const removedFiles: string[] = [];
@@ -646,7 +356,7 @@ function inferPreviewMime(previewPath: string): string | null {
 }
 
 function derivePreviewStatus(
-  save: Pick<Save, "previewRefs" | "previewStatus">
+  save: Pick<Save, "previewRefs" | "previewStatus">,
 ): PreviewStatus {
   if (
     save.previewStatus === "pending" ||
@@ -658,14 +368,10 @@ function derivePreviewStatus(
   return save.previewRefs.length > 0 ? "ready" : "none";
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function resolveIdeaSetPath(
   metadata: ProjectMetadata,
   currentSetPath: string,
-  preferredSetPath?: string
+  preferredSetPath?: string,
 ): string {
   if (preferredSetPath && metadata.setFiles.includes(preferredSetPath)) {
     return preferredSetPath;
@@ -676,38 +382,11 @@ function resolveIdeaSetPath(
   return metadata.activeSetPath;
 }
 
-async function captureSettledSnapshot(
-  projectPath: string,
-  expectedSetPaths: string[]
-): Promise<{ snapshot: ProjectSnapshot; metadata: ProjectMetadata }> {
-  for (let attempt = 0; attempt < SAVE_SETTLE_MAX_ATTEMPTS; attempt++) {
-    const walked = await walkProject(projectPath);
-    const snapshot = await enrichAlsContentHashes(projectPath, walked);
-    const metadata = metadataFromFiles(snapshot.files, expectedSetPaths[0]);
-
-    if (
-      expectedSetPaths.length === 0 ||
-      expectedSetPaths.some((setPath) => metadata.setFiles.includes(setPath))
-    ) {
-      return { snapshot, metadata };
-    }
-
-    if (attempt < SAVE_SETTLE_MAX_ATTEMPTS - 1) {
-      await sleep(SAVE_SETTLE_RETRY_MS);
-    }
-  }
-
-  throw new AppError(
-    `Ableton save did not settle for ${expectedSetPaths[0] ?? "the current set"}. Refusing to create a corrupted tab.`,
-    409
-  );
-}
-
-async function getBlobStorageStats(projectPath: string): Promise<{
+async function getBlobStorageStats(historyDir: string): Promise<{
   blobStorageBytes: number;
   blobCount: number;
 }> {
-  const blobsDirPath = join(resolveProjectStateDir(projectPath), "blobs");
+  const blobsDirPath = join(historyDir, "blobs");
   let blobStorageBytes = 0;
   let blobCount = 0;
   try {
@@ -716,22 +395,21 @@ async function getBlobStorageStats(projectPath: string): Promise<{
       if (name.endsWith(".tmp")) {
         continue;
       }
-      const s = await stat(join(blobsDirPath, name)).catch(() => null);
-      if (!s) {
-        continue;
-      }
+      const s = await stat(join(blobsDirPath, name));
       blobStorageBytes += s.size;
       blobCount++;
     }
-  } catch {
-    // blobs dir doesn't exist yet
+  } catch (error) {
+    if (!isErrno(error, "ENOENT")) {
+      throw error;
+    }
   }
   return { blobStorageBytes, blobCount };
 }
 
 function compactRetentionBucketKey(
   createdAt: string,
-  now: Date
+  now: Date,
 ): string | null {
   const created = new Date(createdAt);
   const ageMs = now.getTime() - created.getTime();
@@ -764,9 +442,16 @@ function getProtectedSaveIds(project: Project): Set<string> {
   return new Set([
     ...project.ideas.map((idea) => idea.headSaveId),
     ...project.ideas.map((idea) => idea.baseSaveId),
-    ...project.ideas
-      .map((idea) => idea.forkedFromSaveId)
-      .filter((id): id is string => Boolean(id)),
+    ...project.saves
+      .filter(
+        (save) =>
+          save.pinned ||
+          Boolean(save.customLabel) ||
+          save.note.trim().length > 0 ||
+          save.previewRefs.length > 0 ||
+          save.previewStatus === "pending",
+      )
+      .map((save) => save.id),
   ]);
 }
 
@@ -803,7 +488,7 @@ function computeAutoSavesToCompact(project: Project, now = new Date()): Save[] {
  *  Returns the diff and the current snapshot. Never throws. */
 async function tryComputeSetDiff(
   prevAlsPath: string,
-  currAlsPath: string
+  currAlsPath: string,
 ): Promise<{
   diff: SetDiff | undefined;
   currSnapshot: SetSnapshot | undefined;
@@ -825,7 +510,7 @@ async function tryComputeSetDiff(
 
 /** Parse a single .als file for track summary. Never throws. */
 async function tryParseSnapshot(
-  alsPath: string
+  alsPath: string,
 ): Promise<SetSnapshot | undefined> {
   try {
     return await parseAlsFile(alsPath);
@@ -837,7 +522,7 @@ async function tryParseSnapshot(
 /** Find the blob hash for the active .als file in a manifest's entries. */
 function findAlsHashInEntries(
   entries: ManifestEntry[],
-  activeSetPath: string
+  activeSetPath: string,
 ): string | null {
   return (
     manifestFileEntries(entries).find((e) => e.relativePath === activeSetPath)
@@ -847,14 +532,14 @@ function findAlsHashInEntries(
 
 /** Find the blob hash for a previous save's active .als file by reading its manifest. */
 async function findPrevAlsHash(
-  projectPath: string,
-  prevSave: Save
+  historyDir: string,
+  prevSave: Save,
 ): Promise<string | null> {
   try {
-    const manifest = await readManifest(projectPath, prevSave.id);
+    const manifest = await readManifest(historyDir, prevSave.id);
     return findAlsHashInEntries(
       manifest.files,
-      prevSave.metadata.activeSetPath
+      prevSave.metadata.activeSetPath,
     );
   } catch {
     return null;
@@ -862,12 +547,12 @@ async function findPrevAlsHash(
 }
 
 async function findAlsHashForSave(
-  projectPath: string,
+  historyDir: string,
   saveId: string,
-  activeSetPath: string
+  activeSetPath: string,
 ): Promise<string | null> {
   try {
-    const manifest = await readManifest(projectPath, saveId);
+    const manifest = await readManifest(historyDir, saveId);
     return findAlsHashInEntries(manifest.files, activeSetPath);
   } catch {
     return null;
@@ -875,15 +560,15 @@ async function findAlsHashForSave(
 }
 
 async function computeManifestChangeSummary(
-  projectPath: string,
+  historyDir: string,
   prevSave: Save,
   currSaveId: string,
-  currMetadata: ProjectMetadata
+  currMetadata: ProjectMetadata,
 ): Promise<ChangeSummary | undefined> {
   try {
     const [prevManifest, currManifest] = await Promise.all([
-      readManifest(projectPath, prevSave.id),
-      readManifest(projectPath, currSaveId),
+      readManifest(historyDir, prevSave.id),
+      readManifest(historyDir, currSaveId),
     ]);
     const diff = diffManifestEntries(prevManifest.files, currManifest.files);
     return {
@@ -896,25 +581,25 @@ async function computeManifestChangeSummary(
 }
 
 async function computeSemanticSaveData(
-  projectPath: string,
+  historyDir: string,
   prevSave: Save | null,
-  save: Pick<Save, "id" | "metadata">
+  save: Pick<Save, "id" | "metadata">,
 ): Promise<{
   setDiff: SetDiff | undefined;
   trackSummary: TrackSummaryItem[] | undefined;
 }> {
   const currAlsHash = await findAlsHashForSave(
-    projectPath,
+    historyDir,
     save.id,
-    save.metadata.activeSetPath
+    save.metadata.activeSetPath,
   );
 
   if (prevSave) {
-    const prevAlsHash = await findPrevAlsHash(projectPath, prevSave);
+    const prevAlsHash = await findPrevAlsHash(historyDir, prevSave);
     if (prevAlsHash && currAlsHash) {
       const result = await tryComputeSetDiff(
-        getBlobPath(projectPath, prevAlsHash),
-        getBlobPath(projectPath, currAlsHash)
+        getBlobPath(historyDir, prevAlsHash),
+        getBlobPath(historyDir, currAlsHash),
       );
       return {
         setDiff: result.diff,
@@ -926,9 +611,7 @@ async function computeSemanticSaveData(
   }
 
   if (currAlsHash) {
-    const parsed = await tryParseSnapshot(
-      getBlobPath(projectPath, currAlsHash)
-    );
+    const parsed = await tryParseSnapshot(getBlobPath(historyDir, currAlsHash));
     if (parsed) {
       return {
         setDiff: undefined,
@@ -938,73 +621,6 @@ async function computeSemanticSaveData(
   }
 
   return { setDiff: undefined, trackSummary: undefined };
-}
-
-type LegacySave = Save & { snapshotPath?: string };
-
-type SaveStorageSource =
-  | { kind: "manifest"; manifest: Manifest }
-  | { kind: "legacy-snapshot"; snapshotPath: string };
-
-async function getSaveStorageSource(
-  projectPath: string,
-  save: Save
-): Promise<SaveStorageSource> {
-  try {
-    const manifest = await readManifest(projectPath, save.id);
-    return { kind: "manifest", manifest };
-  } catch (err) {
-    const legacySnapshotPath = (save as LegacySave).snapshotPath;
-    if (legacySnapshotPath) {
-      try {
-        await access(legacySnapshotPath);
-        return { kind: "legacy-snapshot", snapshotPath: legacySnapshotPath };
-      } catch {
-        // fall through to friendly error below
-      }
-    }
-
-    if (
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      (err as NodeJS.ErrnoException).code === "ENOENT"
-    ) {
-      throw new AppError(
-        "Restore data for this save is missing. This snapshot can no longer be restored.",
-        410
-      );
-    }
-    throw err;
-  }
-}
-
-async function getSaveAlsPath(
-  projectPath: string,
-  save: Save
-): Promise<string> {
-  const source = await getSaveStorageSource(projectPath, save);
-  if (source.kind === "legacy-snapshot") {
-    const legacyAlsPath = join(
-      source.snapshotPath,
-      save.metadata.activeSetPath
-    );
-    try {
-      await access(legacyAlsPath);
-      return legacyAlsPath;
-    } catch {
-      throw new AppError("Saved .als file not found in legacy snapshot.", 404);
-    }
-  }
-
-  const alsHash = findAlsHashInEntries(
-    source.manifest.files,
-    save.metadata.activeSetPath
-  );
-  if (!alsHash) {
-    throw new AppError("Saved .als file not found in snapshot manifest.", 404);
-  }
-  return getBlobPath(projectPath, alsHash);
 }
 
 // ── Async Mutex ─────────────────────────────────────────────────────
@@ -1050,10 +666,10 @@ class AsyncMutex {
 
 export class EchoformService {
   private readonly rootDir: string;
-  private readonly statePath: string;
-  private readonly allowLegacyMigration: boolean;
+  private readonly stateRepository: StateRepository;
   private readonly mutex = new AsyncMutex();
   private readonly launcher: AbletonLauncher;
+  private readonly recoveryRoot: string;
   private readonly ideaPathIndex = new Map<string, Map<string, string>>();
   private readonly previewPathIndex = new Map<
     string,
@@ -1063,63 +679,12 @@ export class EchoformService {
   constructor(
     rootDir = resolve(process.cwd(), STATE_DIRNAME),
     launcher: AbletonLauncher = createAbletonLauncher(),
-    allowLegacyMigration = Boolean(
-      process.env[STATE_DIR_ENV] ?? process.env[LEGACY_STATE_DIR_ENV]
-    )
+    recoveryRoot = join(homedir(), "Music", "Echoform Recoveries"),
   ) {
     this.rootDir = rootDir;
-    this.statePath = join(rootDir, "state.json");
-    this.allowLegacyMigration = allowLegacyMigration;
+    this.stateRepository = new StateRepository(rootDir);
     this.launcher = launcher;
-  }
-
-  private async maybeMigrateLegacyState(): Promise<void> {
-    if (!this.allowLegacyMigration) {
-      return;
-    }
-    const targetExists = await access(this.statePath)
-      .then(() => true)
-      .catch(() => false);
-    if (targetExists) {
-      return;
-    }
-
-    const legacyCandidates = [
-      process.env[LEGACY_STATE_DIR_ENV],
-      join(process.cwd(), LEGACY_STATE_DIRNAME),
-    ]
-      .filter((candidate): candidate is string => Boolean(candidate))
-      .map((candidate) => resolve(candidate))
-      .filter((candidate, index, all) => all.indexOf(candidate) === index)
-      .filter((candidate) => candidate !== this.rootDir);
-
-    for (const legacyRootDir of legacyCandidates) {
-      const legacyStatePath = join(legacyRootDir, "state.json");
-      const legacyExists = await access(legacyStatePath)
-        .then(() => true)
-        .catch(() => false);
-      if (!legacyExists) {
-        continue;
-      }
-
-      await mkdir(dirname(this.rootDir), { recursive: true });
-      try {
-        await cp(legacyRootDir, this.rootDir, {
-          recursive: true,
-          force: false,
-          errorOnExist: true,
-        });
-        return;
-      } catch (err) {
-        if (err && typeof err === "object" && "code" in err) {
-          const code = (err as NodeJS.ErrnoException).code;
-          if (code === "EEXIST") {
-            return;
-          }
-        }
-        throw err;
-      }
-    }
+    this.recoveryRoot = recoveryRoot;
   }
 
   private refreshProjectPathIndex(project: Project): void {
@@ -1130,8 +695,8 @@ export class EchoformService {
         project.ideas.map((idea) => ({
           ideaId: idea.id,
           setPath: idea.setPath,
-        }))
-      )
+        })),
+      ),
     );
   }
 
@@ -1162,6 +727,7 @@ export class EchoformService {
   }
 
   private buildProjectRecord(input: {
+    continuedFrom?: Project["continuedFrom"];
     name?: string;
     projectPath: string;
     metadata: ProjectMetadata;
@@ -1177,8 +743,6 @@ export class EchoformService {
       setPath: setFile,
       baseSaveId: "",
       headSaveId: "",
-      parentIdeaId: null,
-      forkedFromSaveId: null,
     }));
 
     // The active .als becomes currentIdeaId
@@ -1190,6 +754,7 @@ export class EchoformService {
       id: createId("proj"),
       name: input.name?.trim() || basename(input.projectPath),
       adapter: "ableton",
+      continuedFrom: input.continuedFrom ?? null,
       projectPath: input.projectPath,
       rootIds: input.rootIds ?? [],
       presence: "active",
@@ -1207,77 +772,169 @@ export class EchoformService {
   }
 
   async loadState(): Promise<AppState> {
-    await this.maybeMigrateLegacyState();
-    await mkdir(this.rootDir, { recursive: true });
-    try {
-      const content = await readFile(this.statePath, "utf8");
-      const state = migrateState(JSON.parse(content) as AppState);
-      this.refreshPathIndexes(state);
-      return state;
-    } catch {
-      this.ideaPathIndex.clear();
-      this.previewPathIndex.clear();
-      return { roots: [], projects: [], activity: [] };
+    const loaded = await this.stateRepository.load();
+    const state = loaded.state;
+    if (loaded.recoveredFromPrevious) {
+      const alreadyReported = state.activity.some(
+        (item) =>
+          item.kind === "state-recovered" &&
+          item.message.includes("previous generation"),
+      );
+      if (!alreadyReported) {
+        pushActivity(
+          state,
+          createActivity(
+            "state-recovered",
+            "The latest state was unreadable. Echoform recovered the previous generation; recent metadata changes may need to be repeated.",
+            "warning",
+          ),
+        );
+        await this.stateRepository.save(state);
+      }
     }
+    this.refreshPathIndexes(state);
+    return state;
   }
 
   private async saveState(state: AppState): Promise<void> {
-    await mkdir(this.rootDir, { recursive: true });
-    const tmp = `${this.statePath}.tmp`;
+    await this.stateRepository.save(state);
+    this.refreshPathIndexes(state);
+  }
+
+  private projectHistoryDir(projectId: string): string {
+    return join(this.rootDir, "history", projectId);
+  }
+
+  private async storageKeepSaveIds(project: Project): Promise<string[]> {
+    const previous = await this.stateRepository.loadPrevious();
+    const previousProject = previous?.projects.find(
+      (candidate) => candidate.id === project.id,
+    );
+    return uniqueStrings([
+      ...project.saves.map((save) => save.id),
+      ...(previousProject?.saves.map((save) => save.id) ?? []),
+    ]);
+  }
+
+  /** Commit the same destructive generation twice so both current and previous
+   * state stop referencing data before that data enters trash. */
+  private async commitDestructiveState(state: AppState): Promise<boolean> {
+    await this.saveState(state);
     try {
-      await writeFile(tmp, JSON.stringify(state, null, 2));
-      await rename(tmp, this.statePath);
-      this.refreshPathIndexes(state);
-    } catch (err) {
-      // Clean up partial temp file
-      await rm(tmp, { force: true }).catch(() => {});
-      if (err && typeof err === "object" && "code" in err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === "ENOSPC") {
-          throw new AppError(
-            "Disk is full — cannot save project state. Free up space and try again.",
-            507
+      await this.saveState(state);
+      return true;
+    } catch {
+      pushActivity(
+        state,
+        createActivity(
+          "storage-cleanup-deferred",
+          "History metadata was updated, but cleanup is waiting for the previous state generation to rotate.",
+          "warning",
+        ),
+      );
+      try {
+        await this.saveState(state);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  private async finishDestructiveCleanup(
+    state: AppState,
+    project: Project,
+    deletedSaves: Save[],
+  ): Promise<void> {
+    try {
+      await stageManifestsForDeletion(
+        this.projectHistoryDir(project.id),
+        deletedSaves.map((save) => save.id),
+      );
+      await gcBlobs(
+        this.projectHistoryDir(project.id),
+        await this.storageKeepSaveIds(project),
+      );
+      await Promise.all(
+        deletedSaves.map((save) =>
+          this.clearManagedPreviewFiles(save.previewRefs),
+        ),
+      );
+    } catch (error) {
+      pushActivity(
+        state,
+        createActivity(
+          "storage-cleanup-deferred",
+          `${project.name}: history was updated, but storage cleanup was deferred (${error instanceof Error ? error.message : "unknown error"}).`,
+          "warning",
+          { projectId: project.id },
+        ),
+      );
+      await this.saveState(state).catch(() => {});
+    }
+  }
+
+  async reconcileStorage(): Promise<void> {
+    await this.withLock(async () => {
+      const state = await this.loadState();
+      // Rotate the current logical state into the previous slot first. This
+      // makes cleanup deferred by an earlier second-generation failure eligible
+      // without ever deleting data referenced by a recoverable generation.
+      await this.saveState(state);
+      let dirty = false;
+      for (const project of state.projects) {
+        try {
+          await gcBlobs(
+            this.projectHistoryDir(project.id),
+            await this.storageKeepSaveIds(project),
+          );
+        } catch (error) {
+          dirty = true;
+          pushActivity(
+            state,
+            createActivity(
+              "storage-cleanup-deferred",
+              `${project.name}: storage reconciliation failed (${error instanceof Error ? error.message : "unknown error"}).`,
+              "warning",
+              { projectId: project.id },
+            ),
           );
         }
       }
-      throw err;
-    }
+      if (dirty) {
+        await this.saveState(state);
+      }
+    });
   }
 
   private async compactProjectAutoSavesInState(
     state: AppState,
-    project: Project
+    project: Project,
   ): Promise<number> {
     const toDelete = computeAutoSavesToCompact(project);
     if (toDelete.length === 0) {
       return 0;
     }
 
-    for (const save of toDelete) {
-      await this.clearManagedPreviewFiles(save.previewRefs);
-      await deleteManifest(project.projectPath, save.id);
-    }
-
     const deleteIds = new Set(toDelete.map((save) => save.id));
     project.saves = project.saves.filter((save) => !deleteIds.has(save.id));
     project.updatedAt = new Date().toISOString();
-    await this.saveState(state);
-
-    await gcBlobs(
-      project.projectPath,
-      project.saves.map((save) => save.id)
-    );
+    if (await this.commitDestructiveState(state)) {
+      await this.finishDestructiveCleanup(state, project, toDelete);
+    }
     return toDelete.length;
   }
 
   private async shouldCompactProjectAutoSaves(
-    project: Project
+    project: Project,
   ): Promise<boolean> {
     const autoSaveCount = project.saves.filter((save) => save.auto).length;
     if (autoSaveCount > AUTO_COMPACT_MAX_AUTO_SAVES) {
       return true;
     }
-    const { blobStorageBytes } = await getBlobStorageStats(project.projectPath);
+    const { blobStorageBytes } = await getBlobStorageStats(
+      this.projectHistoryDir(project.id),
+    );
     return blobStorageBytes > AUTO_COMPACT_MAX_BLOB_STORAGE_BYTES;
   }
 
@@ -1297,7 +954,7 @@ export class EchoformService {
       "Music",
       "Echoform Previews",
       slugifyProjectName(project.name),
-      save.id
+      save.id,
     );
   }
 
@@ -1312,17 +969,17 @@ export class EchoformService {
   private managedPreviewPath(
     projectId: string,
     saveId: string,
-    extension: string
+    extension: string,
   ): string {
     return join(
       this.managedPreviewDir(projectId, saveId),
-      `${PREVIEW_FILE_BASENAME}${extension}`
+      `${PREVIEW_FILE_BASENAME}${extension}`,
     );
   }
 
   private buildPreviewRequestResult(
     project: Project,
-    save: Save
+    save: Save,
   ): PreviewRequestResult {
     return {
       projectId: project.id,
@@ -1343,12 +1000,12 @@ export class EchoformService {
           return;
         }
         await rm(resolved, { force: true }).catch(() => {});
-      })
+      }),
     );
   }
 
   private async clearExportPreviewCandidates(
-    folderPath: string
+    folderPath: string,
   ): Promise<void> {
     const files = await readdir(folderPath).catch(() => []);
     await Promise.all(
@@ -1359,14 +1016,14 @@ export class EchoformService {
           return;
         }
         await rm(join(folderPath, file), { force: true }).catch(() => {});
-      })
+      }),
     );
   }
 
   private resetSavePreviewState(
     save: Save,
     status: PreviewStatus,
-    now: string
+    now: string,
   ): void {
     save.previewRefs = [];
     save.previewMime = null;
@@ -1379,6 +1036,48 @@ export class EchoformService {
     if (!s?.isDirectory()) {
       throw new AppError(`Directory not found: ${p}`, 404);
     }
+  }
+
+  private async readProjectIdentity(
+    projectPath: string,
+  ): Promise<string | null> {
+    const identityPath = join(
+      resolveProjectStateDir(projectPath),
+      "project.json",
+    );
+    let content: string;
+    try {
+      content = await readFile(identityPath, "utf8");
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      ) {
+        return null;
+      }
+      throw error;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch (error) {
+      throw new AppError(
+        `Project identity is corrupt at ${identityPath}.`,
+        500,
+      );
+    }
+    if (
+      !(parsed && typeof parsed === "object" && "projectId" in parsed) ||
+      typeof (parsed as { projectId?: unknown }).projectId !== "string"
+    ) {
+      throw new AppError(
+        `Project identity is invalid at ${identityPath}.`,
+        500,
+      );
+    }
+    return (parsed as { projectId: string }).projectId;
   }
 
   async listProjects(): Promise<Project[]> {
@@ -1412,11 +1111,11 @@ export class EchoformService {
   async listRootSuggestions(): Promise<RootSuggestion[]> {
     const state = await this.loadState();
     const trackedRootPaths = new Set(
-      state.roots.map((root) => resolve(root.path))
+      state.roots.map((root) => resolve(root.path)),
     );
     const suggestions = await discoverRootSuggestions();
     return suggestions.filter(
-      (suggestion) => !trackedRootPaths.has(resolve(suggestion.path))
+      (suggestion) => !trackedRootPaths.has(resolve(suggestion.path)),
     );
   }
 
@@ -1428,18 +1127,30 @@ export class EchoformService {
     return this.withLock(async () => {
       const projectPath = resolve(input.projectPath);
       const state = await this.loadState();
+      const identity = await this.readProjectIdentity(projectPath);
       const existing = state.projects.find(
-        (p) => p.projectPath === projectPath
+        (project) =>
+          project.projectPath === projectPath || project.id === identity,
       );
       if (existing) {
+        if (existing.projectPath !== projectPath) {
+          for (const save of existing.saves) {
+            await readManifest(this.projectHistoryDir(existing.id), save.id);
+          }
+          existing.projectPath = projectPath;
+        }
         if (input.rootIds?.length) {
           existing.rootIds = [
             ...new Set([...existing.rootIds, ...input.rootIds]),
           ].sort();
           existing.presence = "active";
           existing.lastSeenAt = new Date().toISOString();
-          await this.saveState(state);
         }
+        existing.presence = "active";
+        existing.lastSeenAt = new Date().toISOString();
+        existing.updatedAt = existing.lastSeenAt;
+        await this.writeProjectIdentity(projectPath, existing.id);
+        await this.saveState(state);
         return existing;
       }
       await this.assertDir(projectPath);
@@ -1451,6 +1162,7 @@ export class EchoformService {
         metadata,
         rootIds: input.rootIds,
       });
+      await this.writeProjectIdentity(projectPath, project.id);
       state.projects.push(project);
       await this.saveState(state);
       return project;
@@ -1484,14 +1196,77 @@ export class EchoformService {
       }
     }
 
+    const pathsByIdentity = new Map<string, string[]>();
+    for (const projectPath of discoveredByPath.keys()) {
+      const identity = await this.readProjectIdentity(projectPath);
+      if (identity) {
+        pathsByIdentity.set(identity, [
+          ...(pathsByIdentity.get(identity) ?? []),
+          projectPath,
+        ]);
+      }
+    }
+    for (const [identity, paths] of pathsByIdentity) {
+      const project = state.projects.find(
+        (candidate) => candidate.id === identity,
+      );
+      if (!project) {
+        pushActivity(
+          state,
+          createActivity(
+            "project-discovered",
+            `Found stale project identity ${identity}; assigning a new identity.`,
+            "warning",
+          ),
+        );
+        continue;
+      }
+      const currentPath = paths.find((path) => path === project.projectPath);
+      if (paths.length > 1) {
+        pushActivity(
+          state,
+          createActivity(
+            "project-missing",
+            `${project.name} appears in multiple locations. Keeping the current path when available; use relink to choose another copy.`,
+            "warning",
+            { projectId: project.id },
+          ),
+        );
+        if (!currentPath) {
+          continue;
+        }
+      }
+      const nextPath = currentPath ?? paths[0]!;
+      if (project.projectPath === nextPath) {
+        continue;
+      }
+      const occupant = state.projects.find(
+        (candidate) =>
+          candidate.projectPath === nextPath && candidate.id !== identity,
+      );
+      if (occupant) {
+        throw new AppError(
+          `Cannot relink ${project.name}: path is already tracked.`,
+          409,
+        );
+      }
+      for (const save of project.saves) {
+        await readManifest(this.projectHistoryDir(project.id), save.id);
+      }
+      project.projectPath = nextPath;
+      project.updatedAt = now;
+    }
+
     const existingProjects = new Map(
-      state.projects.map((project) => [project.projectPath, project])
+      state.projects.map((project) => [project.projectPath, project]),
     );
 
     for (const project of state.projects) {
       const discovered = discoveredByPath.get(project.projectPath);
+      const pathIdentity = await this.readProjectIdentity(project.projectPath);
+      const ownsKnownPath = pathIdentity === project.id;
       const wasMissing = project.presence === "missing";
-      if (discovered) {
+      if (discovered && ownsKnownPath) {
         project.rootIds = [...discovered.rootIds].sort();
         project.presence = "active";
         project.lastSeenAt = now;
@@ -1505,27 +1280,45 @@ export class EchoformService {
               "project-restored",
               `${project.name} is available again.`,
               "success",
-              { projectId: project.id }
-            )
+              { projectId: project.id },
+            ),
           );
         }
         continue;
       }
 
-      if (project.rootIds.length > 0) {
-        project.rootIds = [];
-        project.presence = "missing";
-        if (!wasMissing) {
+      if (ownsKnownPath) {
+        project.rootIds = project.rootIds.filter((rootId) =>
+          state.roots.some((root) => root.id === rootId),
+        );
+        project.presence = "active";
+        project.lastSeenAt = now;
+        if (wasMissing) {
           pushActivity(
             state,
             createActivity(
-              "project-missing",
-              `${project.name} is missing from its watched roots.`,
-              "warning",
-              { projectId: project.id }
-            )
+              "project-restored",
+              `${project.name} is available again.`,
+              "success",
+              { projectId: project.id },
+            ),
           );
         }
+        continue;
+      }
+
+      project.rootIds = [];
+      project.presence = "missing";
+      if (!wasMissing) {
+        pushActivity(
+          state,
+          createActivity(
+            "project-missing",
+            `${project.name} is missing from its last known location.`,
+            "warning",
+            { projectId: project.id },
+          ),
+        );
       }
     }
 
@@ -1541,6 +1334,7 @@ export class EchoformService {
         metadata,
         rootIds: [...discovered.rootIds].sort(),
       });
+      await this.writeProjectIdentity(projectPath, project.id);
       state.projects.push(project);
       pushActivity(
         state,
@@ -1548,8 +1342,8 @@ export class EchoformService {
           "project-discovered",
           `Now protecting ${project.name}.`,
           "success",
-          { projectId: project.id }
-        )
+          { projectId: project.id },
+        ),
       );
     }
 
@@ -1600,8 +1394,8 @@ export class EchoformService {
             "root-added",
             `Watching folder ${root.name}.`,
             "info",
-            { rootId: root.id }
-          )
+            { rootId: root.id },
+          ),
         );
       }
 
@@ -1633,8 +1427,8 @@ export class EchoformService {
           "root-removed",
           `Stopped watching ${root.name}.`,
           "warning",
-          { rootId }
-        )
+          { rootId },
+        ),
       );
       await this.syncRootsInState(state);
       await this.saveState(state);
@@ -1648,7 +1442,7 @@ export class EchoformService {
 
   async createSave(
     projectId: string,
-    input?: { label?: string; note?: string; auto?: boolean }
+    input?: { label?: string; note?: string; auto?: boolean; pinned?: boolean },
   ): Promise<{ project: Project; save: Save | null }> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -1660,7 +1454,7 @@ export class EchoformService {
 
   async requestPreview(
     projectId: string,
-    saveId: string
+    saveId: string,
   ): Promise<PreviewRequestResult> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -1701,7 +1495,7 @@ export class EchoformService {
 
   async revealPreviewFolder(
     projectId: string,
-    saveId: string
+    saveId: string,
   ): Promise<PreviewRequestResult> {
     const state = await this.loadState();
     const project = requireProject(state, projectId);
@@ -1713,7 +1507,7 @@ export class EchoformService {
     } catch (err) {
       throw new AppError(
         err instanceof Error ? err.message : "Failed to reveal preview folder.",
-        500
+        500,
       );
     }
     return preview;
@@ -1723,13 +1517,13 @@ export class EchoformService {
     projectId: string,
     saveId: string,
     fileData: ArrayBuffer,
-    fileName: string
+    fileName: string,
   ): Promise<PreviewRequestResult> {
     const extension = extname(fileName).toLowerCase();
     if (!PREVIEW_EXTENSION_SET.has(extension)) {
       throw new AppError(
         `Unsupported format. Accepted: ${PREVIEW_EXTENSIONS.join(", ")}`,
-        400
+        400,
       );
     }
 
@@ -1743,7 +1537,7 @@ export class EchoformService {
       const destinationPath = this.managedPreviewPath(
         project.id,
         save.id,
-        extension
+        extension,
       );
       await mkdir(dirname(destinationPath), { recursive: true });
       await writeFile(destinationPath, Buffer.from(fileData));
@@ -1797,7 +1591,7 @@ export class EchoformService {
               matchingFiles.map(async (file) => {
                 const s = await stat(join(folderPath, file)).catch(() => null);
                 return { file, mtimeMs: s?.mtimeMs ?? 0 };
-              })
+              }),
             );
             withMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
             matchedFile = withMtime[0]?.file;
@@ -1808,7 +1602,7 @@ export class EchoformService {
           const destinationPath = this.managedPreviewPath(
             project.id,
             save.id,
-            extension
+            extension,
           );
 
           await this.clearManagedPreviewFiles(save.previewRefs);
@@ -1838,16 +1632,13 @@ export class EchoformService {
     if (ideaSaves.length > 0) {
       return ideaSaves.at(-1) ?? null;
     }
-    if (idea.forkedFromSaveId) {
-      return requireSave(project, idea.forkedFromSaveId);
-    }
     return null;
   }
 
   private setPendingOpen(
     _project: Project,
     idea: Idea,
-    error: string | null
+    error: string | null,
   ): PendingOpen {
     return {
       ideaId: idea.id,
@@ -1860,7 +1651,7 @@ export class EchoformService {
   private setDriftStatus(
     setPath: string,
     ideaId: string | null,
-    kind: DriftStatus["kind"]
+    kind: DriftStatus["kind"],
   ): DriftStatus {
     return {
       kind,
@@ -1874,31 +1665,41 @@ export class EchoformService {
     state: AppState,
     project: Project,
     idea: Idea,
-    input?: { label?: string; note?: string; auto?: boolean },
-    preferredSetPath?: string
+    input?: { label?: string; note?: string; auto?: boolean; pinned?: boolean },
+    preferredSetPath?: string,
   ): Promise<{ project: Project; save: Save | null }> {
     const expectedSetPaths = uniqueStrings(
       [preferredSetPath, idea.setPath].filter((value): value is string =>
-        Boolean(value?.trim())
-      )
+        Boolean(value?.trim()),
+      ),
     );
-    const { snapshot, metadata: detectedMetadata } =
-      await captureSettledSnapshot(project.projectPath, expectedSetPaths);
-    const projectHash = hashProject(snapshot);
+    const saveId = createId("save");
+    const captured = await captureStoredSnapshot(
+      project.projectPath,
+      this.projectHistoryDir(project.id),
+      saveId,
+      expectedSetPaths,
+    );
+    const detectedMetadata = captured.metadata;
+    const projectHash = captured.projectHash;
     const saveBaseline = this.baselineSaveForIdea(project, idea);
 
     if (
       input?.auto &&
       saveBaseline &&
-      matchesProjectHash(snapshot, saveBaseline.projectHash)
+      projectHash === saveBaseline.projectHash
     ) {
+      await stageManifestsForDeletion(this.projectHistoryDir(project.id), [
+        saveId,
+      ]);
+      await this.finishDestructiveCleanup(state, project, []);
       return { project, save: null };
     }
 
     const resolvedSetPath = resolveIdeaSetPath(
       detectedMetadata,
       idea.setPath,
-      preferredSetPath
+      preferredSetPath,
     );
     const metadata =
       detectedMetadata.activeSetPath === resolvedSetPath
@@ -1907,70 +1708,26 @@ export class EchoformService {
             ...detectedMetadata,
             activeSetPath: resolvedSetPath,
           };
-    const saveId = createId("save");
-    const entries: ManifestEntry[] = [];
-    const baselineManifest = saveBaseline
-      ? await readManifest(project.projectPath, saveBaseline.id).catch(
-          () => null
-        )
-      : null;
-    const baselineEntries = baselineManifest
-      ? buildManifestFileIndex(baselineManifest.files)
-      : null;
-
-    for (const file of snapshot.files) {
-      const reusable = baselineEntries?.get(file.relativePath);
-      if (
-        reusable &&
-        reusable.size === file.size &&
-        (isAlsPath(file.relativePath)
-          ? reusable.contentHash === file.contentHash
-          : reusable.mtimeMs === file.mtimeMs)
-      ) {
-        entries.push({
-          relativePath: file.relativePath,
-          blobHash: reusable.blobHash,
-          size: reusable.size,
-          mtimeMs: file.mtimeMs,
-          contentHash: file.contentHash,
-        });
-        continue;
-      }
-
-      const abs = join(project.projectPath, file.relativePath);
-      const { hash, size } = await storeBlob(project.projectPath, abs);
-      entries.push({
-        relativePath: file.relativePath,
-        blobHash: hash,
-        size,
-        mtimeMs: file.mtimeMs,
-        contentHash: file.contentHash,
-      });
-    }
-    for (const relativePath of snapshot.emptyDirs) {
-      entries.push({ type: "dir", relativePath });
-    }
     const now = new Date().toISOString();
-    await createManifest(project.projectPath, saveId, entries, now);
 
     const changes = saveBaseline
       ? await computeManifestChangeSummary(
-          project.projectPath,
+          this.projectHistoryDir(project.id),
           saveBaseline,
           saveId,
-          metadata
+          metadata,
         )
       : undefined;
     let setDiff: SetDiff | undefined;
     let trackSummary: TrackSummaryItem[] | undefined;
     if (!input?.auto) {
       const semanticData = await computeSemanticSaveData(
-        project.projectPath,
+        this.projectHistoryDir(project.id),
         saveBaseline,
         {
           id: saveId,
           metadata,
-        }
+        },
       );
       setDiff = semanticData.setDiff;
       trackSummary = semanticData.trackSummary;
@@ -1983,6 +1740,7 @@ export class EchoformService {
         (input?.auto ? formatDiffAsLabel(setDiff, changes) : autoLabel()),
       customLabel: Boolean(input?.label?.trim()),
       note: input?.note?.trim() || "",
+      pinned: input?.pinned ?? false,
       createdAt: now,
       ideaId: idea.id,
       previewRefs: [],
@@ -2018,17 +1776,20 @@ export class EchoformService {
           "auto-saved",
           `Saved ${project.name}: ${save.label}`,
           "success",
-          { projectId: project.id }
-        )
+          { projectId: project.id },
+        ),
       );
     }
 
     try {
       await this.saveState(state);
     } catch (err) {
-      await deleteManifest(project.projectPath, saveId);
+      await stageManifestsForDeletion(this.projectHistoryDir(project.id), [
+        saveId,
+      ]);
       throw err;
     }
+    await this.finishDestructiveCleanup(state, project, []);
 
     if (save.auto && (await this.shouldCompactProjectAutoSaves(project))) {
       await this.compactProjectAutoSavesInState(state, project);
@@ -2040,11 +1801,11 @@ export class EchoformService {
   private async openIdeaInState(
     state: AppState,
     project: Project,
-    idea: Idea
+    idea: Idea,
   ): Promise<{ project: Project; openError?: string }> {
     const absolutePath = resolveProjectFilePath(
       project.projectPath,
-      idea.setPath
+      idea.setPath,
     );
 
     try {
@@ -2053,7 +1814,7 @@ export class EchoformService {
       project.driftStatus = this.setDriftStatus(
         idea.setPath,
         idea.id,
-        "missing-file"
+        "missing-file",
       );
       project.pendingOpen = null;
       project.updatedAt = new Date().toISOString();
@@ -2079,58 +1840,9 @@ export class EchoformService {
     }
   }
 
-  async branchFromSave(
-    projectId: string,
-    input: { saveId: string; name: string; fileName: string }
-  ): Promise<{ project: Project; openError?: string }> {
-    return this.withLock(async () => {
-      const state = await this.loadState();
-      const project = requireProject(state, projectId);
-      const save = requireSave(project, input.saveId);
-      const branchName =
-        input.name.trim() || buildRecoveredIdeaName(project, save);
-      const requestedFileName =
-        input.fileName.trim() || buildDefaultBranchFileName(save.label);
-      const setPath = await buildUniqueBranchSetPath({
-        projectPath: project.projectPath,
-        baseDir: dirnameOfSetPath(save.metadata.activeSetPath),
-        requestedFileName,
-      });
-      const sourceAlsPath = await getSaveAlsPath(project.projectPath, save);
-      const absoluteSetPath = resolveProjectFilePath(
-        project.projectPath,
-        setPath
-      );
-      await mkdir(
-        dirnameOfSetPath(setPath)
-          ? join(project.projectPath, dirnameOfSetPath(setPath))
-          : project.projectPath,
-        {
-          recursive: true,
-        }
-      );
-      await copyFile(sourceAlsPath, absoluteSetPath);
-
-      const idea = createBranchIdea(project, save, branchName, setPath);
-      project.ideas.push(idea);
-      project.updatedAt = new Date().toISOString();
-
-      try {
-        const result = await this.openIdeaInState(state, project, idea);
-        return result;
-      } catch (err) {
-        await rm(absoluteSetPath, { force: true }).catch(() => {});
-        project.ideas = project.ideas.filter(
-          (candidate) => candidate.id !== idea.id
-        );
-        throw err;
-      }
-    });
-  }
-
   async openIdea(
     projectId: string,
-    ideaId: string
+    ideaId: string,
   ): Promise<{ project: Project; openError?: string }> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2142,7 +1854,7 @@ export class EchoformService {
 
   async revealIdeaFile(
     projectId: string,
-    ideaId: string
+    ideaId: string,
   ): Promise<{ project: Project; openError?: string }> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2150,7 +1862,7 @@ export class EchoformService {
       const idea = requireIdea(project, ideaId);
       const absolutePath = resolveProjectFilePath(
         project.projectPath,
-        idea.setPath
+        idea.setPath,
       );
 
       try {
@@ -2163,7 +1875,7 @@ export class EchoformService {
         project.driftStatus = this.setDriftStatus(
           idea.setPath,
           idea.id,
-          "missing-file"
+          "missing-file",
         );
         project.updatedAt = new Date().toISOString();
         await this.saveState(state);
@@ -2192,7 +1904,7 @@ export class EchoformService {
 
   async handleWatchedAlsChange(
     projectId: string,
-    changedPaths: string | string[]
+    changedPaths: string | string[],
   ): Promise<{ project: Project; save: Save | null; stateChanged: boolean }> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2200,8 +1912,8 @@ export class EchoformService {
       const relativeSetPaths = uniqueStrings(
         (Array.isArray(changedPaths) ? changedPaths : [changedPaths]).map(
           (changedPath) =>
-            changePathToRelativeSetPath(project.projectPath, changedPath)
-        )
+            changePathToRelativeSetPath(project.projectPath, changedPath),
+        ),
       );
       if (relativeSetPaths.length === 0) {
         throw new AppError("No changed Ableton file was provided.", 400);
@@ -2215,16 +1927,16 @@ export class EchoformService {
         ideaId:
           index.get(
             normalizeAbsolutePath(
-              resolveProjectFilePath(project.projectPath, relativeSetPath)
-            )
+              resolveProjectFilePath(project.projectPath, relativeSetPath),
+            ),
           ) ?? null,
       }));
 
       const currentCandidate = changedCandidates.find(
-        (candidate) => candidate.ideaId === currentIdea.id
+        (candidate) => candidate.ideaId === currentIdea.id,
       );
       const knownCandidates = changedCandidates.filter(
-        (candidate) => candidate.ideaId !== null
+        (candidate) => candidate.ideaId !== null,
       );
 
       const preferredCandidate =
@@ -2240,7 +1952,7 @@ export class EchoformService {
         const now = new Date().toISOString();
         const ideaName = basename(
           preferredCandidate.relativeSetPath,
-          extname(preferredCandidate.relativeSetPath)
+          extname(preferredCandidate.relativeSetPath),
         );
         const newIdea: Idea = {
           id: createId("idea"),
@@ -2249,8 +1961,6 @@ export class EchoformService {
           setPath: preferredCandidate.relativeSetPath,
           baseSaveId: "",
           headSaveId: "",
-          parentIdeaId: null,
-          forkedFromSaveId: null,
         };
         project.ideas.push(newIdea);
         resolvedIdeaId = newIdea.id;
@@ -2285,7 +1995,7 @@ export class EchoformService {
         project,
         idea,
         { auto: true },
-        preferredCandidate.relativeSetPath
+        preferredCandidate.relativeSetPath,
       );
       if (!result.save && stateChanged) {
         project.updatedAt = new Date().toISOString();
@@ -2302,7 +2012,7 @@ export class EchoformService {
   async compareSaves(
     projectId: string,
     leftId: string,
-    rightId: string
+    rightId: string,
   ): Promise<CompareResult> {
     const state = await this.loadState();
     const project = requireProject(state, projectId);
@@ -2332,7 +2042,7 @@ export class EchoformService {
   async updateSave(
     projectId: string,
     saveId: string,
-    input: { note?: string; label?: string }
+    input: { note?: string; label?: string; pinned?: boolean },
   ): Promise<Project> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2345,6 +2055,9 @@ export class EchoformService {
         const nextLabel = input.label.trim();
         save.label = nextLabel;
         save.customLabel = nextLabel.length > 0;
+      }
+      if (input.pinned !== undefined) {
+        save.pinned = input.pinned;
       }
       project.updatedAt = new Date().toISOString();
       await this.saveState(state);
@@ -2368,7 +2081,7 @@ export class EchoformService {
 
   async setProjectWatchError(
     projectId: string,
-    message: string
+    message: string,
   ): Promise<Project> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2381,8 +2094,8 @@ export class EchoformService {
           "watcher-error",
           `${project.name}: ${message}`,
           "error",
-          { projectId: project.id }
-        )
+          { projectId: project.id },
+        ),
       );
       await this.saveState(state);
       return project;
@@ -2408,12 +2121,12 @@ export class EchoformService {
       const state = await this.loadState();
       requireProject(state, projectId);
       state.projects = state.projects.filter(
-        (project) => project.id !== projectId
+        (project) => project.id !== projectId,
       );
       await this.saveState(state);
       this.ideaPathIndex.delete(projectId);
       return [...state.projects].sort((a, b) =>
-        b.updatedAt.localeCompare(a.updatedAt)
+        b.updatedAt.localeCompare(a.updatedAt),
       );
     });
   }
@@ -2423,14 +2136,6 @@ export class EchoformService {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       const save = requireSave(project, saveId);
-      if (project.ideas.some((idea) => idea.forkedFromSaveId === saveId)) {
-        throw new AppError(
-          "Cannot delete a save that other branches fork from.",
-          409
-        );
-      }
-      await this.clearManagedPreviewFiles(save.previewRefs);
-      await deleteManifest(project.projectPath, saveId);
       project.saves = project.saves.filter((s) => s.id !== saveId);
       for (const idea of project.ideas) {
         if (idea.headSaveId === saveId) {
@@ -2442,10 +2147,170 @@ export class EchoformService {
         }
       }
       project.updatedAt = new Date().toISOString();
-      await this.saveState(state);
-      // GC unreferenced blobs
-      const keepIds = project.saves.map((s) => s.id);
-      await gcBlobs(project.projectPath, keepIds);
+      if (await this.commitDestructiveState(state)) {
+        await this.finishDestructiveCleanup(state, project, [save]);
+      }
+      return project;
+    });
+  }
+
+  async recoverSave(
+    projectId: string,
+    saveId: string,
+    open = true,
+  ): Promise<RecoveryResult> {
+    return this.withLock(async () => {
+      const state = await this.loadState();
+      const sourceProject = requireProject(state, projectId);
+      const sourceSave = requireSave(sourceProject, saveId);
+      const recoveredCopy = await recoverStoredSnapshot({
+        activeSetPath: sourceSave.metadata.activeSetPath,
+        historyDir: this.projectHistoryDir(sourceProject.id),
+        projectName: sourceProject.name,
+        recoveryRoot: this.recoveryRoot,
+        saveId,
+      });
+      const snapshot = await walkProject(recoveredCopy.recoveredPath);
+      const metadata = metadataFromFiles(
+        snapshot.files,
+        sourceSave.metadata.activeSetPath,
+      );
+      const recoveredProject = this.buildProjectRecord({
+        continuedFrom: {
+          projectId: sourceProject.id,
+          saveId: sourceSave.id,
+        },
+        name: `Branch of ${sourceProject.name}`,
+        projectPath: recoveredCopy.recoveredPath,
+        metadata,
+      });
+      state.projects.push(recoveredProject);
+      try {
+        await this.writeProjectIdentity(
+          recoveredProject.projectPath,
+          recoveredProject.id,
+        );
+        const idea = requireIdea(
+          recoveredProject,
+          recoveredProject.currentIdeaId,
+        );
+        const checkpoint = await this.createSaveInState(
+          state,
+          recoveredProject,
+          idea,
+          {
+            label: `Continued from ${sourceSave.label}`,
+            note: `Recovered from ${sourceProject.name} save ${sourceSave.id}.`,
+            pinned: true,
+          },
+          sourceSave.metadata.activeSetPath,
+        );
+        if (!checkpoint.save) {
+          throw new Error("Initial recovery checkpoint was not created.");
+        }
+      } catch (error) {
+        state.projects = state.projects.filter(
+          (candidate) => candidate.id !== recoveredProject.id,
+        );
+        await rm(recoveredCopy.recoveredPath, {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+        await rm(this.projectHistoryDir(recoveredProject.id), {
+          recursive: true,
+          force: true,
+        }).catch(() => {});
+        throw error;
+      }
+
+      let openError: string | null = null;
+      if (open) {
+        try {
+          await this.launcher.openFile(recoveredCopy.activeSetPath);
+        } catch (error) {
+          openError =
+            error instanceof Error ? error.message : "Failed to open Ableton.";
+        }
+      }
+      return {
+        activeSetPath: recoveredCopy.activeSetPath,
+        openError,
+        recoveredProjectId: recoveredProject.id,
+        recoveredPath: recoveredCopy.recoveredPath,
+        sourceProjectId: sourceProject.id,
+        sourceSaveId: sourceSave.id,
+      };
+    });
+  }
+
+  private async writeProjectIdentity(
+    projectPath: string,
+    projectId: string,
+  ): Promise<void> {
+    const identityPath = join(
+      resolveProjectStateDir(projectPath),
+      "project.json",
+    );
+    await mkdir(dirname(identityPath), { recursive: true });
+    const temporaryPath = `${identityPath}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify({ projectId }, null, 2), {
+      flush: true,
+    });
+    await rename(temporaryPath, identityPath);
+  }
+
+  async relinkProject(
+    projectId: string,
+    projectPathInput: string,
+  ): Promise<Project> {
+    return this.withLock(async () => {
+      const projectPath = resolve(projectPathInput);
+      await this.assertDir(projectPath);
+      const snapshot = await walkProject(projectPath);
+      metadataFromFiles(snapshot.files);
+      const state = await this.loadState();
+      const project = requireProject(state, projectId);
+      const occupant = state.projects.find(
+        (candidate) =>
+          candidate.id !== projectId && candidate.projectPath === projectPath,
+      );
+      if (occupant) {
+        throw new AppError(
+          `Cannot relink: ${projectPath} is already tracked as ${occupant.name}.`,
+          409,
+        );
+      }
+      const pathIdentity = await this.readProjectIdentity(projectPath);
+      if (pathIdentity && pathIdentity !== projectId) {
+        throw new AppError(
+          `Cannot relink: ${projectPath} belongs to another project identity.`,
+          409,
+        );
+      }
+      for (const save of project.saves) {
+        await readManifest(this.projectHistoryDir(project.id), save.id);
+      }
+      const previousIdentity = pathIdentity;
+      await this.writeProjectIdentity(projectPath, project.id);
+      project.projectPath = projectPath;
+      project.presence = "active";
+      project.lastSeenAt = new Date().toISOString();
+      project.updatedAt = project.lastSeenAt;
+      project.watchError = null;
+      try {
+        await this.saveState(state);
+      } catch (error) {
+        if (previousIdentity) {
+          await this.writeProjectIdentity(projectPath, previousIdentity).catch(
+            () => {},
+          );
+        } else {
+          await rm(join(resolveProjectStateDir(projectPath), "project.json"), {
+            force: true,
+          }).catch(() => {});
+        }
+        throw error;
+      }
       return project;
     });
   }
@@ -2453,12 +2318,12 @@ export class EchoformService {
   private async markPreviewMissing(
     projectId: string,
     saveId: string,
-    previewPath: string
+    previewPath: string,
   ): Promise<void> {
     await this.withLock(async () => {
       const state = await this.loadState();
       const project = state.projects.find(
-        (candidate) => candidate.id === projectId
+        (candidate) => candidate.id === projectId,
       );
       const save = project?.saves.find((candidate) => candidate.id === saveId);
       if (!(project && save)) {
@@ -2466,7 +2331,7 @@ export class EchoformService {
       }
       if (
         !save.previewRefs.some(
-          (previewRef) => resolve(previewRef) === previewPath
+          (previewRef) => resolve(previewRef) === previewPath,
         )
       ) {
         return;
@@ -2490,7 +2355,7 @@ export class EchoformService {
       await this.markPreviewMissing(
         previewOwner.projectId,
         previewOwner.saveId,
-        resolved
+        resolved,
       );
       throw new AppError("File not found", 404);
     }
@@ -2500,7 +2365,7 @@ export class EchoformService {
   /** Compute changes for a save that doesn't have them yet (backfill). */
   async computeChanges(
     projectId: string,
-    saveId: string
+    saveId: string,
   ): Promise<{ project: Project; changes: ChangeSummary | null }> {
     const analysisTarget = await this.withLock(async () => {
       const state = await this.loadState();
@@ -2540,18 +2405,18 @@ export class EchoformService {
     const computedChanges =
       analysisTarget.missingChanges && analysisTarget.prevSave
         ? await computeManifestChangeSummary(
-            analysisTarget.project.projectPath,
+            this.projectHistoryDir(analysisTarget.project.id),
             analysisTarget.prevSave,
             analysisTarget.save.id,
-            analysisTarget.save.metadata
+            analysisTarget.save.metadata,
           )
         : analysisTarget.save.changes;
 
     const semanticData = analysisTarget.missingSemantic
       ? await computeSemanticSaveData(
-          analysisTarget.project.projectPath,
+          this.projectHistoryDir(analysisTarget.project.id),
           analysisTarget.prevSave,
-          analysisTarget.save
+          analysisTarget.save,
         )
       : {
           setDiff: analysisTarget.save.setDiff,
@@ -2588,21 +2453,20 @@ export class EchoformService {
   async getDiskUsage(projectId: string): Promise<DiskUsage> {
     const state = await this.loadState();
     const project = requireProject(state, projectId);
-    const { blobStorageBytes, blobCount } = await getBlobStorageStats(
-      project.projectPath
-    );
+    const historyDir = this.projectHistoryDir(project.id);
+    const { blobStorageBytes, blobCount } =
+      await getBlobStorageStats(historyDir);
 
     // Count manifests
-    const manifestsDirPath = join(
-      resolveProjectStateDir(project.projectPath),
-      "manifests"
-    );
+    const manifestsDirPath = join(historyDir, "manifests");
     let manifestCount = 0;
     try {
       const entries = await readdir(manifestsDirPath);
       manifestCount = entries.filter((e) => e.endsWith(".json")).length;
-    } catch {
-      // manifests dir doesn't exist yet
+    } catch (error) {
+      if (!isErrno(error, "ENOENT")) {
+        throw error;
+      }
     }
 
     const autoSaves = project.saves
@@ -2612,7 +2476,7 @@ export class EchoformService {
     const eligibleAutoSaves = computeAutoSavesToCompact(project);
     const totalSnapshotBytes = project.saves.reduce(
       (sum, s) => sum + s.metadata.sizeBytes,
-      0
+      0,
     );
 
     return {
@@ -2629,7 +2493,7 @@ export class EchoformService {
       oldestAutoSaveAt: autoSaves[0]?.createdAt ?? null,
       largestAutoSaveBytes: autoSaves.reduce(
         (largest, save) => Math.max(largest, save.metadata.sizeBytes),
-        0
+        0,
       ),
       saves: project.saves.map((s) => ({
         id: s.id,
@@ -2643,14 +2507,14 @@ export class EchoformService {
   }
 
   async compactStorage(
-    projectId: string
+    projectId: string,
   ): Promise<{ project: Project; deletedCount: number }> {
     return this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
       const deletedCount = await this.compactProjectAutoSavesInState(
         state,
-        project
+        project,
       );
       return { project, deletedCount };
     });
@@ -2659,7 +2523,7 @@ export class EchoformService {
   /** Delete auto-saves older than the given number of days. Returns deleted count. */
   async pruneSaves(
     projectId: string,
-    olderThanDays: number
+    olderThanDays: number,
   ): Promise<{ project: Project; deletedCount: number }> {
     return this.withLock(async () => {
       const state = await this.loadState();
@@ -2670,39 +2534,21 @@ export class EchoformService {
       const cutoffIso = cutoff.toISOString();
 
       // Find auto-saves older than cutoff, but never delete head saves
-      const headSaveIds = new Set(project.ideas.map((i) => i.headSaveId));
-      const baseSaveIds = new Set(project.ideas.map((i) => i.baseSaveId));
-      const forkSaveIds = new Set(
-        project.ideas
-          .map((i) => i.forkedFromSaveId)
-          .filter((id): id is string => Boolean(id))
-      );
+      const protectedSaveIds = getProtectedSaveIds(project);
       const toDelete = project.saves.filter(
-        (s) =>
-          s.auto &&
-          s.createdAt < cutoffIso &&
-          !headSaveIds.has(s.id) &&
-          !baseSaveIds.has(s.id) &&
-          !forkSaveIds.has(s.id)
+        (s) => s.auto && s.createdAt < cutoffIso && !protectedSaveIds.has(s.id),
       );
 
       if (toDelete.length === 0) {
         return { project, deletedCount: 0 };
       }
 
-      // Delete manifests
-      for (const s of toDelete) {
-        await deleteManifest(project.projectPath, s.id);
-      }
-
       const deleteIds = new Set(toDelete.map((s) => s.id));
       project.saves = project.saves.filter((s) => !deleteIds.has(s.id));
       project.updatedAt = new Date().toISOString();
-      await this.saveState(state);
-
-      // GC unreferenced blobs
-      const keepIds = project.saves.map((s) => s.id);
-      await gcBlobs(project.projectPath, keepIds);
+      if (await this.commitDestructiveState(state)) {
+        await this.finishDestructiveCleanup(state, project, toDelete);
+      }
 
       return { project, deletedCount: toDelete.length };
     });

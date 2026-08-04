@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
-import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from "./paths";
+import { STATE_DIRNAME } from "./paths";
 import type {
   DiscoveredProject,
   Project,
@@ -14,7 +14,7 @@ const COMMON_ROOT_DIRS =
     ? ["Documents\\Ableton", "Music\\Ableton"]
     : ["Music/Ableton", "Documents/Ableton"];
 
-const IGNORED_DIRS = new Set([STATE_DIRNAME, LEGACY_STATE_DIRNAME, "Backup"]);
+const IGNORED_DIRS = new Set([STATE_DIRNAME, "Backup"]);
 
 async function dirExists(p: string): Promise<boolean> {
   try {
@@ -36,7 +36,7 @@ function isRealAlsFile(name: string): boolean {
 async function walkForProjects(
   rootPath: string,
   currentPath: string,
-  results: Array<{ path: string; name: string; setFiles: string[] }>
+  results: Array<{ path: string; name: string; setFiles: string[] }>,
 ): Promise<void> {
   let entries;
   try {
@@ -73,7 +73,7 @@ async function walkForProjects(
 }
 
 export async function discoverProjectsInRoot(
-  rootPath: string
+  rootPath: string,
 ): Promise<Array<{ path: string; name: string; setFiles: string[] }>> {
   const resolvedRoot = resolve(rootPath);
   if (!(await dirExists(resolvedRoot))) {
@@ -86,7 +86,7 @@ export async function discoverProjectsInRoot(
 
 export async function discoverProjects(
   tracked: Project[],
-  roots?: TrackedRoot[]
+  roots?: TrackedRoot[],
 ): Promise<DiscoveredProject[]> {
   const trackedPaths = new Set(tracked.map((project) => project.projectPath));
   const rootPaths =
@@ -102,7 +102,7 @@ export async function discoverProjects(
         ...project,
         tracked: trackedPaths.has(project.path),
         rootPath,
-      }))
+      })),
     );
   }
 

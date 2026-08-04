@@ -29,10 +29,11 @@
     "typecheck:desktop": "bun run --cwd apps/desktop typecheck",
     "typecheck:web": "bun run --cwd apps/web typecheck",
     "typecheck:server": "bun run --cwd packages/server typecheck",
-    "check": "bun run check:desktop && bun run check:web && bun run check:server",
+    "check": "bun run audit && bun run check:desktop && bun run check:web && bun run check:server",
     "check:desktop": "bun run --cwd apps/desktop check",
     "check:web": "bun run --cwd apps/web check",
     "check:server": "bun run --cwd packages/server check",
+    "audit": "bun run scripts/check-dependency-audit.ts",
     "release": "bun run scripts/release.mjs",
     "release:patch": "bun run scripts/release.mjs patch",
     "release:minor": "bun run scripts/release.mjs minor",
@@ -42,8 +43,21 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "@xmldom/xmldom": "0.8.13",
+    "defu": "6.1.7",
+    "electron-builder-squirrel-windows": "26.15.3",
+    "fast-uri": "3.1.5",
+    "form-data": "4.0.6",
+    "hono": "4.13.0",
+    "js-yaml": "4.3.1",
+    "sharp": "0.35.3",
+    "svgo": "4.0.2",
+    "tar": "7.5.22",
+    "tmp": "0.2.7"
+  },
   "devDependencies": {
-    "@release-it/conventional-changelog": "^10.0.1",
-    "release-it": "^19.0.6"
+    "@release-it/conventional-changelog": "^10.0.6",
+    "release-it": "^19.2.4"
   }
 }

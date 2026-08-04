@@ -3,9 +3,9 @@ import {
   CaretUpDown,
   Check,
   CheckCircle,
+  Copy,
   FolderSimple,
   FolderSimplePlus,
-  GitFork,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -46,8 +46,8 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         Welcome to Echoform
       </h1>
       <p className="mt-2 max-w-sm text-[15px] text-white/35 leading-relaxed">
-        Automatic version history for your Ableton projects. Every change saved,
-        nothing lost.
+        Automatic checkpoints for your Ableton projects. Every saved change is
+        kept outside your working folder.
       </p>
 
       <div className="mt-10 flex flex-col gap-4 text-left">
@@ -62,7 +62,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           },
           {
             title: "Go back anytime",
-            desc: "Browse history, compare saves, or revisit earlier versions.",
+            desc: "Browse checkpoints, compare changes, or recover an earlier moment.",
           },
         ].map((item, i) => (
           <div className="flex items-start gap-3" key={item.title}>
@@ -309,7 +309,7 @@ function MockTimeline() {
           )}
           key={entry.time}
         >
-          {/* Vertical branch line */}
+          {/* Timeline guide */}
           <div
             className="absolute top-0 bottom-0 left-[22px] w-px bg-white/[0.05]"
             style={
@@ -419,7 +419,7 @@ function MockTabs() {
       {/* Fake timeline entries beneath */}
       <div className="px-4 py-3">
         {[
-          { label: "Latest save", dim: false },
+          { label: "Latest checkpoint", dim: false },
           { label: "Earlier today", dim: true },
           { label: "Yesterday", dim: true },
         ].map((row) => (
@@ -447,11 +447,15 @@ function MockTabs() {
   );
 }
 
-function MockVersions() {
-  const branches = [
-    { name: "Main", depth: 0, saves: 24, current: true, active: true },
-    { name: "Experiment", depth: 1, saves: 6, current: false, active: false },
-    { name: "Lo-fi remix", depth: 1, saves: 3, current: false, active: false },
+function MockRecovery() {
+  const projectCopies = [
+    { name: "Working project", checkpoints: 24, current: true, active: true },
+    {
+      name: "Recovered checkpoint",
+      checkpoints: 1,
+      current: false,
+      active: false,
+    },
   ];
 
   return (
@@ -460,7 +464,7 @@ function MockVersions() {
       <div className="flex items-center justify-between border-white/[0.06] border-b px-3 py-2.5">
         <div className="flex items-center gap-2">
           <div className="flex size-7 items-center justify-center rounded-md bg-white/[0.06]">
-            <GitFork className="text-white/40" size={13} />
+            <Copy className="text-white/40" size={13} />
           </div>
           <div>
             <span className="block font-medium text-[13px] text-white/75">
@@ -474,33 +478,29 @@ function MockVersions() {
         <CaretUpDown className="text-white/25" size={12} />
       </div>
 
-      {/* Branch list */}
+      {/* Project-copy list */}
       <div className="p-1.5">
         <div className="px-2 py-1.5 font-medium text-[10px] text-white/25 uppercase tracking-[0.14em]">
-          Versions
+          Project copies
         </div>
-        {branches.map((branch) => (
+        {projectCopies.map((projectCopy) => (
           <div
             className={cn(
               "flex items-center gap-2 rounded-md px-2 py-2",
-              branch.active ? "bg-white/[0.08] text-white/90" : "text-white/50"
+              projectCopy.active
+                ? "bg-white/[0.08] text-white/90"
+                : "text-white/50"
             )}
-            key={branch.name}
-            style={{ paddingLeft: `${8 + branch.depth * 16}px` }}
+            key={projectCopy.name}
           >
-            {branch.depth > 0 && (
-              <span className="shrink-0 text-[10px] text-white/15">
-                &#x2514;
-              </span>
-            )}
-            <span className="flex-1 text-[13px]">{branch.name}</span>
+            <span className="flex-1 text-[13px]">{projectCopy.name}</span>
             <span className="shrink-0 text-[10px] text-white/20 tabular-nums">
-              {branch.saves}
+              {projectCopy.checkpoints}
             </span>
-            {branch.current && (
+            {projectCopy.current && (
               <div className="size-1.5 shrink-0 rounded-full bg-emerald-400/70 ring-2 ring-emerald-400/20" />
             )}
-            {branch.active && (
+            {projectCopy.active && (
               <Check
                 className="shrink-0 text-white/40"
                 size={12}
@@ -516,8 +516,8 @@ function MockVersions() {
 
 const HOW_IT_WORKS_STEPS = [
   {
-    title: "Timeline",
-    desc: "Every save in Ableton creates an entry. Click any to see what changed.",
+    title: "Checkpoints",
+    desc: "Every save in Ableton creates a checkpoint. Select one to inspect what changed.",
     mockup: MockTimeline,
   },
   {
@@ -526,9 +526,9 @@ const HOW_IT_WORKS_STEPS = [
     mockup: MockTabs,
   },
   {
-    title: "Versions",
-    desc: "Try a different direction without losing your original. Branch off freely.",
-    mockup: MockVersions,
+    title: "Branch safely",
+    desc: "Continue from any checkpoint in a separate working copy. Your current project stays untouched.",
+    mockup: MockRecovery,
   },
 ];
 

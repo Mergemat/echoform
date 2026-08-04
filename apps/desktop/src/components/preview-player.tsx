@@ -554,7 +554,7 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
           {/* Compare controls */}
           <div className="mt-2 flex items-center gap-2">
             <NativeSelect
-              aria-label="Compare with another save"
+              aria-label="Compare with another checkpoint"
               className="max-w-[260px] flex-1 rounded-lg text-xs"
               onChange={(event) => {
                 const nextId = event.target.value;
@@ -576,7 +576,7 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
               value={effectiveCompareSaveId}
             >
               <NativeSelectOption value="">
-                Compare with another save
+                Compare with another checkpoint
               </NativeSelectOption>
               {compareOptions.map((candidate) => (
                 <NativeSelectOption key={candidate.id} value={candidate.id}>

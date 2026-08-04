@@ -1,92 +1,7 @@
 import { basename, extname } from "@/lib/path";
 import type { Idea, Project, Save } from "@/lib/types";
 
-// ── Idea tree helpers ────────────────────────────────────────────────
-
-/** Root ideas = no parent or parent doesn't exist in the project */
-export function getRootIdeas(project: Project): Idea[] {
-  const ids = new Set(project.ideas.map((i) => i.id));
-  return project.ideas.filter(
-    (i) => !(i.parentIdeaId && ids.has(i.parentIdeaId))
-  );
-}
-
-/** Walk up parentIdeaId to find the root ancestor of a given idea */
-export function getRootIdeaFor(project: Project, ideaId: string): Idea | null {
-  const byId = new Map(project.ideas.map((i) => [i.id, i]));
-  let current = byId.get(ideaId) ?? null;
-  while (current?.parentIdeaId && byId.has(current.parentIdeaId)) {
-    current = byId.get(current.parentIdeaId)!;
-  }
-  return current;
-}
-
-/** Get all idea IDs that descend from a root idea (including the root itself) */
-export function getIdeaSubtreeIds(
-  project: Project,
-  rootIdeaId: string
-): Set<string> {
-  const result = new Set<string>([rootIdeaId]);
-  const childrenByParent = new Map<string, Idea[]>();
-  for (const idea of project.ideas) {
-    if (!idea.parentIdeaId) {
-      continue;
-    }
-    const existing = childrenByParent.get(idea.parentIdeaId) ?? [];
-    existing.push(idea);
-    childrenByParent.set(idea.parentIdeaId, existing);
-  }
-  const visit = (id: string) => {
-    for (const child of childrenByParent.get(id) ?? []) {
-      result.add(child.id);
-      visit(child.id);
-    }
-  };
-  visit(rootIdeaId);
-  return result;
-}
-
-export interface RootFileGroup {
-  /** Human-readable name of the idea it was forked from */
-  forkedFromIdeaName: string | null;
-  /** If this tab was forked from a different .als file, the origin setPath */
-  forkedFromSetPath: string | null;
-  representativeIdea: Idea;
-  rootIdeas: Idea[];
-  setPath: string;
-}
-
-export function getRootFileGroups(project: Project): RootFileGroup[] {
-  const ideasById = new Map(project.ideas.map((i) => [i.id, i]));
-  const groups = new Map<string, RootFileGroup>();
-  for (const idea of getRootIdeas(project)) {
-    const existing = groups.get(idea.setPath);
-    if (existing) {
-      existing.rootIdeas.push(idea);
-    } else {
-      // Check if this root idea was forked from a different setPath
-      let forkedFromSetPath: string | null = null;
-      let forkedFromIdeaName: string | null = null;
-      if (idea.parentIdeaId) {
-        const parent = ideasById.get(idea.parentIdeaId);
-        if (parent && parent.setPath !== idea.setPath) {
-          forkedFromSetPath = parent.setPath;
-          forkedFromIdeaName = parent.name;
-        }
-      }
-      groups.set(idea.setPath, {
-        setPath: idea.setPath,
-        rootIdeas: [idea],
-        representativeIdea: idea,
-        forkedFromSetPath,
-        forkedFromIdeaName,
-      });
-    }
-  }
-  return [...groups.values()];
-}
-
-/** Display name for a root idea's .als file (filename without extension) */
+/** Display name for an Ableton set file (filename without extension). */
 export function fileTabName(idea: Idea): string {
   const name = basename(idea.setPath);
   const ext = extname(name);
@@ -287,7 +202,7 @@ export function buildChips(save: Save): Chip[] {
     // Device enable/disable toggles
     let toggleCount = 0;
     for (const t of sd.modifiedTracks) {
-      toggleCount += (t.deviceToggles ?? []).length;
+      toggleCount += t.deviceToggles.length;
     }
     if (toggleCount > 0) {
       chips.push({
@@ -390,21 +305,16 @@ function isTrivialAutoSave(save: Save): boolean {
 
 function buildDisplayItems(
   saves: Save[],
-  expandedGroups: Set<string>,
-  ungroupableSaveIds: Set<string> = new Set()
+  expandedGroups: Set<string>
 ): DisplayItem[] {
   const items: DisplayItem[] = [];
   let i = 0;
   while (i < saves.length) {
     const save = saves[i]!;
-    if (isTrivialAutoSave(save) && !ungroupableSaveIds.has(save.id)) {
+    if (isTrivialAutoSave(save)) {
       const group: Save[] = [save];
       let j = i + 1;
-      while (
-        j < saves.length &&
-        isTrivialAutoSave(saves[j]!) &&
-        !ungroupableSaveIds.has(saves[j]?.id)
-      ) {
+      while (j < saves.length && isTrivialAutoSave(saves[j]!)) {
         group.push(saves[j]!);
         j++;
       }
@@ -429,145 +339,37 @@ function buildDisplayItems(
 
 type TimelineDisplayItem =
   | {
-      type: "branch";
-      idea: Idea;
-      depth: number;
-      fromSave: Save | null;
-      isCurrent: boolean;
-      isFocused: boolean;
-      isCollapsed: boolean;
-      saveCount: number;
-    }
-  | {
       type: "save";
       save: Save;
       idea: Idea;
-      depth: number;
-      isFocused: boolean;
     }
   | {
       type: "group";
       saves: Save[];
       key: string;
       idea: Idea;
-      depth: number;
-      isFocused: boolean;
     };
-
-function sortIdeasByNewestSave(
-  ideas: Idea[],
-  savesByIdea: Map<string, Save[]>
-): Idea[] {
-  return [...ideas].sort((a, b) => {
-    const aNewest = savesByIdea.get(a.id)?.[0]?.createdAt ?? a.createdAt;
-    const bNewest = savesByIdea.get(b.id)?.[0]?.createdAt ?? b.createdAt;
-    return bNewest.localeCompare(aNewest);
-  });
-}
 
 export function buildTimelineDisplayItems(
   project: Project,
   focusedIdeaId: string | null,
-  expandedGroups: Set<string>,
-  collapsedBranches: Set<string> = new Set()
+  expandedGroups: Set<string>
 ): TimelineDisplayItem[] {
-  const savesByIdea = new Map<string, Save[]>();
-  for (const idea of project.ideas) {
-    const saves = project.saves
-      .filter((save) => save.ideaId === idea.id)
-      .slice()
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    savesByIdea.set(idea.id, saves);
+  const idea =
+    project.ideas.find(
+      (candidate) => candidate.id === (focusedIdeaId ?? project.currentIdeaId)
+    ) ?? project.ideas[0];
+  if (!idea) {
+    return [];
   }
 
-  const ideasById = new Map(project.ideas.map((idea) => [idea.id, idea]));
-  const savesById = new Map(project.saves.map((save) => [save.id, save]));
-  const childrenBySaveId = new Map<string, Idea[]>();
-  for (const idea of project.ideas) {
-    if (!idea.forkedFromSaveId) {
-      continue;
-    }
-    const existing = childrenBySaveId.get(idea.forkedFromSaveId) ?? [];
-    existing.push(idea);
-    childrenBySaveId.set(idea.forkedFromSaveId, existing);
-  }
-  for (const [saveId, children] of childrenBySaveId) {
-    childrenBySaveId.set(saveId, sortIdeasByNewestSave(children, savesByIdea));
-  }
+  const saves = project.saves
+    .filter((save) => save.ideaId === idea.id)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  const forkSaveIds = new Set(
-    project.ideas
-      .map((idea) => idea.forkedFromSaveId)
-      .filter((id): id is string => Boolean(id))
-  );
-  const rootIdeas = sortIdeasByNewestSave(
-    project.ideas.filter(
-      (idea) => !(idea.parentIdeaId && ideasById.has(idea.parentIdeaId))
-    ),
-    savesByIdea
-  );
-  const effectiveFocusId = focusedIdeaId ?? project.currentIdeaId;
-  const items: TimelineDisplayItem[] = [];
-
-  const visitIdea = (idea: Idea, depth: number) => {
-    const fromSave = idea.forkedFromSaveId
-      ? (savesById.get(idea.forkedFromSaveId) ?? null)
-      : null;
-    const isFocused = idea.id === effectiveFocusId;
-    const ideaSaves = savesByIdea.get(idea.id) ?? [];
-    const isCollapsed = collapsedBranches.has(idea.id) && !isFocused;
-
-    items.push({
-      type: "branch",
-      idea,
-      depth,
-      fromSave,
-      isCurrent: idea.id === project.currentIdeaId,
-      isFocused,
-      isCollapsed,
-      saveCount: ideaSaves.length,
-    });
-
-    if (isCollapsed) {
-      return;
-    }
-
-    const branchItems = buildDisplayItems(
-      ideaSaves,
-      expandedGroups,
-      forkSaveIds
-    );
-
-    for (const item of branchItems) {
-      if (item.type === "group") {
-        items.push({
-          type: "group",
-          saves: item.saves,
-          key: item.key,
-          idea,
-          depth,
-          isFocused,
-        });
-        continue;
-      }
-
-      items.push({
-        type: "save",
-        save: item.save,
-        idea,
-        depth,
-        isFocused,
-      });
-
-      const children = childrenBySaveId.get(item.save.id) ?? [];
-      for (const child of children) {
-        visitIdea(child, depth + 1);
-      }
-    }
-  };
-
-  for (const idea of rootIdeas) {
-    visitIdea(idea, 0);
-  }
-  return items;
+  return buildDisplayItems(saves, expandedGroups).map((item) => ({
+    ...item,
+    idea,
+  }));
 }

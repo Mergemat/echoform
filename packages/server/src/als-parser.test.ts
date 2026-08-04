@@ -10,7 +10,7 @@ const tempDirs: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -18,7 +18,7 @@ function makeTrack(
   id: string,
   type: TrackSnapshot["type"],
   name: string,
-  fields: Partial<TrackSnapshot> = {}
+  fields: Partial<TrackSnapshot> = {},
 ): TrackSnapshot {
   return {
     id,
@@ -49,7 +49,7 @@ function trackXml(
   tag: "AudioTrack" | "MidiTrack" | "ReturnTrack" | "GroupTrack",
   id: string,
   name: string,
-  groupId = -1
+  groupId = -1,
 ): string {
   return `
     <${tag} Id="${id}">

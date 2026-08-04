@@ -16,9 +16,7 @@ const SESSION_BOOTSTRAP_HEADER = "x-echoform-session-bootstrap";
 const SESSION_BOOTSTRAP_TOKEN =
   process.env.ECHOFORM_SESSION_BOOTSTRAP_TOKEN?.trim() || null;
 const STATIC_DIR = resolve(
-  process.env.ECHOFORM_STATIC_DIR ??
-    process.env.ABLEGIT_STATIC_DIR ??
-    join(process.cwd(), "dist")
+  process.env.ECHOFORM_STATIC_DIR ?? join(process.cwd(), "dist"),
 );
 const DEFAULT_ALLOWED_ORIGINS = [
   `http://localhost:${PORT}`,
@@ -28,10 +26,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const allowedOrigins = new Set([
   ...DEFAULT_ALLOWED_ORIGINS,
-  ...((
-    process.env.ECHOFORM_ALLOWED_ORIGINS ?? process.env.ABLEGIT_ALLOWED_ORIGINS
-  )
-    ?.split(",")
+  ...(process.env.ECHOFORM_ALLOWED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? []),
 ]);
@@ -65,7 +60,7 @@ async function broadcastSnapshot(): Promise<void> {
 
 async function backfillSaveAnalysis(
   projectId: string,
-  saveId: string
+  saveId: string,
 ): Promise<void> {
   try {
     const { project } = await service.computeChanges(projectId, saveId);
@@ -100,7 +95,7 @@ function parseCookies(req: Request): Map<string, string> {
           decodeURIComponent(part.slice(0, idx)),
           decodeURIComponent(part.slice(idx + 1)),
         ] as const;
-      })
+      }),
   );
 }
 
@@ -212,8 +207,23 @@ const rootWatcher = new RootWatcher({
 
 async function reconcileWatchers(): Promise<void> {
   const state = await service.loadState();
-  watcher.unwatchAll();
-  rootWatcher.unwatchAll();
+  const desiredRootIds = new Set(state.roots.map((root) => root.id));
+  for (const rootId of rootWatcher.watchedRootIds()) {
+    if (!desiredRootIds.has(rootId)) {
+      rootWatcher.unwatchRoot(rootId);
+    }
+  }
+
+  const desiredProjectIds = new Set(
+    state.projects
+      .filter((project) => project.watching && project.presence === "active")
+      .map((project) => project.id),
+  );
+  for (const projectId of watcher.watchedProjectIds()) {
+    if (!desiredProjectIds.has(projectId)) {
+      watcher.unwatchProject(projectId);
+    }
+  }
 
   for (const root of state.roots) {
     await rootWatcher.watchRoot(root);
@@ -229,11 +239,10 @@ async function reconcileWatchers(): Promise<void> {
   }
 }
 
-// start watching all tracked projects on boot
-(async () => {
-  await service.syncRoots();
-  await reconcileWatchers();
-})();
+// Complete storage/state reconciliation before accepting any requests.
+await service.reconcileStorage();
+await service.syncRoots();
+await reconcileWatchers();
 
 setInterval(() => {
   void service
@@ -295,33 +304,17 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       });
       return await buildSnapshotEvent();
     }
-    case "branch-from-save": {
-      watcher.suppress(cmd.projectId);
-      try {
-        const result = await service.branchFromSave(cmd.projectId, {
-          saveId: cmd.saveId,
-          name: cmd.name,
-          fileName: cmd.fileName,
-        });
-        if (result.openError) {
-          broadcast({ type: "error", message: result.openError });
-        }
-        return await buildSnapshotEvent();
-      } finally {
-        watcher.unsuppress(cmd.projectId);
-      }
-    }
     case "open-idea": {
       const result = await service.openIdea(cmd.projectId, cmd.ideaId);
       if (result.openError) {
-        broadcast({ type: "error", message: result.openError });
+        throw new AppError(result.openError, 500);
       }
       return await buildSnapshotEvent();
     }
     case "reveal-idea-file": {
       const result = await service.revealIdeaFile(cmd.projectId, cmd.ideaId);
       if (result.openError) {
-        broadcast({ type: "error", message: result.openError });
+        throw new AppError(result.openError, 500);
       }
       return await buildSnapshotEvent();
     }
@@ -337,6 +330,7 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       await service.updateSave(cmd.projectId, cmd.saveId, {
         note: cmd.note,
         label: cmd.label,
+        pinned: cmd.pinned,
       });
       return await buildSnapshotEvent();
     }
@@ -368,7 +362,24 @@ async function handleCommand(cmd: WsCommand): Promise<WsEvent | null> {
       await service.deleteSave(cmd.projectId, cmd.saveId);
       return await buildSnapshotEvent();
     }
+    case "recover-save": {
+      const recovery = await service.recoverSave(
+        cmd.projectId,
+        cmd.saveId,
+        cmd.open ?? true,
+      );
+      await reconcileWatchers();
+      broadcast({ type: "recovery-created", recovery });
+      await broadcastSnapshot();
+      return null;
+    }
+    case "relink-project": {
+      await service.relinkProject(cmd.projectId, cmd.projectPath);
+      await reconcileWatchers();
+      return await buildSnapshotEvent();
+    }
   }
+  throw new AppError("Unknown command", 400);
 }
 
 // ── HTTP routes (compare + media) ───────────────────────────────────
@@ -377,7 +388,7 @@ function jsonResponse(
   req: Request,
   data: unknown,
   status = 200,
-  extraHeaders: HeadersInit = {}
+  extraHeaders: HeadersInit = {},
 ) {
   return new Response(JSON.stringify(data), {
     status,
@@ -408,7 +419,7 @@ function resolveStaticPath(pathname: string): string | null {
 
 async function serveStatic(
   req: Request,
-  pathname: string
+  pathname: string,
 ): Promise<Response | null> {
   if (req.method !== "GET" && req.method !== "HEAD") {
     return null;
@@ -487,7 +498,7 @@ Bun.serve({
         return jsonResponse(
           req,
           { error: authError.message },
-          authError.status
+          authError.status,
         );
       }
     }
@@ -536,7 +547,7 @@ Bun.serve({
 
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/request$/
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/request$/,
       ) &&
       req.method === "POST"
     ) {
@@ -556,7 +567,7 @@ Bun.serve({
 
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/reveal-folder$/
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/reveal-folder$/,
       ) &&
       req.method === "POST"
     ) {
@@ -577,7 +588,7 @@ Bun.serve({
     // POST /api/projects/:id/saves/:saveId/preview/upload (multipart)
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/upload$/
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/upload$/,
       ) &&
       req.method === "POST"
     ) {
@@ -596,7 +607,7 @@ Bun.serve({
             {
               error: `file too large (max ${Math.floor(MAX_PREVIEW_UPLOAD_BYTES / (1024 * 1024))}MB)`,
             },
-            413
+            413,
           );
         }
         const fileData = await file.arrayBuffer();
@@ -604,7 +615,7 @@ Bun.serve({
           projectId,
           saveId,
           fileData,
-          file.name
+          file.name,
         );
         await broadcastSnapshot();
         return jsonResponse(req, { preview });
@@ -619,7 +630,7 @@ Bun.serve({
     // POST /api/projects/:id/saves/:saveId/preview/cancel
     if (
       url.pathname.match(
-        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/cancel$/
+        /^\/api\/projects\/[^/]+\/saves\/[^/]+\/preview\/cancel$/,
       ) &&
       req.method === "POST"
     ) {
@@ -661,6 +672,32 @@ Bun.serve({
       }
     }
 
+    // REST: recover a complete save into a new, verified project directory
+    if (
+      url.pathname.match(/^\/api\/projects\/[^/]+\/saves\/[^/]+\/recover$/) &&
+      req.method === "POST"
+    ) {
+      const parts = url.pathname.split("/");
+      const projectId = parts[3]!;
+      const saveId = parts[5]!;
+      try {
+        const body = (await req.json().catch(() => ({}))) as { open?: boolean };
+        const recovery = await service.recoverSave(
+          projectId,
+          saveId,
+          body.open ?? true,
+        );
+        await reconcileWatchers();
+        broadcast({ type: "recovery-created", recovery });
+        await broadcastSnapshot();
+        return jsonResponse(req, { recovery }, 201);
+      } catch (err) {
+        const status = err instanceof AppError ? err.status : 500;
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return jsonResponse(req, { error: message }, status);
+      }
+    }
+
     // REST: prune auto-saves older than N days
     // POST /api/projects/:id/prune  body: { olderThanDays: number }
     if (
@@ -676,7 +713,7 @@ Bun.serve({
           return jsonResponse(
             req,
             { error: "olderThanDays must be a non-negative number" },
-            400
+            400,
           );
         }
         const { deletedCount } = await service.pruneSaves(projectId, days);
@@ -746,21 +783,33 @@ Bun.serve({
       });
     },
     async message(ws, raw) {
+      let requestId: string | null = null;
       try {
         const cmd = JSON.parse(String(raw)) as WsCommand;
+        if (typeof cmd.requestId !== "string" || cmd.requestId.length === 0) {
+          throw new AppError("requestId is required", 400);
+        }
+        requestId = cmd.requestId;
         const result = await handleCommand(cmd);
         if (result) {
           broadcast(result);
         }
+        ws.send(
+          JSON.stringify({
+            type: "command-ack",
+            requestId,
+          } satisfies WsEvent),
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         const status = err instanceof AppError ? err.status : 500;
         ws.send(
           JSON.stringify({
-            type: "error",
+            type: "command-error",
+            requestId: requestId ?? "",
             message,
-            status,
-          } satisfies WsEvent & { status?: number })
+            code: status,
+          } satisfies WsEvent),
         );
       }
     },

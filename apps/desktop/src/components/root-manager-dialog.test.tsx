@@ -51,7 +51,6 @@ describe("RootManagerDialog", () => {
       selectedProjectId: null,
       selectedSaveId: null,
       activeIdeaId: null,
-      collapsedBranches: new Set(),
       discoveredProjects: [],
       compare: null,
     });

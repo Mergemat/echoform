@@ -8,7 +8,6 @@ const rootDir = dirname(fileURLToPath(import.meta.url)).replace(
   ""
 );
 const devStateDir = join(rootDir, ".echoform-state");
-const legacyDevStateDir = join(rootDir, ".ablegit-state");
 const serverHost = "127.0.0.1";
 const defaultServerPort = 3001;
 const rendererUrl = "http://127.0.0.1:5193";
@@ -98,7 +97,6 @@ async function main() {
     ECHOFORM_ALLOWED_ORIGINS: rendererOrigin,
     ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
     ECHOFORM_STATE_DIR: devStateDir,
-    ABLEGIT_STATE_DIR: legacyDevStateDir,
   });
   await waitFor(`${serverBaseUrl}/api/session`, "Echoform server", {
     headers: {

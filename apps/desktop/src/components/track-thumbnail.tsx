@@ -110,7 +110,7 @@ function trackTitle(track: TrackSummaryItem): string {
     return `${track.name} (${track.type}, ${track.clipCount} clips)`;
   }
 
-  const nestedTracks = Math.max(0, (track.trackCount ?? 1) - 1);
+  const nestedTracks = Math.max(0, track.trackCount - 1);
   return `${track.name} (${nestedTracks} nested tracks, ${track.clipCount} clips)`;
 }
 

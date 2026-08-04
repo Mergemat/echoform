@@ -4,14 +4,11 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 500;
 const DEFAULT_WIDTH = 300;
 const STORAGE_KEY = "echoform:sidebar-width";
-const LEGACY_STORAGE_KEY = "ablegit:sidebar-width";
 const MOBILE_BREAKPOINT = 768;
 
 function readStoredWidth(): number {
   try {
-    const v =
-      localStorage.getItem(STORAGE_KEY) ??
-      localStorage.getItem(LEGACY_STORAGE_KEY);
+    const v = localStorage.getItem(STORAGE_KEY);
     if (v) {
       const n = Number(v);
       if (n >= MIN_WIDTH && n <= MAX_WIDTH) {

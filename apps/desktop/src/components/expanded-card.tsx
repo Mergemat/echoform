@@ -1,6 +1,21 @@
-import { GitFork, TrashSimple, X } from "@phosphor-icons/react";
-import { useState } from "react";
+import {
+  CaretDown,
+  CircleNotch,
+  Copy,
+  PushPin,
+  TrashSimple,
+  X,
+} from "@phosphor-icons/react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -37,13 +52,13 @@ function trackChangeKey(t: TrackDiff): string {
   const parts = [
     t.addedDevices.slice().sort().join(","),
     t.removedDevices.slice().sort().join(","),
-    (t.deviceToggles ?? [])
+    t.deviceToggles
       .map((d) => `${d.name}:${d.enabled}`)
       .sort()
       .join(","),
     String(t.clipCountDelta),
     t.mixerChanges.slice().sort().join(","),
-    String(t.colorChanged ?? false),
+    String(t.colorChanged),
     t.renamedFrom ?? "",
   ];
   return parts.join("|");
@@ -92,77 +107,197 @@ function useExpandedCardView({
 }: ExpandedCardProps) {
   const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
   const projectId = project.id;
+  const editRequestGenerationRef = useRef(0);
   const [state, setState] = useState({
+    recoveryError: null as string | null,
+    recovering: false,
     computing: false,
-    fileName: "",
-    ideaName: "",
+    deleteError: null as string | null,
+    deleting: false,
+    editError: null as string | null,
+    editPending: false,
+    editSaved: false,
     labelVal: save.label,
     noteVal: save.note,
-    showIdeaForm: false,
+    pinError: null as string | null,
+    pinPending: false,
+    showAdvancedRecovery: false,
+    showDeleteConfirm: false,
+    showRecoveryForm: false,
     showPreviewDialog: false,
   });
   const {
+    recoveryError,
+    recovering,
     computing,
-    fileName,
-    ideaName,
+    deleteError,
+    deleting,
+    editError,
+    editPending,
+    editSaved,
     labelVal,
     noteVal,
-    showIdeaForm,
+    pinError,
+    pinPending,
+    showAdvancedRecovery,
+    showDeleteConfirm,
+    showRecoveryForm,
     showPreviewDialog,
   } = state;
 
-  const commitEdit = () => {
+  const commitEdit = async () => {
     const nextLabel = labelVal.trim();
     const nextNote = noteVal;
     if (nextLabel === save.label && nextNote === save.note) {
       return;
     }
-    sendDaemonCommand({
-      type: "update-save",
-      projectId,
-      saveId: save.id,
-      ...(nextNote === save.note ? {} : { note: nextNote }),
-      ...(nextLabel === save.label ? {} : { label: nextLabel }),
-    });
-  };
-  const handleDelete = () => {
-    posthog.capture("save_deleted", { auto: save.auto });
-    sendDaemonCommand({ type: "delete-save", projectId, saveId: save.id });
-  };
-  const handleCreateIdea = () => {
-    if (!ideaName.trim()) {
-      return;
-    }
-    posthog.capture("version_created");
-    sendDaemonCommand({
-      type: "branch-from-save",
-      projectId,
-      saveId: save.id,
-      name: ideaName.trim(),
-      fileName: fileName.trim() || `${ideaName.trim()}.als`,
-    });
+    const requestGeneration = editRequestGenerationRef.current + 1;
+    editRequestGenerationRef.current = requestGeneration;
     setState((current) => ({
       ...current,
-      fileName: "",
-      ideaName: "",
-      showIdeaForm: false,
+      editError: null,
+      editPending: true,
+      editSaved: false,
     }));
+    try {
+      await sendDaemonCommand(
+        {
+          type: "update-save",
+          projectId,
+          saveId: save.id,
+          ...(nextNote === save.note ? {} : { note: nextNote }),
+          ...(nextLabel === save.label ? {} : { label: nextLabel }),
+        },
+        { reportError: false }
+      );
+      if (editRequestGenerationRef.current === requestGeneration) {
+        setState((current) => ({
+          ...current,
+          editError: null,
+          editPending: false,
+          editSaved: true,
+        }));
+      }
+    } catch (error) {
+      if (editRequestGenerationRef.current === requestGeneration) {
+        setState((current) => ({
+          ...current,
+          editError:
+            error instanceof Error
+              ? error.message
+              : "Checkpoint details were not saved.",
+          editPending: false,
+          editSaved: false,
+        }));
+      }
+    }
   };
-  const toggleBranchForm = () => {
+  const handleDelete = async () => {
+    setState((current) => ({
+      ...current,
+      deleteError: null,
+      deleting: true,
+    }));
+    try {
+      await sendDaemonCommand(
+        {
+          type: "delete-save",
+          projectId,
+          saveId: save.id,
+        },
+        { reportError: false }
+      );
+      posthog.capture("save_deleted", { auto: save.auto });
+      setState((current) => ({
+        ...current,
+        deleting: false,
+        showDeleteConfirm: false,
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        deleteError:
+          error instanceof Error
+            ? error.message
+            : "Checkpoint was not deleted.",
+        deleting: false,
+      }));
+    }
+  };
+  const handleRecover = async () => {
+    setState((current) => ({
+      ...current,
+      recovering: true,
+      recoveryError: null,
+    }));
+    try {
+      await sendDaemonCommand(
+        {
+          type: "recover-save",
+          projectId,
+          saveId: save.id,
+          open: true,
+        },
+        { reportError: false }
+      );
+      posthog.capture("save_recovered");
+      setState((current) => ({
+        ...current,
+        recovering: false,
+        showRecoveryForm: false,
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        recovering: false,
+        recoveryError:
+          error instanceof Error
+            ? error.message
+            : "The recovered copy could not be opened.",
+      }));
+    }
+  };
+  const toggleRecoveryForm = () => {
     setState((current) => {
-      const next = !current.showIdeaForm;
+      const next = !current.showRecoveryForm;
       if (next) {
-        const defaultBranchName =
-          current.ideaName.trim() || `Recovered ${getSaveDisplayTitle(save)}`;
         return {
           ...current,
-          fileName: current.fileName.trim() || `${defaultBranchName}.als`,
-          ideaName: defaultBranchName,
-          showIdeaForm: true,
+          recoveryError: null,
+          showAdvancedRecovery: false,
+          showRecoveryForm: true,
         };
       }
-      return { ...current, showIdeaForm: false };
+      return { ...current, recoveryError: null, showRecoveryForm: false };
     });
+  };
+  const handlePin = async () => {
+    setState((current) => ({
+      ...current,
+      pinError: null,
+      pinPending: true,
+    }));
+    try {
+      await sendDaemonCommand(
+        {
+          type: "update-save",
+          projectId,
+          saveId: save.id,
+          pinned: !save.pinned,
+        },
+        { reportError: false }
+      );
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        pinError:
+          error instanceof Error
+            ? error.message
+            : "The checkpoint pin was not changed.",
+      }));
+    } finally {
+      setState((current) => ({ ...current, pinPending: false }));
+    }
   };
   const handleCompute = async () => {
     posthog.capture("save_analysis_requested");
@@ -189,7 +324,7 @@ function useExpandedCardView({
   const needsAnalysis =
     changes === undefined || sd === undefined || !save.trackSummary;
   const summarizedTrackCount = save.trackSummary?.reduce(
-    (sum, track) => sum + (track.trackCount ?? 1),
+    (sum, track) => sum + track.trackCount,
     0
   );
   const previewButtonLabel =
@@ -204,7 +339,7 @@ function useExpandedCardView({
           : null;
 
   return (
-    <div className="space-y-2 border-white/50 border-l-2 bg-white/[0.04] pt-3 pr-5 pb-4 pl-4">
+    <div className="space-y-2 border-white/60 border-l-2 bg-white/[0.05] pt-3 pr-5 pb-4 pl-4">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <Input
@@ -218,6 +353,9 @@ function useExpandedCardView({
             }
             value={labelVal}
           />
+          <div className="mt-1 text-[10px] text-white/45 uppercase tracking-[0.12em]">
+            Checkpoint
+          </div>
           <div className="mt-1.5 flex items-center gap-1.5 text-white/25 text-xs">
             <span>{formatDateTime(save.createdAt)}</span>
             {idea && (
@@ -254,9 +392,24 @@ function useExpandedCardView({
             noteVal: e.target.value,
           }))
         }
-        placeholder="Add a note about this save..."
+        placeholder="Add a note to this checkpoint..."
         value={noteVal}
       />
+
+      {(editPending || editSaved || editError) && (
+        <div
+          className={cn(
+            "text-[11px]",
+            editError ? "text-red-300/85" : "text-white/50"
+          )}
+          role={editError ? "alert" : "status"}
+        >
+          {editError ??
+            (editPending
+              ? "Saving checkpoint details..."
+              : "Checkpoint details saved to history.")}
+        </div>
+      )}
 
       <div className="flex items-center gap-1.5 text-[11px] text-white/30 tabular-nums">
         <span>{save.metadata.fileCount} files</span>
@@ -394,7 +547,7 @@ function useExpandedCardView({
                 const hasDetail =
                   rep.addedDevices.length > 0 ||
                   rep.removedDevices.length > 0 ||
-                  (rep.deviceToggles ?? []).length > 0 ||
+                  rep.deviceToggles.length > 0 ||
                   rep.colorChanged ||
                   rep.clipCountDelta !== 0 ||
                   rep.mixerChanges.length > 0;
@@ -437,9 +590,9 @@ function useExpandedCardView({
                             −{rep.removedDevices.join(", ")}
                           </span>
                         )}
-                        {(rep.deviceToggles ?? []).length > 0 && (
+                        {rep.deviceToggles.length > 0 && (
                           <span className="text-amber-400/40">
-                            {(rep.deviceToggles ?? [])
+                            {rep.deviceToggles
                               .map(
                                 (d) => `${d.name} ${d.enabled ? "on" : "off"}`
                               )
@@ -483,7 +636,7 @@ function useExpandedCardView({
             size="sm"
             variant="outline"
           >
-            {computing ? "Analyzing..." : "Analyze save"}
+            {computing ? "Analyzing..." : "Analyze checkpoint"}
           </Button>
         </div>
       ) : addedAudio.length +
@@ -579,13 +732,15 @@ function useExpandedCardView({
                 size="sm"
                 variant="outline"
               >
-                {previewButtonLabel}
+                {save.previewStatus === "ready"
+                  ? previewButtonLabel
+                  : "Add preview to checkpoint"}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {save.previewStatus === "ready"
                 ? "Listen to how your track sounded at this point"
-                : "Attach an audio bounce to this save for playback"}
+                : "Attach an audio bounce to this checkpoint for playback"}
             </TooltipContent>
           </Tooltip>
           {save.previewStatus === "ready" && (
@@ -601,87 +756,188 @@ function useExpandedCardView({
           )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={toggleBranchForm} size="sm" variant="ghost">
-                <GitFork data-icon="inline-start" size={13} /> New version
+              <Button onClick={toggleRecoveryForm} size="sm" variant="ghost">
+                <Copy data-icon="inline-start" size={13} /> Continue from here
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              Create a new .als file from this point to try a different
-              direction
+              Recover this checkpoint into a verified copy, then open it in
+              Ableton
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={save.pinned ? "Unpin checkpoint" : "Pin checkpoint"}
+                className={save.pinned ? "text-amber-200/90" : "text-white/50"}
+                disabled={pinPending}
+                onClick={() => void handlePin()}
+                size="icon-sm"
+                variant="ghost"
+              >
+                {pinPending ? (
+                  <CircleNotch className="animate-spin" size={13} />
+                ) : (
+                  <PushPin
+                    size={13}
+                    weight={save.pinned ? "fill" : "regular"}
+                  />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {save.pinned
+                ? "Allow this checkpoint to follow normal retention"
+                : "Protect this checkpoint from automatic cleanup"}
             </TooltipContent>
           </Tooltip>
           <div className="flex-1" />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                className="text-white/15 hover:text-red-400/70"
-                onClick={handleDelete}
+                aria-label="Delete checkpoint"
+                className="text-white/35 hover:text-red-300"
+                onClick={() =>
+                  setState((current) => ({
+                    ...current,
+                    deleteError: null,
+                    showDeleteConfirm: true,
+                  }))
+                }
                 size="icon-sm"
                 variant="ghost"
               >
                 <TrashSimple size={13} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Delete this save</TooltipContent>
+            <TooltipContent side="bottom">Delete checkpoint</TooltipContent>
           </Tooltip>
         </div>
       </TooltipProvider>
 
       {previewStatusText && (
-        <div className="text-[11px] text-white/20">{previewStatusText}</div>
+        <div className="text-[11px] text-white/45">{previewStatusText}</div>
+      )}
+      {pinError && (
+        <div className="text-[11px] text-red-300/85" role="alert">
+          {pinError}
+        </div>
       )}
 
-      {showIdeaForm && (
-        <div className="space-y-2.5 rounded-lg border border-white/[0.06] bg-white/[0.03] p-3">
-          <div className="font-medium text-[11px] text-white/25 uppercase tracking-wider">
-            New version
+      {showRecoveryForm && (
+        <div className="space-y-2.5 rounded-lg border border-white/[0.12] bg-white/[0.05] p-3">
+          <div className="font-medium text-[11px] text-white/70 uppercase tracking-wider">
+            Continue from this checkpoint
           </div>
-          <div className="text-[11px] text-white/15 leading-snug">
-            Creates a new .als file starting from this save, so you can explore
-            a different direction without losing your current work.
+          <div className="text-[11px] text-white/50 leading-snug">
+            Echoform will start a new branch from this exact moment in a
+            separate project folder, open it, and keep your current work
+            untouched.
           </div>
-          <Input
-            className="h-auto w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-white/70 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
-            onChange={(e) =>
+          <button
+            aria-expanded={showAdvancedRecovery}
+            className="flex items-center gap-1 text-[11px] text-white/45 hover:text-white/70"
+            onClick={() =>
               setState((current) => ({
                 ...current,
-                ideaName: e.target.value,
+                showAdvancedRecovery: !current.showAdvancedRecovery,
               }))
             }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleCreateIdea();
-              }
-            }}
-            placeholder="Version name..."
-            value={ideaName}
-          />
-          <Input
-            className="h-auto w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-2.5 py-2 text-white/70 text-xs placeholder:text-white/15 focus-visible:border-white/15 focus-visible:ring-0"
-            onChange={(e) =>
-              setState((current) => ({
-                ...current,
-                fileName: e.target.value,
-              }))
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleCreateIdea();
-              }
-            }}
-            placeholder="File name (.als)..."
-            value={fileName}
-          />
+            type="button"
+          >
+            <CaretDown
+              className={cn(
+                "transition-transform",
+                showAdvancedRecovery ? "rotate-0" : "-rotate-90"
+              )}
+              size={11}
+            />
+            Advanced: recovery file and location
+          </button>
+          {showAdvancedRecovery && (
+            <div className="space-y-1 rounded-md bg-black/15 p-2 text-[10px] text-white/50 leading-relaxed">
+              <div>
+                Echoform creates a uniquely named project in Music/Echoform
+                Recoveries, separate from your working project.
+              </div>
+              <div>
+                Every file from the checkpoint is verified before its recovered
+                Ableton set opens. Existing files are never overwritten.
+              </div>
+            </div>
+          )}
+          {recoveryError && (
+            <div className="text-[11px] text-red-300/85" role="alert">
+              {recoveryError}
+            </div>
+          )}
           <Button
-            disabled={!(ideaName.trim() && fileName.trim())}
-            onClick={handleCreateIdea}
+            disabled={recovering}
+            onClick={() => void handleRecover()}
             size="sm"
             variant="outline"
           >
-            Create version
+            {recovering && <CircleNotch className="animate-spin" size={13} />}
+            {recovering ? "Creating branch..." : "Create branch and open"}
           </Button>
         </div>
       )}
+
+      <Dialog
+        onOpenChange={(open) =>
+          !deleting &&
+          setState((current) => ({
+            ...current,
+            deleteError: null,
+            showDeleteConfirm: open,
+          }))
+        }
+        open={showDeleteConfirm}
+      >
+        <DialogContent className="border-white/[0.12] bg-[#111215]">
+          <DialogHeader>
+            <DialogTitle className="text-white/90">
+              Delete checkpoint?
+            </DialogTitle>
+            <DialogDescription className="text-white/55">
+              This permanently removes “{getSaveDisplayTitle(save)}” from the
+              timeline. Your Ableton project files stay untouched, but this
+              checkpoint cannot be recovered or undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <div
+              className="rounded-md bg-red-400/[0.08] px-3 py-2 text-red-300/90 text-xs"
+              role="alert"
+            >
+              {deleteError}
+            </div>
+          )}
+          <DialogFooter className="border-white/[0.08] bg-white/[0.03]">
+            <Button
+              disabled={deleting}
+              onClick={() =>
+                setState((current) => ({
+                  ...current,
+                  deleteError: null,
+                  showDeleteConfirm: false,
+                }))
+              }
+              variant="ghost"
+            >
+              Keep checkpoint
+            </Button>
+            <Button
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+              variant="destructive"
+            >
+              {deleting && <CircleNotch className="animate-spin" size={13} />}
+              {deleting ? "Deleting..." : "Delete checkpoint"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PreviewRequestDialog
         idea={idea}

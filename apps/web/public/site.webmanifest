@@ -1,7 +1,7 @@
 {
   "name": "Echoform",
   "short_name": "Echoform",
-  "description": "Desktop version history for Ableton Live projects with previews and recovery.",
+  "description": "Local version history for Ableton Live projects with checkpoint comparisons, previews, creative directions, and recovery.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1115",

@@ -4,23 +4,29 @@ import DownloadDropdown from "../components/download-dropdown.astro";
 
 const title = "Echoform — Version history for Ableton projects";
 const description =
-  "Desktop version history for Ableton Live projects with previews and recovery.";
+  "Git-like checkpoints, diffs, branches, previews, and recovery for Ableton Live projects.";
 const siteUrl = new URL("https://echoform.app");
 const canonicalUrl = new URL(Astro.url.pathname, siteUrl);
 const socialImageUrl = new URL("/screenshot.webp", siteUrl);
 const repo = "https://github.com/Mergemat/echoform";
 
-const releaseRes = await fetch(
-  "https://api.github.com/repos/Mergemat/echoform/releases/latest",
-  {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  }
-);
-const release = await releaseRes.json();
-const version: string = (release.tag_name as string).replace(/^v/, "");
+const releaseRes = await fetch(`${repo}/releases/latest`, {
+  redirect: "manual",
+});
+const releaseLocation = releaseRes.headers.get("location");
+const isRedirect = releaseRes.status >= 300 && releaseRes.status < 400;
+const releasePath = releaseLocation
+  ? new URL(releaseLocation, repo).pathname
+  : undefined;
+const releaseTag = releasePath?.match(
+  /^\/Mergemat\/echoform\/releases\/tag\/(v.+)$/
+)?.[1];
+if (!(isRedirect && releaseTag)) {
+  throw new Error(
+    `Unable to resolve the latest Echoform release (HTTP ${releaseRes.status}).`
+  );
+}
+const version = releaseTag.slice(1);
 
 const dl = {
   macArm: `${repo}/releases/download/v${version}/Echoform-${version}-arm64.dmg`,
@@ -91,7 +97,7 @@ const jsonLd = {
     <meta property="og:image" content={socialImageUrl.toString()}>
     <meta
       property="og:image:alt"
-      content="Echoform desktop app showing project history, saved versions, and change previews."
+      content="Echoform desktop app showing project history, checkpoints, and change previews."
     >
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content={title}>
@@ -157,14 +163,14 @@ const jsonLd = {
         <h1
           class="text-[clamp(2.25rem,5vw,3.5rem)] font-bold leading-[1.08] tracking-[-0.035em] text-text-primary"
         >
-          Version history for<br>Ableton projects
+          Git-like history for<br>Ableton projects
         </h1>
 
         <p
           class="mx-auto mt-5 max-w-md text-[16px] leading-relaxed text-text-secondary"
         >
-          Every save, tracked. Preview past versions, compare changes, and
-          recover anything — without leaving your workflow.
+          Keep a local history of project changes. Compare checkpoints, attach
+          audio previews, and branch safely from an earlier checkpoint.
         </p>
 
         <div class="mt-8 flex flex-col items-center gap-3">
@@ -186,7 +192,7 @@ const jsonLd = {
           <div class="relative aspect-[16/9] bg-surface-raised">
             <img
               src="/screenshot.webp"
-              alt="Echoform desktop app showing project history, saved versions, and change previews."
+              alt="Echoform desktop app showing project history, checkpoints, and change previews."
               class="h-full w-full object-cover object-top"
               loading="eager"
               decoding="async"
@@ -231,7 +237,8 @@ const jsonLd = {
             Automatic tracking
           </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Every save creates a version. No commits, no commands — just work.
+            Project file changes create checkpoints automatically. No commits or
+            commands required.
           </p>
         </div>
 
@@ -262,8 +269,8 @@ const jsonLd = {
             Audio preview
           </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Listen to any version directly in the app with waveform
-            visualization.
+            Attach an exported audio file to a checkpoint and play it with a
+            waveform in the app.
           </p>
         </div>
 
@@ -294,7 +301,7 @@ const jsonLd = {
             Track changes
           </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            See what changed between versions — tracks added, removed, or
+            See what changed between checkpoints — tracks added, removed, or
             renamed.
           </p>
         </div>
@@ -318,11 +325,10 @@ const jsonLd = {
             </svg>
           </div>
           <h3 class="text-[14px] font-semibold text-text-primary">
-            Instant recovery
+            Safe branching
           </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Restore any version with one click. Never lose a creative direction
-            again.
+            Start a new branch from any checkpoint in a verified working copy.
           </p>
         </div>
 
@@ -344,9 +350,12 @@ const jsonLd = {
               />
             </svg>
           </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">Branching</h3>
+          <h3 class="text-[14px] font-semibold text-text-primary">
+            Creative directions
+          </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Fork your project into branches. Explore ideas without risk.
+            Detect multiple Ableton sets as separate directions and focus each
+            checkpoint history.
           </p>
         </div>
 
@@ -377,7 +386,7 @@ const jsonLd = {
             Disk awareness
           </h3>
           <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Monitor storage usage per project. Prune old versions to reclaim
+            Monitor storage usage per project. Prune old checkpoints to reclaim
             space.
           </p>
         </div>
@@ -395,7 +404,7 @@ const jsonLd = {
         <h2
           class="relative text-[clamp(1.5rem,3vw,2rem)] font-bold tracking-[-0.03em] text-text-primary"
         >
-          Stop losing work.
+          Keep past directions within reach.
         </h2>
         <p
           class="relative mx-auto mt-3 max-w-sm text-[15px] text-text-secondary"

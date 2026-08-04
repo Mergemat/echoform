@@ -31,7 +31,7 @@ export function GroupCard({
         <CaretRight className="shrink-0 text-white/25" size={10} />
       )}
       <span className="font-medium text-[11px] text-white/25 uppercase tracking-wider">
-        {saves.length} auto saves
+        {saves.length} automatic checkpoints
       </span>
       {totalDelta !== 0 && (
         <span

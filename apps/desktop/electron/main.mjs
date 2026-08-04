@@ -7,7 +7,7 @@ Sentry.init({
 
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   app,
@@ -237,7 +237,6 @@ async function startServer() {
   const resourcesRoot = resolveResourcesRoot();
   const server = resolveServerProcess();
   const stateRoot = app.getPath("userData");
-  const legacyStateRoot = join(app.getPath("appData"), "Ablegit");
   const launchAbort = new AbortController();
   let stopped = false;
 
@@ -253,7 +252,6 @@ async function startServer() {
       ECHOFORM_HOST: serverHost,
       ECHOFORM_STATIC_DIR: join(resourcesRoot, "dist"),
       ECHOFORM_STATE_DIR: stateRoot,
-      ABLEGIT_STATE_DIR: legacyStateRoot,
       ECHOFORM_SESSION_BOOTSTRAP_TOKEN: sessionBootstrapToken,
     },
     stdio: "inherit",
@@ -446,8 +444,8 @@ function createTray() {
 ipcMain.handle("echoform:pick-folder", async () => {
   const parentWindow = mainWindow ?? BrowserWindow.getFocusedWindow() ?? null;
   const result = await dialog.showOpenDialog(parentWindow, {
-    title: "Choose a folder for Echoform to watch",
-    buttonLabel: "Watch Folder",
+    title: "Choose a project folder",
+    buttonLabel: "Choose Folder",
     defaultPath: app.getPath("music"),
     properties: ["openDirectory", "createDirectory"],
   });
@@ -457,6 +455,13 @@ ipcMain.handle("echoform:pick-folder", async () => {
   }
 
   return result.filePaths[0] ?? null;
+});
+
+ipcMain.handle("echoform:reveal-path", (_event, path) => {
+  if (typeof path !== "string" || !isAbsolute(path)) {
+    throw new TypeError("An absolute path is required.");
+  }
+  shell.showItemInFolder(path);
 });
 
 ipcMain.handle("echoform:open-update", (_event, url) => {

@@ -134,7 +134,7 @@ export const ProjectItem = memo(function ProjectItem({
             <span className="ml-auto text-[11px] text-white/20 tabular-nums">
               {project.saves.length > 0
                 ? timeAgo(project.saves.at(-1)?.createdAt)
-                : "No saves"}
+                : "No checkpoints"}
             </span>
           </div>
         </div>

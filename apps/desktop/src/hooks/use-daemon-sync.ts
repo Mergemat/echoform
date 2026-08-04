@@ -4,6 +4,7 @@ import { useConnectionStore } from "@/lib/connection-store";
 import {
   startDaemonClient,
   stopDaemonClient,
+  subscribeCommandFailures,
   subscribeConnection,
   subscribeDaemonEvents,
 } from "@/lib/daemon-client";
@@ -13,6 +14,9 @@ import { useStore } from "@/lib/store";
 
 export function useDaemonSync() {
   useEffect(() => {
+    const unsubscribeCommandFailures = subscribeCommandFailures(({ error }) => {
+      toast.error(error.message);
+    });
     const unsubscribeEvents = subscribeDaemonEvents((event) => {
       const store = useStore.getState();
 
@@ -35,7 +39,7 @@ export function useDaemonSync() {
           posthog.capture("save_created", {
             auto: true,
           });
-          toast.success(`Auto-saved ${event.save.label}`);
+          toast.success(`Checkpoint created for ${event.save.label}`);
           return;
         case "change-detected":
           toast.info(`Changes detected in ${event.projectName}`);
@@ -46,6 +50,36 @@ export function useDaemonSync() {
         case "root-suggestions":
           store.setRootSuggestions(event.suggestions);
           return;
+        case "recovery-created": {
+          const { openError, recoveredPath } = event.recovery;
+          const revealPath = window.echoform?.revealPath;
+          const options = {
+            description: recoveredPath,
+            action: revealPath
+              ? {
+                  label: "Reveal",
+                  onClick: () => {
+                    void revealPath(recoveredPath).catch((error) => {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not reveal the recovered project."
+                      );
+                    });
+                  },
+                }
+              : undefined,
+          };
+          if (openError) {
+            toast.warning("Branch created, but Ableton did not open", {
+              ...options,
+              description: `${openError} · ${recoveredPath}`,
+            });
+          } else {
+            toast.success("New branch opened in Ableton", options);
+          }
+          return;
+        }
         case "error":
           toast.error(event.message);
           return;
@@ -68,6 +102,7 @@ export function useDaemonSync() {
 
     return () => {
       unsubscribeEvents();
+      unsubscribeCommandFailures();
       unsubscribeConnection();
       stopDaemonClient();
     };

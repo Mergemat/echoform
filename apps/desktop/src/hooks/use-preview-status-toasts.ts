@@ -16,7 +16,7 @@ export function usePreviewStatusToasts(projects: Project[]) {
         const was = prev.get(save.id);
         if (was === "pending" && save.previewStatus === "ready") {
           posthog.capture("preview_attached", { auto: save.auto });
-          toast.success(`Preview attached to "${save.label}"`);
+          toast.success(`Checkpoint preview saved for "${save.label}"`);
         }
       }
     }

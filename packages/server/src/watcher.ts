@@ -5,14 +5,22 @@ interface WatcherEvents {
   onChange: (
     projectId: string,
     projectName: string,
-    changedPaths: string[]
-  ) => void;
-  onError: (projectId: string, projectName: string, message: string) => void;
+    changedPaths: string[],
+  ) => void | Promise<void>;
+  onError: (
+    projectId: string,
+    projectName: string,
+    message: string,
+  ) => void | Promise<void>;
 }
 
 interface RootWatcherEvents {
-  onChange: (rootId: string, rootName: string) => void;
-  onError: (rootId: string, rootName: string, message: string) => void;
+  onChange: (rootId: string, rootName: string) => void | Promise<void>;
+  onError: (
+    rootId: string,
+    rootName: string,
+    message: string,
+  ) => void | Promise<void>;
 }
 
 export const DEFAULT_WATCHER_DEBOUNCE_MS = 200;
@@ -38,12 +46,21 @@ function watchErrorMessage(err: unknown): string {
 
 export class ProjectWatcher {
   private readonly watchers = new Map<string, FSWatcher>();
+  private readonly watchedPaths = new Map<string, string>();
   private readonly debounceTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
   >();
   private readonly pendingChangedPaths = new Map<string, Set<string>>();
   private readonly suppressedProjects = new Set<string>();
+  private readonly suppressedChanges = new Map<
+    string,
+    { projectName: string; paths: Set<string> }
+  >();
+  private readonly suppressionTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private readonly events: WatcherEvents;
   private readonly debounceMs: number;
 
@@ -54,17 +71,41 @@ export class ProjectWatcher {
 
   /** Temporarily ignore FS events for a project (call during save) */
   suppress(projectId: string): void {
+    const timer = this.suppressionTimers.get(projectId);
+    if (timer) {
+      clearTimeout(timer);
+      this.suppressionTimers.delete(projectId);
+    }
     this.suppressedProjects.add(projectId);
   }
 
   /** Re-enable FS events after a cooldown so the copy's own events drain */
   unsuppress(projectId: string, cooldownMs = 2000): void {
-    setTimeout(() => this.suppressedProjects.delete(projectId), cooldownMs);
+    const existing = this.suppressionTimers.get(projectId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.suppressionTimers.delete(projectId);
+      this.suppressedProjects.delete(projectId);
+      const queued = this.suppressedChanges.get(projectId);
+      this.suppressedChanges.delete(projectId);
+      if (!queued) {
+        return;
+      }
+      for (const path of queued.paths) {
+        this.debouncedChange(projectId, queued.projectName, path);
+      }
+    }, cooldownMs);
+    this.suppressionTimers.set(projectId, timer);
   }
 
   async watchProject(project: Project): Promise<void> {
     if (this.watchers.has(project.id)) {
-      return;
+      if (this.watchedPaths.get(project.id) === project.projectPath) {
+        return;
+      }
+      this.unwatchProject(project.id);
     }
     if (!project.watching) {
       return;
@@ -91,20 +132,29 @@ export class ProjectWatcher {
             return;
           }
           if (this.suppressedProjects.has(project.id)) {
+            const queued = this.suppressedChanges.get(project.id) ?? {
+              projectName: project.name,
+              paths: new Set<string>(),
+            };
+            queued.paths.add(filename);
+            this.suppressedChanges.set(project.id, queued);
             return;
           }
           this.debouncedChange(project.id, project.name, filename);
-        }
+        },
       );
       watcher.on("error", (err: NodeJS.ErrnoException) => {
         const msg = watchErrorMessage(err);
-        this.events.onError(project.id, project.name, msg);
+        void Promise.resolve(
+          this.events.onError(project.id, project.name, msg),
+        ).catch(() => {});
         this.unwatchProject(project.id);
       });
       this.watchers.set(project.id, watcher);
+      this.watchedPaths.set(project.id, project.projectPath);
     } catch (err) {
       const msg = watchErrorMessage(err);
-      this.events.onError(project.id, project.name, msg);
+      await this.events.onError(project.id, project.name, msg);
     }
   }
 
@@ -113,6 +163,7 @@ export class ProjectWatcher {
     if (w) {
       w.close();
       this.watchers.delete(projectId);
+      this.watchedPaths.delete(projectId);
     }
     const t = this.debounceTimers.get(projectId);
     if (t) {
@@ -121,6 +172,12 @@ export class ProjectWatcher {
     }
     this.pendingChangedPaths.delete(projectId);
     this.suppressedProjects.delete(projectId);
+    this.suppressedChanges.delete(projectId);
+    const suppressionTimer = this.suppressionTimers.get(projectId);
+    if (suppressionTimer) {
+      clearTimeout(suppressionTimer);
+      this.suppressionTimers.delete(projectId);
+    }
   }
 
   unwatchAll(): void {
@@ -132,7 +189,7 @@ export class ProjectWatcher {
   private debouncedChange(
     projectId: string,
     projectName: string,
-    changedPath: string
+    changedPath: string,
   ): void {
     const pending =
       this.pendingChangedPaths.get(projectId) ?? new Set<string>();
@@ -149,7 +206,17 @@ export class ProjectWatcher {
         ...(this.pendingChangedPaths.get(projectId) ?? new Set<string>()),
       ];
       this.pendingChangedPaths.delete(projectId);
-      this.events.onChange(projectId, projectName, changedPaths);
+      void Promise.resolve(
+        this.events.onChange(projectId, projectName, changedPaths),
+      )
+        .catch((error) =>
+          this.events.onError(
+            projectId,
+            projectName,
+            error instanceof Error ? error.message : "Watcher callback failed.",
+          ),
+        )
+        .catch(() => {});
     }, this.debounceMs);
     this.debounceTimers.set(projectId, timer);
   }
@@ -157,10 +224,15 @@ export class ProjectWatcher {
   isWatching(projectId: string): boolean {
     return this.watchers.has(projectId);
   }
+
+  watchedProjectIds(): string[] {
+    return [...this.watchers.keys()];
+  }
 }
 
 export class RootWatcher {
   private readonly watchers = new Map<string, FSWatcher>();
+  private readonly watchedPaths = new Map<string, string>();
   private readonly debounceTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -170,7 +242,7 @@ export class RootWatcher {
 
   constructor(
     events: RootWatcherEvents,
-    debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS
+    debounceMs = DEFAULT_WATCHER_DEBOUNCE_MS,
   ) {
     this.events = events;
     this.debounceMs = debounceMs;
@@ -178,7 +250,10 @@ export class RootWatcher {
 
   async watchRoot(root: TrackedRoot): Promise<void> {
     if (this.watchers.has(root.id)) {
-      return;
+      if (this.watchedPaths.get(root.id) === root.path) {
+        return;
+      }
+      this.unwatchRoot(root.id);
     }
 
     try {
@@ -187,13 +262,16 @@ export class RootWatcher {
       });
       watcher.on("error", (err: NodeJS.ErrnoException) => {
         const msg = watchErrorMessage(err);
-        this.events.onError(root.id, root.name, msg);
+        void Promise.resolve(
+          this.events.onError(root.id, root.name, msg),
+        ).catch(() => {});
         this.unwatchRoot(root.id);
       });
       this.watchers.set(root.id, watcher);
+      this.watchedPaths.set(root.id, root.path);
     } catch (err) {
       const msg = watchErrorMessage(err);
-      this.events.onError(root.id, root.name, msg);
+      await this.events.onError(root.id, root.name, msg);
     }
   }
 
@@ -202,6 +280,7 @@ export class RootWatcher {
     if (watcher) {
       watcher.close();
       this.watchers.delete(rootId);
+      this.watchedPaths.delete(rootId);
     }
     const timer = this.debounceTimers.get(rootId);
     if (timer) {
@@ -216,6 +295,10 @@ export class RootWatcher {
     }
   }
 
+  watchedRootIds(): string[] {
+    return [...this.watchers.keys()];
+  }
+
   private debouncedChange(rootId: string, rootName: string): void {
     const existing = this.debounceTimers.get(rootId);
     if (existing) {
@@ -223,7 +306,17 @@ export class RootWatcher {
     }
     const timer = setTimeout(() => {
       this.debounceTimers.delete(rootId);
-      this.events.onChange(rootId, rootName);
+      void Promise.resolve(this.events.onChange(rootId, rootName))
+        .catch((error) =>
+          this.events.onError(
+            rootId,
+            rootName,
+            error instanceof Error
+              ? error.message
+              : "Root watcher callback failed.",
+          ),
+        )
+        .catch(() => {});
     }, this.debounceMs);
     this.debounceTimers.set(rootId, timer);
   }

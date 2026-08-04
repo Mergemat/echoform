@@ -4,7 +4,7 @@ import { resolveStateDir } from "./paths";
 describe("resolveStateDir", () => {
   test("defaults to .echoform-state under cwd", () => {
     expect(resolveStateDir("/tmp/ablegit-project", undefined)).toBe(
-      "/tmp/ablegit-project/.echoform-state"
+      "/tmp/ablegit-project/.echoform-state",
     );
   });
 
@@ -12,8 +12,8 @@ describe("resolveStateDir", () => {
     expect(
       resolveStateDir(
         "/tmp/ablegit-project",
-        "/Users/test/Library/Application Support/Echoform"
-      )
+        "/Users/test/Library/Application Support/Echoform",
+      ),
     ).toBe("/Users/test/Library/Application Support/Echoform");
   });
 });

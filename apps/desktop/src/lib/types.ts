@@ -19,3 +19,12 @@ export type {
   WsCommand,
   WsEvent,
 } from "../../../../packages/server/src/types";
+
+import type { WsCommand as ServerWsCommand } from "../../../../packages/server/src/types";
+
+type WithoutRequestId<T> = T extends { requestId: string }
+  ? Omit<T, "requestId">
+  : never;
+
+/** Command payload accepted from UI code before the transport adds correlation. */
+export type DaemonCommandInput = WithoutRequestId<ServerWsCommand>;
