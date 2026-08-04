@@ -1,35 +1,72 @@
 import * as Sentry from "@sentry/electron/renderer";
-import posthog from "posthog-js/dist/module.full.no-external";
+import posthogJs from "posthog-js/dist/module.full.no-external";
 
-posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
-  api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-  autocapture: false,
-  capture_pageview: false,
-  capture_pageleave: false,
-  capture_performance: false,
-  defaults: "2026-01-30",
-  debug: import.meta.env.DEV,
-});
+const posthogKey = import.meta.env.VITE_PUBLIC_POSTHOG_KEY?.trim();
+const posthogHost = import.meta.env.VITE_PUBLIC_POSTHOG_HOST?.trim();
+
+export const analyticsEnabled = Boolean(posthogKey && posthogHost);
+
+if (analyticsEnabled) {
+  posthogJs.init(posthogKey, {
+    api_host: posthogHost,
+    autocapture: false,
+    capture_pageleave: false,
+    capture_pageview: false,
+    capture_performance: false,
+    debug: import.meta.env.DEV,
+    defaults: "2026-01-30",
+  });
+}
+
+type AnalyticsValue = boolean | null | number | string | undefined;
+type AnalyticsProperties = Record<string, AnalyticsValue>;
+
+function cleanProperties(properties: AnalyticsProperties) {
+  return Object.fromEntries(
+    Object.entries(properties).filter(
+      ([, value]) => value !== undefined && value !== ""
+    )
+  );
+}
 
 function getAppContextProps() {
   if (typeof window === "undefined") {
     return {};
   }
 
-  return {
+  return cleanProperties({
     api_base_url: window.echoform?.apiBaseUrl,
     app_version: window.echoform?.runtime?.appVersion,
     arch: window.echoform?.runtime?.arch,
     electron_version: window.echoform?.runtime?.electronVersion,
     platform: window.echoform?.runtime?.platform,
-  };
+  });
 }
 
-let lastProfileProperties: Record<string, number> | null = null;
+function refreshAppContext() {
+  if (!analyticsEnabled || typeof window === "undefined") {
+    return;
+  }
 
-export function syncAppProfile(properties: Record<string, number>) {
+  const props = getAppContextProps();
+  if (Object.keys(props).length === 0) {
+    return;
+  }
+
+  posthogJs.register(props);
+}
+
+let lastProfileProperties: Record<string, AnalyticsValue> | null = null;
+
+export function syncAppProfile(properties: AnalyticsProperties) {
+  if (!analyticsEnabled) {
+    return;
+  }
+
+  refreshAppContext();
+
   const nextProfile = Object.fromEntries(
-    Object.entries(properties).sort(([left], [right]) =>
+    Object.entries(cleanProperties(properties)).sort(([left], [right]) =>
       left.localeCompare(right)
     )
   );
@@ -42,13 +79,30 @@ export function syncAppProfile(properties: Record<string, number>) {
   }
 
   lastProfileProperties = nextProfile;
-  posthog.setPersonProperties(nextProfile);
+  posthogJs.setPersonProperties(nextProfile);
 }
 
-if (typeof window !== "undefined") {
-  posthog.register(getAppContextProps());
+function capture(event: string, properties: AnalyticsProperties = {}) {
+  if (!analyticsEnabled) {
+    return;
+  }
+
+  refreshAppContext();
+  posthogJs.capture(event, cleanProperties(properties));
 }
 
-Sentry.getCurrentScope().setTag("posthog_session_id", posthog.get_session_id());
+if (analyticsEnabled && typeof window !== "undefined") {
+  refreshAppContext();
+}
 
-export { posthog };
+const posthogSessionId = analyticsEnabled ? posthogJs.get_session_id() : null;
+if (posthogSessionId) {
+  Sentry.getCurrentScope().setTag("posthog_session_id", posthogSessionId);
+}
+
+export const posthog = {
+  capture,
+  get_session_id() {
+    return analyticsEnabled ? posthogJs.get_session_id() : null;
+  },
+};
