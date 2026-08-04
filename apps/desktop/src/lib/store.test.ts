@@ -14,14 +14,13 @@ const makeIdea = (id: string): Idea => ({
   setPath: "project.als",
   baseSaveId: "save-1",
   headSaveId: "save-1",
-  parentIdeaId: null,
-  forkedFromSaveId: null,
 });
 
 const makeSave = (id: string, ideaId: string): Save => ({
   id,
   label: `Save ${id}`,
   note: "",
+  pinned: false,
   createdAt: "2024-01-01T00:00:00Z",
   ideaId,
   previewRefs: [],
@@ -49,6 +48,7 @@ const makeProject = (
   id,
   name: `Project ${id}`,
   adapter: "ableton",
+  continuedFrom: null,
   projectPath: `/projects/${id}`,
   rootIds: [],
   presence: "active",
@@ -77,7 +77,6 @@ describe("useStore", () => {
         rootSuggestions: [],
         compare: null,
         discoveredProjects: [],
-        collapsedBranches: new Set(),
       });
     });
   });
@@ -156,12 +155,11 @@ describe("useStore", () => {
     expect(useStore.getState().selectedSaveId).toBe("save-2");
   });
 
-  it("setActiveIdea() clears save selection and expands the target branch", () => {
+  it("setActiveIdea() clears save selection", () => {
     act(() =>
       useStore.setState({
         activeIdeaId: "old-idea",
         selectedSaveId: "save-1",
-        collapsedBranches: new Set(["new-idea"]),
       })
     );
 
@@ -170,7 +168,6 @@ describe("useStore", () => {
     const state = useStore.getState();
     expect(state.activeIdeaId).toBe("new-idea");
     expect(state.selectedSaveId).toBeNull();
-    expect(state.collapsedBranches.has("new-idea")).toBe(false);
   });
 
   it("applySnapshot() falls back to the first remaining project", () => {

@@ -19,7 +19,6 @@ interface Store {
     roots: TrackedRoot[],
     activity: ActivityItem[]
   ) => void;
-  collapsedBranches: Set<string>;
   compare: CompareResult | null;
   discoveredProjects: DiscoveredProject[];
   projects: Project[];
@@ -37,7 +36,6 @@ interface Store {
   setDiscoveredProjects: (projects: DiscoveredProject[]) => void;
   setRootSuggestions: (suggestions: RootSuggestion[]) => void;
   snapshotReceived: boolean;
-  toggleBranchCollapse: (ideaId: string) => void;
   toggleSave: (id: string) => void;
 }
 
@@ -82,7 +80,6 @@ export const useStore = create<Store>((set, get) => ({
   selectedProjectId: null,
   selectedSaveId: null,
   activeIdeaId: null,
-  collapsedBranches: new Set(),
   discoveredProjects: [],
   compare: null,
 
@@ -159,24 +156,8 @@ export const useStore = create<Store>((set, get) => ({
     })),
 
   setActiveIdea: (id) =>
-    set((state) => {
-      const next = new Set(state.collapsedBranches);
-      next.delete(id);
-      return {
-        activeIdeaId: id,
-        selectedSaveId: null,
-        collapsedBranches: next,
-      };
-    }),
-
-  toggleBranchCollapse: (ideaId) =>
-    set((state) => {
-      const next = new Set(state.collapsedBranches);
-      if (next.has(ideaId)) {
-        next.delete(ideaId);
-      } else {
-        next.add(ideaId);
-      }
-      return { collapsedBranches: next };
+    set({
+      activeIdeaId: id,
+      selectedSaveId: null,
     }),
 }));

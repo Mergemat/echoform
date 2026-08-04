@@ -55,7 +55,7 @@ const parser = new XMLParser({
     _name: string,
     _jpath: any,
     isLeafNode: boolean,
-    _isAttribute: boolean
+    _isAttribute: boolean,
   ) => {
     // Only force non-leaf nodes into arrays when they're known list items.
     if (isLeafNode) {
@@ -308,7 +308,7 @@ function extractClips(mainSequencer: any): { count: number; names: string[] } {
     mainSequencer,
     "ClipTimeable",
     "ArrangerAutomation",
-    "Events"
+    "Events",
   );
   if (events) {
     for (const clipType of ["MidiClip", "AudioClip"]) {
@@ -335,7 +335,7 @@ const TRACK_TAGS = new Set(Object.keys(TRACK_TYPE_MAP));
 
 function extractTrack(
   trackNode: any,
-  trackType: TrackSnapshot["type"]
+  trackType: TrackSnapshot["type"],
 ): TrackSnapshot {
   const id = String(trackNode["@_Id"] ?? "");
   const name = attrVal(val(trackNode, "Name", "EffectiveName")) ?? "(unnamed)";
@@ -461,7 +461,7 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown error";
     throw new Error(
-      `Corrupt or invalid .als file — failed to decompress: ${detail}`
+      `Corrupt or invalid .als file — failed to decompress: ${detail}`,
     );
   }
   const doc = parser.parse(xml);
@@ -477,7 +477,7 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
 
   if (tracksNode) {
     const tracksByTag = Object.fromEntries(
-      Object.keys(TRACK_TYPE_MAP).map((tag) => [tag, asArray(tracksNode[tag])])
+      Object.keys(TRACK_TYPE_MAP).map((tag) => [tag, asArray(tracksNode[tag])]),
     ) as Record<string, any[]>;
 
     for (const tag of extractTrackTagOrder(xml)) {
@@ -500,14 +500,21 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
   const mainMixer = val(mainTrack, "DeviceChain", "Mixer");
   const tempo = Number(attrVal(val(mainMixer, "Tempo", "Manual")) ?? 120);
   const tsEncoded = Number(
-    attrVal(val(mainMixer, "TimeSignature", "Manual")) ?? 201
+    attrVal(val(mainMixer, "TimeSignature", "Manual")) ?? 201,
   );
   const timeSignature = decodeTimeSignature(tsEncoded);
 
   // ── Arrangement length (beats, from MainTrack) ──────────────────
   const mainSeqRoot = val(mainTrack, "DeviceChain", "MainSequencer");
   const arrangementLength = Number(
-    attrVal(val(mainSeqRoot, "ClipTimeable", "ArrangerAutomation", "ArrangementLength")) ?? 0
+    attrVal(
+      val(
+        mainSeqRoot,
+        "ClipTimeable",
+        "ArrangerAutomation",
+        "ArrangementLength",
+      ),
+    ) ?? 0,
   );
 
   // ── Scene count (Session view scenes) ───────────────────────────
@@ -518,5 +525,12 @@ export async function parseAlsFile(filePath: string): Promise<SetSnapshot> {
   const locators = asArray(val(liveSet, "Locators", "Locators", "Locator"));
   const locatorCount = locators.length;
 
-  return { tempo, timeSignature, tracks, arrangementLength, sceneCount, locatorCount };
+  return {
+    tempo,
+    timeSignature,
+    tracks,
+    arrangementLength,
+    sceneCount,
+    locatorCount,
+  };
 }

@@ -236,11 +236,11 @@ export function PreviewRequestDialog({
       <DialogContent className="gap-0 overflow-hidden rounded-xl border border-white/[0.08] bg-[#111215] p-0 text-white sm:max-w-[480px]">
         <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle className="font-semibold text-base text-white/90">
-            Add a preview
+            Add preview to checkpoint
           </DialogTitle>
           <DialogDescription className="mt-1 text-[13px] text-white/40 leading-relaxed">
-            Drop an audio file here, or bounce from Ableton into the folder
-            below.
+            This audio becomes part of the checkpoint’s durable history. Drop a
+            file here, or bounce from Ableton into the folder below.
           </DialogDescription>
         </DialogHeader>
 

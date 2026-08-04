@@ -11,7 +11,7 @@ import type { ChangeSummary, SetDiff } from "./types";
 /** Build a concise label from a semantic diff and file changes. */
 export function formatDiffAsLabel(
   setDiff?: SetDiff,
-  changes?: ChangeSummary
+  changes?: ChangeSummary,
 ): string {
   const parts: string[] = [];
 
@@ -23,7 +23,7 @@ export function formatDiffAsLabel(
     // Time signature
     if (setDiff.timeSignatureChange) {
       parts.push(
-        `time sig ${setDiff.timeSignatureChange.from}→${setDiff.timeSignatureChange.to}`
+        `time sig ${setDiff.timeSignatureChange.from}→${setDiff.timeSignatureChange.to}`,
       );
     }
     // Arrangement length
@@ -53,12 +53,17 @@ export function formatDiffAsLabel(
     // Scene count
     if (setDiff.sceneCountChange) {
       const delta = setDiff.sceneCountChange.to - setDiff.sceneCountChange.from;
-      parts.push(`${delta > 0 ? "+" : ""}${delta} scene${Math.abs(delta) === 1 ? "" : "s"}`);
+      parts.push(
+        `${delta > 0 ? "+" : ""}${delta} scene${Math.abs(delta) === 1 ? "" : "s"}`,
+      );
     }
     // Locator count
     if (setDiff.locatorCountChange) {
-      const delta = setDiff.locatorCountChange.to - setDiff.locatorCountChange.from;
-      parts.push(`${delta > 0 ? "+" : ""}${delta} locator${Math.abs(delta) === 1 ? "" : "s"}`);
+      const delta =
+        setDiff.locatorCountChange.to - setDiff.locatorCountChange.from;
+      parts.push(
+        `${delta > 0 ? "+" : ""}${delta} locator${Math.abs(delta) === 1 ? "" : "s"}`,
+      );
     }
     // Modified tracks (summarize)
     if (setDiff.modifiedTracks.length > 0) {

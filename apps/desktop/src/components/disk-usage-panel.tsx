@@ -1,6 +1,14 @@
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -182,8 +190,16 @@ const PRUNE_OPTIONS = [
 ];
 
 export function DiskUsagePanel({ projectId }: { projectId: string }) {
+  return <ProjectDiskUsagePanel key={projectId} projectId={projectId} />;
+}
+
+function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
   const [state, setState] = useState({
     actionMsg: null as string | null,
+    confirmAction: null as
+      | { kind: "compact" }
+      | { days: number; kind: "prune" }
+      | null,
     compacting: false,
     error: null as string | null,
     loading: false,
@@ -191,7 +207,16 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
     pruning: false,
     usage: null as DiskUsage | null,
   });
-  const { actionMsg, compacting, error, loading, open, pruning, usage } = state;
+  const {
+    actionMsg,
+    compacting,
+    confirmAction,
+    error,
+    loading,
+    open,
+    pruning,
+    usage,
+  } = state;
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, error: null, loading: true }));
@@ -228,6 +253,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
     setState((current) => ({
       ...current,
       actionMsg: null,
+      confirmAction: null,
       pruning: true,
     }));
     void pruneSaves(projectId, days)
@@ -238,8 +264,10 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
         });
         const nextActionMsg =
           deleted === 0
-            ? `No auto-saves older than ${days}d.`
-            : `Pruned ${deleted} auto-save${deleted === 1 ? "" : "s"}.`;
+            ? `No automatic checkpoints older than ${days}d.`
+            : `Pruned ${deleted} automatic checkpoint${
+                deleted === 1 ? "" : "s"
+              }.`;
         const fresh = await fetchDiskUsage(projectId);
         setState((current) => ({
           ...current,
@@ -262,6 +290,7 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
     setState((current) => ({
       ...current,
       actionMsg: null,
+      confirmAction: null,
       compacting: true,
     }));
     void compactStorage(projectId)
@@ -271,8 +300,10 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
         });
         const nextActionMsg =
           deleted === 0
-            ? "No auto-saves were eligible for compaction."
-            : `Compacted ${deleted} auto-save${deleted === 1 ? "" : "s"}.`;
+            ? "No automatic checkpoints were eligible for compaction."
+            : `Compacted ${deleted} automatic checkpoint${
+                deleted === 1 ? "" : "s"
+              }.`;
         const fresh = await fetchDiskUsage(projectId);
         setState((current) => ({
           ...current,
@@ -297,181 +328,263 @@ export function DiskUsagePanel({ projectId }: { projectId: string }) {
       : 0;
 
   return (
-    <Popover onOpenChange={handleOpenChange} open={open}>
-      <PopoverTrigger asChild>
-        <Button
-          className="h-auto px-1 py-0 font-mono text-[11px] text-white/25 tabular-nums hover:text-white/50"
-          size="sm"
-          variant="ghost"
+    <>
+      <Popover onOpenChange={handleOpenChange} open={open}>
+        <PopoverTrigger asChild>
+          <Button
+            className="h-auto px-1 py-0 font-mono text-[11px] text-white/25 tabular-nums hover:text-white/50"
+            size="sm"
+            variant="ghost"
+          >
+            {usage ? formatSize(usage.blobStorageBytes) : "Storage"}
+          </Button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          align="end"
+          className="w-[360px] overflow-hidden rounded-xl border-white/[0.08] bg-[#111114] p-0"
         >
-          {usage ? formatSize(usage.blobStorageBytes) : "Storage"}
-        </Button>
-      </PopoverTrigger>
-
-      <PopoverContent
-        align="end"
-        className="w-[360px] overflow-hidden rounded-xl border-white/[0.08] bg-[#111114] p-0"
-      >
-        <div className="space-y-4 p-4">
-          {loading && !usage && (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-8 w-2/3 rounded-lg" />
-            </div>
-          )}
-          {error && (
-            <div className="rounded-lg bg-red-400/[0.06] px-3 py-2 text-[11px] text-red-400/70">
-              {error}
-            </div>
-          )}
-
-          {usage && (
-            <>
-              {/* Hero: ring + primary stat */}
-              <div className="flex items-center gap-4">
-                <UsageRing
-                  totalBytes={usage.totalSnapshotBytes}
-                  usedBytes={usage.blobStorageBytes}
-                />
-                <div>
-                  <div className="font-semibold text-[20px] text-white/85 tabular-nums leading-tight tracking-tight">
-                    {formatSize(usage.blobStorageBytes)}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-white/30">
-                    on disk
-                    {dedupPct > 0 && (
-                      <span className="text-white/20">
-                        {" "}
-                        &middot; {dedupPct}% saved by dedup
-                      </span>
-                    )}
-                  </div>
-                </div>
+          <div className="space-y-4 p-4">
+            {loading && !usage && (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-8 w-2/3 rounded-lg" />
               </div>
-
-              {/* Stats */}
-              <div className="space-y-1.5 pt-1">
-                <StatRow label="Total saves" value={usage.totalSaveCount} />
-                <StatRow label="Auto-saves" value={usage.autoSaveCount} />
-                <StatRow label="Manual saves" value={usage.manualSaveCount} />
-                <StatRow
-                  dim
-                  label="Dedup savings"
-                  value={formatSize(usage.dedupSavings)}
-                />
-                <StatRow
-                  dim
-                  label="Compactable"
-                  value={usage.eligibleAutoSaveCount}
-                />
-                <StatRow
-                  dim
-                  label="Largest auto-save"
-                  value={formatSize(usage.largestAutoSaveBytes)}
-                />
-                <StatRow
-                  dim
-                  label="Oldest auto-save"
-                  value={
-                    usage.oldestAutoSaveAt
-                      ? formatDateTime(usage.oldestAutoSaveAt)
-                      : "-"
-                  }
-                />
+            )}
+            {error && (
+              <div className="rounded-lg bg-red-400/[0.06] px-3 py-2 text-[11px] text-red-400/70">
+                {error}
               </div>
+            )}
 
-              {/* Per-save chart */}
-              {usage.saves.length > 0 && (
-                <div className="pt-1">
-                  <div className="mb-2 flex items-center gap-3">
-                    <span className="font-medium text-[10px] text-white/25 uppercase tracking-wider">
-                      Saves
-                    </span>
-                    <div className="ml-auto flex items-center gap-2">
-                      <span className="flex items-center gap-1 text-[10px] text-white/20">
-                        <span className="inline-block size-1.5 rounded-full bg-white/35" />
-                        manual
-                      </span>
-                      <span className="flex items-center gap-1 text-[10px] text-white/20">
-                        <span className="inline-block size-1.5 rounded-full bg-white/15" />
-                        auto
-                      </span>
+            {usage && (
+              <>
+                {/* Hero: ring + primary stat */}
+                <div className="flex items-center gap-4">
+                  <UsageRing
+                    totalBytes={usage.totalSnapshotBytes}
+                    usedBytes={usage.blobStorageBytes}
+                  />
+                  <div>
+                    <div className="font-semibold text-[20px] text-white/85 tabular-nums leading-tight tracking-tight">
+                      {formatSize(usage.blobStorageBytes)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-white/30">
+                      on disk
+                      {dedupPct > 0 && (
+                        <span className="text-white/20">
+                          {" "}
+                          &middot; {dedupPct}% saved by dedup
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <SaveSizeChart saves={usage.saves} />
                 </div>
-              )}
 
-              {/* Compact + Prune */}
-              <div className="border-white/[0.06] border-t pt-1">
-                <div className="flex items-center justify-between pt-3">
-                  <span className="text-[11px] text-white/30">
-                    Retention compaction
-                  </span>
-                  <button
-                    className={cn(
-                      "rounded-md px-2 py-0.5 text-[11px] transition-colors",
-                      "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
-                      "disabled:pointer-events-none disabled:opacity-30"
-                    )}
-                    disabled={
-                      compacting || pruning || usage.eligibleAutoSaveCount === 0
+                {/* Stats */}
+                <div className="space-y-1.5 pt-1">
+                  <StatRow
+                    label="All checkpoints"
+                    value={usage.totalSaveCount}
+                  />
+                  <StatRow label="Automatic" value={usage.autoSaveCount} />
+                  <StatRow label="Manual" value={usage.manualSaveCount} />
+                  <StatRow
+                    dim
+                    label="Dedup savings"
+                    value={formatSize(usage.dedupSavings)}
+                  />
+                  <StatRow
+                    dim
+                    label="Compactable"
+                    value={usage.eligibleAutoSaveCount}
+                  />
+                  <StatRow
+                    dim
+                    label="Largest automatic"
+                    value={formatSize(usage.largestAutoSaveBytes)}
+                  />
+                  <StatRow
+                    dim
+                    label="Oldest automatic"
+                    value={
+                      usage.oldestAutoSaveAt
+                        ? formatDateTime(usage.oldestAutoSaveAt)
+                        : "-"
                     }
-                    onClick={handleCompact}
-                    type="button"
-                  >
-                    {compacting ? "Compacting..." : "Compact auto-saves"}
-                  </button>
+                  />
                 </div>
-                <div className="mt-1.5 text-[10px] text-white/15">
-                  Keeps all last-24h auto-saves, then one per hour/day/week.
-                </div>
-                <div className="flex items-center justify-between pt-3">
-                  <span className="text-[11px] text-white/30">
-                    Prune auto-saves older than
-                  </span>
-                  <div className="flex gap-1">
-                    {PRUNE_OPTIONS.map((opt) => (
-                      <button
-                        className={cn(
-                          "rounded-md px-2 py-0.5 text-[11px] transition-colors",
-                          "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
-                          "disabled:pointer-events-none disabled:opacity-30"
-                        )}
-                        disabled={
-                          pruning || compacting || usage.autoSaveCount === 0
-                        }
-                        key={opt.days}
-                        onClick={() => handlePrune(opt.days)}
-                        type="button"
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {actionMsg && (
-                  <div className="mt-1.5 text-[11px] text-white/40">
-                    {actionMsg}
+
+                {/* Per-save chart */}
+                {usage.saves.length > 0 && (
+                  <div className="pt-1">
+                    <div className="mb-2 flex items-center gap-3">
+                      <span className="font-medium text-[10px] text-white/25 uppercase tracking-wider">
+                        Checkpoints
+                      </span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <span className="flex items-center gap-1 text-[10px] text-white/20">
+                          <span className="inline-block size-1.5 rounded-full bg-white/35" />
+                          manual
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] text-white/20">
+                          <span className="inline-block size-1.5 rounded-full bg-white/15" />
+                          auto
+                        </span>
+                      </div>
+                    </div>
+                    <SaveSizeChart saves={usage.saves} />
                   </div>
                 )}
-                <div className="mt-2 text-[10px] text-white/15">
-                  Latest and base saves are never pruned.
-                </div>
-              </div>
 
-              {/* Refresh */}
-              <button
-                className="text-[11px] text-white/20 transition-colors hover:text-white/40"
-                onClick={load}
-                type="button"
-              >
-                Refresh
-              </button>
-            </>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+                {/* Compact + Prune */}
+                <div className="border-white/[0.06] border-t pt-1">
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-[11px] text-white/30">
+                      Retention compaction
+                    </span>
+                    <button
+                      className={cn(
+                        "rounded-md px-2 py-0.5 text-[11px] transition-colors",
+                        "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
+                        "disabled:pointer-events-none disabled:opacity-30"
+                      )}
+                      disabled={
+                        compacting ||
+                        pruning ||
+                        usage.eligibleAutoSaveCount === 0
+                      }
+                      onClick={() =>
+                        setState((current) => ({
+                          ...current,
+                          actionMsg: null,
+                          confirmAction: { kind: "compact" },
+                          open: false,
+                        }))
+                      }
+                      type="button"
+                    >
+                      {compacting ? "Compacting..." : "Compact checkpoints"}
+                    </button>
+                  </div>
+                  <div className="mt-1.5 text-[10px] text-white/15">
+                    Keeps all last-24h automatic checkpoints, then one per
+                    hour/day/week.
+                  </div>
+                  <div className="flex items-center justify-between pt-3">
+                    <span className="text-[11px] text-white/30">
+                      Prune automatic checkpoints older than
+                    </span>
+                    <div className="flex gap-1">
+                      {PRUNE_OPTIONS.map((opt) => (
+                        <button
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-[11px] transition-colors",
+                            "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
+                            "disabled:pointer-events-none disabled:opacity-30"
+                          )}
+                          disabled={
+                            pruning || compacting || usage.autoSaveCount === 0
+                          }
+                          key={opt.days}
+                          onClick={() =>
+                            setState((current) => ({
+                              ...current,
+                              actionMsg: null,
+                              confirmAction: { days: opt.days, kind: "prune" },
+                              open: false,
+                            }))
+                          }
+                          type="button"
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {actionMsg && (
+                    <div
+                      className="mt-2 text-[11px] text-white/60"
+                      role="status"
+                    >
+                      {actionMsg}
+                    </div>
+                  )}
+                  <div className="mt-2 text-[10px] text-white/40">
+                    The latest checkpoint and each Ableton set's first
+                    checkpoint are never pruned.
+                  </div>
+                </div>
+
+                {/* Refresh */}
+                <button
+                  className="text-[11px] text-white/20 transition-colors hover:text-white/40"
+                  onClick={load}
+                  type="button"
+                >
+                  Refresh
+                </button>
+              </>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      <Dialog
+        onOpenChange={(nextOpen) => {
+          if (!(nextOpen || compacting || pruning)) {
+            setState((current) => ({
+              ...current,
+              confirmAction: null,
+            }));
+          }
+        }}
+        open={confirmAction !== null}
+      >
+        <DialogContent className="border-white/[0.12] bg-[#111215]">
+          <DialogHeader>
+            <DialogTitle className="text-white/90">
+              Permanently remove historical automatic checkpoints?
+            </DialogTitle>
+            <DialogDescription className="text-white/55">
+              {confirmAction?.kind === "compact"
+                ? `This may remove up to ${usage?.eligibleAutoSaveCount ?? 0} automatic checkpoint${usage?.eligibleAutoSaveCount === 1 ? "" : "s"}, keeping the recent and hourly/daily/weekly checkpoints described in Storage.`
+                : confirmAction
+                  ? `This removes eligible automatic checkpoints older than ${confirmAction.days} days. The latest checkpoint and each Ableton set's first checkpoint remain protected.`
+                  : null}{" "}
+              This cannot be undone. Manual checkpoints and Ableton files stay
+              untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="border-white/[0.08] bg-white/[0.03]">
+            <Button
+              disabled={compacting || pruning}
+              onClick={() =>
+                setState((current) => ({
+                  ...current,
+                  confirmAction: null,
+                }))
+              }
+              variant="ghost"
+            >
+              Keep checkpoints
+            </Button>
+            <Button
+              disabled={compacting || pruning}
+              onClick={() => {
+                if (confirmAction?.kind === "compact") {
+                  void handleCompact();
+                } else if (confirmAction) {
+                  void handlePrune(confirmAction.days);
+                }
+              }}
+              variant="destructive"
+            >
+              Confirm removal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

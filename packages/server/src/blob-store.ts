@@ -1,15 +1,14 @@
 /**
  * blob-store.ts – Content-addressed blob storage for Echoform snapshots.
  *
- * Blobs are stored per-project at {projectPath}/.echoform-state/blobs/{sha256}.
- * Manifests map saveIds to their file→blob associations at
- * {projectPath}/.echoform-state/manifests/{saveId}.json.
+ * Blobs are stored in the app-owned per-project history directory.
+ * Manifests map saveIds to file→blob associations under that same app-owned
+ * history directory. Working-project folders contain no snapshot payloads.
  *
  * All writes are atomic (write to .tmp, then rename).
  */
 
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import {
   copyFile,
   mkdir,
@@ -17,11 +16,18 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { LEGACY_STATE_DIRNAME, STATE_DIRNAME } from "./paths";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
+import { STATE_DIRNAME } from "./paths";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -50,91 +56,97 @@ export interface Manifest {
 // ── Internal paths ──────────────────────────────────────────────────
 
 export function resolveProjectStateDir(projectPath: string): string {
-  const stateDir = join(projectPath, STATE_DIRNAME);
-  if (existsSync(stateDir)) {
-    return stateDir;
-  }
-
-  const legacyStateDir = join(projectPath, LEGACY_STATE_DIRNAME);
-  if (existsSync(legacyStateDir)) {
-    return legacyStateDir;
-  }
-
-  return stateDir;
+  return join(projectPath, STATE_DIRNAME);
 }
 
-function blobsDir(projectPath: string): string {
-  return join(resolveProjectStateDir(projectPath), "blobs");
+function blobsDir(historyDir: string): string {
+  return join(historyDir, "blobs");
 }
 
-function manifestsDir(projectPath: string): string {
-  return join(resolveProjectStateDir(projectPath), "manifests");
+function manifestsDir(historyDir: string): string {
+  return join(historyDir, "manifests");
 }
 
-function blobFilePath(projectPath: string, hash: string): string {
-  return join(blobsDir(projectPath), hash);
+function blobFilePath(historyDir: string, hash: string): string {
+  return join(blobsDir(historyDir), hash);
 }
 
-function manifestFilePath(projectPath: string, saveId: string): string {
-  return join(manifestsDir(projectPath), `${saveId}.json`);
+function manifestFilePath(historyDir: string, saveId: string): string {
+  return join(manifestsDir(historyDir), `${saveId}.json`);
+}
+
+function trashDir(historyDir: string): string {
+  return join(historyDir, "trash");
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
 }
 
 // ── Blob operations ─────────────────────────────────────────────────
 
-const BLOB_STABILITY_POLL_MS = 100;
-const BLOB_STABILITY_MAX_ATTEMPTS = 10;
-
-/**
- * Wait until a file's size and mtime are stable across two consecutive polls.
- * This guards against reading a file that is still being written (e.g. a WAV
- * file Ableton is rendering). Throws if the file never settles within the
- * timeout window (BLOB_STABILITY_MAX_ATTEMPTS × BLOB_STABILITY_POLL_MS).
- */
-async function waitForFileStability(filePath: string): Promise<void> {
-  let prev = await stat(filePath);
-  for (let attempt = 0; attempt < BLOB_STABILITY_MAX_ATTEMPTS; attempt++) {
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, BLOB_STABILITY_POLL_MS)
-    );
-    const next = await stat(filePath);
-    if (next.size === prev.size && next.mtimeMs === prev.mtimeMs) {
-      return;
-    }
-    prev = next;
-  }
-  throw new Error(
-    `File is still being written and did not stabilise: ${filePath}. ` +
-      `Try saving again after the render completes.`
-  );
-}
-
-/**
- * Store a file as a content-addressed blob.
- * Returns the SHA-256 hash and byte size.
- * If a blob with the same hash already exists, the write is skipped (dedup).
- */
-export async function storeBlob(
-  projectPath: string,
-  filePath: string
+/** Store already-captured bytes without rereading a mutable source file. */
+export async function storeBlobBytes(
+  historyDir: string,
+  content: Uint8Array,
 ): Promise<{ hash: string; size: number }> {
-  await waitForFileStability(filePath);
-  const content = await readFile(filePath);
   const hash = createHash("sha256").update(content).digest("hex");
-  const dest = blobFilePath(projectPath, hash);
+  const dest = blobFilePath(historyDir, hash);
 
-  // Dedup: skip write if blob already exists
-  try {
-    await stat(dest);
+  const hasValidDestination = async (): Promise<boolean> => {
+    try {
+      const existing = await readFile(dest);
+      return (
+        existing.length === content.length &&
+        createHash("sha256").update(existing).digest("hex") === hash
+      );
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) {
+        return false;
+      }
+      throw error;
+    }
+  };
+
+  // Never trust a content-addressed filename without validating its bytes.
+  if (await hasValidDestination()) {
     return { hash, size: content.length };
-  } catch {
-    // Blob doesn't exist yet — store it
   }
 
-  await mkdir(blobsDir(projectPath), { recursive: true });
-  const tmp = `${dest}.tmp`;
+  await mkdir(blobsDir(historyDir), { recursive: true });
+  const tmp = `${dest}.${crypto.randomUUID()}.tmp`;
   try {
-    await writeFile(tmp, content);
-    await rename(tmp, dest);
+    await writeFile(tmp, content, { flush: true });
+    if (await hasValidDestination()) {
+      await rm(tmp, { force: true });
+      return { hash, size: content.length };
+    }
+    try {
+      await rename(tmp, dest);
+    } catch (promotionError) {
+      if (await hasValidDestination()) {
+        await rm(tmp, { force: true });
+        return { hash, size: content.length };
+      }
+      const quarantine = `${dest}.corrupt-${crypto.randomUUID()}`;
+      try {
+        await rename(dest, quarantine);
+      } catch (error) {
+        if (!isErrno(error, "ENOENT")) {
+          throw promotionError;
+        }
+      }
+      try {
+        await rename(tmp, dest);
+      } finally {
+        await rm(quarantine, { force: true }).catch(() => {});
+      }
+    }
   } catch (err) {
     await rm(tmp, { force: true }).catch(() => {});
     if (
@@ -144,7 +156,7 @@ export async function storeBlob(
       (err as NodeJS.ErrnoException).code === "ENOSPC"
     ) {
       throw new Error(
-        "Disk is full — cannot store snapshot. Free up space and try again."
+        "Disk is full — cannot store snapshot. Free up space and try again.",
       );
     }
     throw err;
@@ -153,52 +165,137 @@ export async function storeBlob(
 }
 
 /** Resolve the filesystem path to a stored blob by its hash. */
-export function getBlobPath(projectPath: string, hash: string): string {
-  return blobFilePath(projectPath, hash);
+export function getBlobPath(historyDir: string, hash: string): string {
+  return blobFilePath(historyDir, hash);
 }
 
 // ── Manifest operations ─────────────────────────────────────────────
 
 /** Write a manifest for a save (atomic: .tmp → rename). */
 export async function createManifest(
-  projectPath: string,
+  historyDir: string,
   saveId: string,
   files: ManifestEntry[],
-  createdAt: string
+  createdAt: string,
 ): Promise<Manifest> {
-  const manifest: Manifest = { saveId, files, createdAt };
-  await mkdir(manifestsDir(projectPath), { recursive: true });
-  const dest = manifestFilePath(projectPath, saveId);
+  const manifest = validateManifest({ saveId, files, createdAt }, saveId);
+  await mkdir(manifestsDir(historyDir), { recursive: true });
+  const dest = manifestFilePath(historyDir, saveId);
   const tmp = `${dest}.tmp`;
-  await writeFile(tmp, JSON.stringify(manifest, null, 2));
-  await rename(tmp, dest);
+  try {
+    await writeFile(tmp, JSON.stringify(manifest, null, 2), { flush: true });
+    await rename(tmp, dest);
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw error;
+  }
   return manifest;
 }
 
 /** Read and parse a manifest for a save. Throws if not found. */
 export async function readManifest(
-  projectPath: string,
-  saveId: string
+  historyDir: string,
+  saveId: string,
 ): Promise<Manifest> {
-  const content = await readFile(manifestFilePath(projectPath, saveId), "utf8");
-  return JSON.parse(content) as Manifest;
+  const content = await readFile(manifestFilePath(historyDir, saveId), "utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`Manifest ${saveId} is corrupt.`, { cause: error });
+  }
+  return validateManifest(parsed, saveId);
 }
 
-/** Delete a manifest file. No-op if already deleted. */
-export async function deleteManifest(
-  projectPath: string,
-  saveId: string
+function isSafeRelativePath(path: string): boolean {
+  if (!path || isAbsolute(path)) {
+    return false;
+  }
+  const normalized = normalize(path);
+  return normalized !== ".." && !normalized.startsWith(`..${sep}`);
+}
+
+function validateManifest(value: unknown, expectedSaveId: string): Manifest {
+  if (!(value && typeof value === "object" && !Array.isArray(value))) {
+    throw new Error(`Manifest ${expectedSaveId} has an invalid structure.`);
+  }
+  const candidate = value as Partial<Manifest>;
+  if (
+    candidate.saveId !== expectedSaveId ||
+    typeof candidate.createdAt !== "string" ||
+    !Array.isArray(candidate.files)
+  ) {
+    throw new Error(`Manifest ${expectedSaveId} has an invalid structure.`);
+  }
+  const paths = new Set<string>();
+  for (const entry of candidate.files) {
+    if (!(entry && typeof entry === "object" && !Array.isArray(entry))) {
+      throw new Error(`Manifest ${expectedSaveId} contains an invalid entry.`);
+    }
+    const item = entry as unknown as Record<string, unknown>;
+    if (
+      typeof item.relativePath !== "string" ||
+      !isSafeRelativePath(item.relativePath)
+    ) {
+      throw new Error(`Manifest ${expectedSaveId} contains an unsafe path.`);
+    }
+    if (paths.has(item.relativePath)) {
+      throw new Error(`Manifest ${expectedSaveId} contains duplicate paths.`);
+    }
+    paths.add(item.relativePath);
+    if (
+      item.type !== "dir" &&
+      (typeof item.blobHash !== "string" ||
+        !/^[a-f0-9]{64}$/.test(item.blobHash) ||
+        typeof item.size !== "number" ||
+        !Number.isFinite(item.size) ||
+        item.size < 0)
+    ) {
+      throw new Error(
+        `Manifest ${expectedSaveId} contains an invalid file entry.`,
+      );
+    }
+  }
+  return candidate as Manifest;
+}
+
+/** Move manifests to recoverable trash. State references must be removed first. */
+export async function stageManifestsForDeletion(
+  historyDir: string,
+  saveIds: string[],
 ): Promise<void> {
-  await rm(manifestFilePath(projectPath, saveId), { force: true });
+  if (saveIds.length === 0) {
+    return;
+  }
+  const generation = `${Date.now()}-${crypto.randomUUID()}`;
+  const destinationDir = join(trashDir(historyDir), generation, "manifests");
+  await mkdir(destinationDir, { recursive: true });
+  for (const saveId of saveIds) {
+    const source = manifestFilePath(historyDir, saveId);
+    const destination = join(destinationDir, `${saveId}.json`);
+    try {
+      await rename(source, destination);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 // ── Restore ─────────────────────────────────────────────────────────
 
 /** Reconstruct a directory from a manifest by copying blobs to their original relative paths. */
-async function _reconstructFromManifest(
-  projectPath: string,
+export async function reconstructFromManifest(
+  historyDir: string,
   manifest: Manifest,
-  targetDir: string
+  targetDir: string,
 ): Promise<void> {
   for (const entry of manifest.files) {
     if (entry.type !== "dir") {
@@ -211,10 +308,25 @@ async function _reconstructFromManifest(
     if (entry.type === "dir") {
       continue;
     }
-    const src = getBlobPath(projectPath, entry.blobHash);
+    const src = getBlobPath(historyDir, entry.blobHash);
     const dest = join(targetDir, entry.relativePath);
+    const targetRoot = resolve(targetDir);
+    const resolvedDestination = resolve(dest);
+    if (
+      resolvedDestination !== targetRoot &&
+      !resolvedDestination.startsWith(`${targetRoot}${sep}`)
+    ) {
+      throw new Error(
+        `Manifest path escapes the recovery directory: ${entry.relativePath}`,
+      );
+    }
+    const bytes = await readFile(src);
+    const actualHash = createHash("sha256").update(bytes).digest("hex");
+    if (actualHash !== entry.blobHash || bytes.length !== entry.size) {
+      throw new Error(`Blob verification failed for ${entry.relativePath}.`);
+    }
     await mkdir(dirname(dest), { recursive: true });
-    await copyFile(src, dest);
+    await writeFile(dest, bytes);
   }
 }
 
@@ -226,40 +338,82 @@ async function _reconstructFromManifest(
  * Returns the number of blobs deleted.
  */
 export async function gcBlobs(
-  projectPath: string,
-  keepSaveIds: string[]
+  historyDir: string,
+  keepSaveIds: string[],
 ): Promise<number> {
   // Collect all hashes referenced by kept saves
   const referenced = new Set<string>();
   for (const saveId of keepSaveIds) {
-    try {
-      const manifest = await readManifest(projectPath, saveId);
-      for (const entry of manifest.files) {
-        if (entry.type === "dir") {
-          continue;
-        }
-        referenced.add(entry.blobHash);
+    const manifest = await readManifest(historyDir, saveId);
+    for (const entry of manifest.files) {
+      if (entry.type === "dir") {
+        continue;
       }
-    } catch {
-      // Manifest missing — its blobs won't be protected
+      referenced.add(entry.blobHash);
+    }
+  }
+
+  // Stage any orphan manifest left by an interrupted destructive operation.
+  try {
+    const manifestNames = await readdir(manifestsDir(historyDir));
+    const keepNames = new Set(keepSaveIds.map((saveId) => `${saveId}.json`));
+    const orphanNames = manifestNames.filter(
+      (name) => name.endsWith(".json") && !keepNames.has(name),
+    );
+    if (orphanNames.length > 0) {
+      const destinationDir = join(
+        trashDir(historyDir),
+        `${Date.now()}-${crypto.randomUUID()}`,
+        "manifests",
+      );
+      await mkdir(destinationDir, { recursive: true });
+      for (const name of orphanNames) {
+        await rename(
+          join(manifestsDir(historyDir), name),
+          join(destinationDir, name),
+        );
+      }
+    }
+  } catch (error) {
+    if (!isErrno(error, "ENOENT")) {
+      throw error;
     }
   }
 
   // Scan blobs dir and delete unreferenced
-  const dir = blobsDir(projectPath);
+  const dir = blobsDir(historyDir);
   let entries: string[];
   try {
     entries = await readdir(dir);
-  } catch {
-    return 0; // No blobs dir yet
+  } catch (error) {
+    if (!isErrno(error, "ENOENT")) {
+      throw error;
+    }
+    await rm(trashDir(historyDir), { recursive: true, force: true });
+    return 0;
   }
 
   let deleted = 0;
-  for (const name of entries) {
-    if (name.endsWith(".tmp") || !referenced.has(name)) {
-      await rm(join(dir, name), { force: true });
+  const unreferenced = entries.filter(
+    (name) => !name.endsWith(".tmp") && !referenced.has(name),
+  );
+  if (unreferenced.length > 0) {
+    const destinationDir = join(
+      trashDir(historyDir),
+      `${Date.now()}-${crypto.randomUUID()}`,
+      "blobs",
+    );
+    await mkdir(destinationDir, { recursive: true });
+    for (const name of unreferenced) {
+      await rename(join(dir, name), join(destinationDir, name));
       deleted++;
     }
   }
+  for (const name of entries.filter((entry) => entry.endsWith(".tmp"))) {
+    await rm(join(dir, name), { force: true });
+  }
+  // Both current and previous app-state generations have already committed
+  // before GC is called, so no recoverable state can refer to staged data.
+  await rm(trashDir(historyDir), { recursive: true, force: true });
   return deleted;
 }

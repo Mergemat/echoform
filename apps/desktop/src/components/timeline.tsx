@@ -1,25 +1,16 @@
-import { GitFork, MusicNotes, Waveform } from "@phosphor-icons/react";
+import { MusicNotes, Waveform } from "@phosphor-icons/react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
-import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { BranchCard } from "./branch-card";
-import { BranchSelector } from "./branch-selector";
 import { CollapsedCard } from "./collapsed-card";
 import { ExpandedCard } from "./expanded-card";
+import { RelinkProjectButton } from "./relink-project-button";
 import { GroupCard } from "./save-group";
-import {
-  buildTimelineDisplayItems,
-  fileTabName,
-  getIdeaSubtreeIds,
-  getRootFileGroups,
-  getRootIdeaFor,
-  getRootIdeas,
-  type RootFileGroup,
-} from "./timeline-utils";
+import { SetSelector } from "./set-selector";
+import { buildTimelineDisplayItems } from "./timeline-utils";
 
 export function Timeline() {
   return useTimelineView();
@@ -29,105 +20,50 @@ function useTimelineView() {
   const project = useStore((s) => s.selectedProject());
   const selectedSaveId = useStore((s) => s.selectedSaveId);
   const activeIdeaId = useStore((s) => s.activeIdeaId);
-  const collapsedBranches = useStore((s) => s.collapsedBranches);
   const toggleSave = useStore((s) => s.toggleSave);
   const setActiveIdea = useStore((s) => s.setActiveIdea);
-  const toggleBranchCollapse = useStore((s) => s.toggleBranchCollapse);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [ideaActionError, setIdeaActionError] = useState<string | null>(null);
+  const [openingIdeaId, setOpeningIdeaId] = useState<string | null>(null);
   const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
 
-  // Derive file tabs and active tab from project data
-  const rootIdeas = useMemo(
-    () => (project ? getRootIdeas(project) : []),
-    [project]
-  );
-  const rootFileGroups = useMemo<RootFileGroup[]>(() => {
-    return project ? getRootFileGroups(project) : [];
-  }, [project]);
-  const hasMultipleFiles = rootFileGroups.length > 1;
-
   const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
-  const activeRootIdea = useMemo(() => {
-    if (!(project && effectiveIdeaId)) {
-      return rootIdeas[0] ?? null;
-    }
-    return getRootIdeaFor(project, effectiveIdeaId) ?? rootIdeas[0] ?? null;
-  }, [project, effectiveIdeaId, rootIdeas]);
-  const activeRootGroup = useMemo(() => {
-    if (rootFileGroups.length === 0) {
-      return null;
-    }
-    if (!activeRootIdea) {
-      return rootFileGroups[0] ?? null;
-    }
-    return (
-      rootFileGroups.find(
-        (group) => group.setPath === activeRootIdea.setPath
-      ) ??
-      rootFileGroups[0] ??
-      null
-    );
-  }, [activeRootIdea, rootFileGroups]);
-
-  // Filter project to only ideas/saves under the active file tab
-  const filteredProject = useMemo(() => {
-    if (!(project && activeRootGroup)) {
-      return project;
-    }
-    if (!hasMultipleFiles) {
-      return project;
-    }
-    const subtreeIds = new Set<string>();
-    for (const rootIdea of activeRootGroup.rootIdeas) {
-      for (const ideaId of getIdeaSubtreeIds(project, rootIdea.id)) {
-        subtreeIds.add(ideaId);
-      }
-    }
-    return {
-      ...project,
-      ideas: project.ideas.filter((i) => subtreeIds.has(i.id)),
-      saves: project.saves.filter((s) => subtreeIds.has(s.ideaId)),
-    };
-  }, [project, activeRootGroup, hasMultipleFiles]);
 
   const displayItems = useMemo(() => {
-    if (!filteredProject) {
+    if (!project) {
       return [];
     }
-    return buildTimelineDisplayItems(
-      filteredProject,
-      activeIdeaId,
-      expandedGroups,
-      collapsedBranches
-    );
-  }, [filteredProject, activeIdeaId, expandedGroups, collapsedBranches]);
+    return buildTimelineDisplayItems(project, effectiveIdeaId, expandedGroups);
+  }, [project, effectiveIdeaId, expandedGroups]);
 
+  const activeSetSaves = useMemo(
+    () =>
+      project?.saves.filter((save) => save.ideaId === effectiveIdeaId) ?? [],
+    [project, effectiveIdeaId]
+  );
   const previewCount = useMemo(
     () =>
-      project?.saves.filter(
+      activeSetSaves.filter(
         (s) => s.previewStatus === "ready" && s.previewRefs.length > 0
-      ).length ?? 0,
-    [project]
+      ).length,
+    [activeSetSaves]
   );
   const previewSaveIds = useMemo(() => {
-    if (!showPreviewsOnly) {
+    if (!(showPreviewsOnly && previewCount > 0)) {
       return null;
     }
     return new Set(
-      project?.saves
+      activeSetSaves
         .filter((s) => s.previewStatus === "ready" && s.previewRefs.length > 0)
-        .map((s) => s.id) ?? []
+        .map((s) => s.id)
     );
-  }, [project, showPreviewsOnly]);
+  }, [activeSetSaves, previewCount, showPreviewsOnly]);
 
   const visibleItems = useMemo(() => {
     if (!previewSaveIds) {
       return displayItems;
     }
     return displayItems.filter((item) => {
-      if (item.type === "branch") {
-        return true;
-      }
       if (item.type === "save") {
         return previewSaveIds.has(item.save.id);
       }
@@ -153,13 +89,38 @@ function useTimelineView() {
   const handleSelectIdea = useCallback(
     (ideaId: string) => {
       setActiveIdea(ideaId);
+    },
+    [setActiveIdea]
+  );
+
+  const handleOpenIdea = useCallback(
+    async (ideaId: string) => {
       if (!project) {
         return;
       }
-      posthog.capture("idea_opened_in_ableton", { source: "timeline" });
-      sendDaemonCommand({ type: "open-idea", projectId: project.id, ideaId });
+      setIdeaActionError(null);
+      setOpeningIdeaId(ideaId);
+      try {
+        await sendDaemonCommand(
+          {
+            type: "open-idea",
+            projectId: project.id,
+            ideaId,
+          },
+          { reportError: false }
+        );
+        posthog.capture("idea_opened_in_ableton", { source: "timeline" });
+      } catch (error) {
+        setIdeaActionError(
+          error instanceof Error
+            ? error.message
+            : "The set could not be opened."
+        );
+      } finally {
+        setOpeningIdeaId(null);
+      }
     },
-    [project, setActiveIdea]
+    [project]
   );
 
   if (!project) {
@@ -173,7 +134,7 @@ function useTimelineView() {
             No project selected
           </div>
           <div className="max-w-[240px] text-[13px] text-white/15 leading-relaxed">
-            Pick a project from the sidebar to see its version timeline
+            Pick a project from the sidebar to see its checkpoint timeline
           </div>
         </div>
       </div>
@@ -191,11 +152,15 @@ function useTimelineView() {
             <MusicNotes className="text-white/15" size={22} weight="bold" />
           </div>
           <div className="font-medium text-[15px] text-white/25">
-            {isMissing ? "Project not found" : "No saves yet"}
+            {isMissing ? "Project not found" : "No checkpoints yet"}
           </div>
           {isMissing ? (
-            <div className="max-w-[280px] text-[13px] text-white/15 leading-relaxed">
-              This project's folder is missing from your watched roots.
+            <div className="flex flex-col items-center gap-3">
+              <div className="max-w-[280px] text-[13px] text-white/30 leading-relaxed">
+                This project's folder moved or is no longer available. Locate it
+                to reconnect this history to the same project.
+              </div>
+              <RelinkProjectButton projectId={project.id} />
             </div>
           ) : isWatching ? (
             <div className="flex flex-col items-center gap-3">
@@ -226,26 +191,24 @@ function useTimelineView() {
 
   return (
     <div className="flex h-full flex-col">
-      {hasMultipleFiles && project && (
-        <FileTabs
-          activeSetPath={activeRootGroup?.setPath ?? null}
-          currentSetPath={
-            getRootIdeaFor(project, project.currentIdeaId)?.setPath ?? null
-          }
-          onSelect={(ideaId) => {
-            setActiveIdea(ideaId);
-          }}
+      {project.ideas.length > 0 && (
+        <SetSelector
+          activeIdeaId={activeIdeaId}
+          onOpenInAbleton={(ideaId) => void handleOpenIdea(ideaId)}
+          onSelect={handleSelectIdea}
+          openDisabled={project.presence === "missing"}
+          openingIdeaId={openingIdeaId}
           project={project}
-          rootFileGroups={rootFileGroups}
         />
       )}
 
-      {filteredProject && filteredProject.ideas.length > 1 && (
-        <BranchSelector
-          activeIdeaId={activeIdeaId}
-          onSelect={handleSelectIdea}
-          project={filteredProject}
-        />
+      {ideaActionError && (
+        <div
+          className="border-red-300/15 border-b bg-red-300/[0.06] px-5 py-2 text-red-200/85 text-xs"
+          role="alert"
+        >
+          {ideaActionError}
+        </div>
       )}
 
       {pendingOpen && (
@@ -305,7 +268,7 @@ function useTimelineView() {
             <div className="text-red-200/80 text-xs leading-relaxed">
               {project.driftStatus.kind === "unknown-file"
                 ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
-                : `Version file ${project.driftStatus.setPath} is missing.`}
+                : `Ableton set ${project.driftStatus.setPath} is missing.`}
             </div>
             <div className="flex shrink-0 gap-1.5">
               {project.driftStatus.kind === "unknown-file" && (
@@ -336,7 +299,7 @@ function useTimelineView() {
                 size="sm"
                 variant="ghost"
               >
-                Open Current Version
+                Open Current Set
               </Button>
             </div>
           </div>
@@ -345,10 +308,13 @@ function useTimelineView() {
 
       {project.presence === "missing" && (
         <div className="border-amber-400/10 border-b bg-amber-400/[0.04] px-5 py-3">
-          <div className="text-amber-200/80 text-xs leading-relaxed">
-            This project is missing from your watched folders. History stays
-            safe here, but file actions are disabled until the folder comes back
-            or the root is re-added.
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-amber-200/80 text-xs leading-relaxed">
+              This project's folder moved or is unavailable. History stays safe;
+              locate the project to restore file actions without creating a new
+              history.
+            </div>
+            <RelinkProjectButton projectId={project.id} />
           </div>
         </div>
       )}
@@ -377,37 +343,22 @@ function useTimelineView() {
       )}
 
       <div className="scrollbar-thin flex-1 overflow-y-auto">
+        {activeSetSaves.length === 0 && (
+          <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-white/25">
+            No checkpoints for this Ableton set yet.
+          </div>
+        )}
         {visibleItems.map((item) => {
-          if (item.type === "branch") {
-            return (
-              <BranchCard
-                depth={item.depth}
-                fromSave={item.fromSave}
-                idea={item.idea}
-                isCollapsed={item.isCollapsed}
-                isCurrent={item.isCurrent}
-                isFocused={item.isFocused}
-                key={`branch-${item.idea.id}`}
-                onToggleCollapse={() => toggleBranchCollapse(item.idea.id)}
-                saveCount={item.saveCount}
-              />
-            );
-          }
-
           if (item.type === "group") {
             return (
-              <BranchLine
-                depth={item.depth}
-                isFocused={item.isFocused}
-                key={`group-${item.key}`}
-              >
+              <div className="px-4" key={`group-${item.key}`}>
                 <GroupCard
                   expanded={expandedGroups.has(item.key)}
                   groupKey={item.key}
                   onToggle={() => toggleGroup(item.key)}
                   saves={item.saves}
                 />
-              </BranchLine>
+              </div>
             );
           }
 
@@ -417,11 +368,7 @@ function useTimelineView() {
           const isSelected = save.id === selectedSaveId;
 
           return (
-            <BranchLine
-              depth={item.depth}
-              isFocused={item.isFocused}
-              key={`save-${save.id}`}
-            >
+            <div className="px-4" key={`save-${save.id}`}>
               {isSelected ? (
                 <div>
                   <CollapsedCard
@@ -448,114 +395,10 @@ function useTimelineView() {
                   save={save}
                 />
               )}
-            </BranchLine>
+            </div>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/** Horizontal file tabs — one per root .als file. Only shown when project has 2+ files. */
-function FileTabs({
-  rootFileGroups,
-  activeSetPath,
-  currentSetPath,
-  project,
-  onSelect,
-}: {
-  rootFileGroups: RootFileGroup[];
-  activeSetPath: string | null;
-  currentSetPath: string | null;
-  project: Project;
-  onSelect: (ideaId: string) => void;
-}) {
-  // Pre-compute subtree IDs and save counts per root idea
-  const subtrees = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-    for (const group of rootFileGroups) {
-      const subtree = new Set<string>();
-      for (const idea of group.rootIdeas) {
-        for (const ideaId of getIdeaSubtreeIds(project, idea.id)) {
-          subtree.add(ideaId);
-        }
-      }
-      map.set(group.setPath, subtree);
-    }
-    return map;
-  }, [rootFileGroups, project]);
-
-  return (
-    <div className="scrollbar-none flex shrink-0 items-center gap-0 overflow-x-auto border-border border-b px-3">
-      {rootFileGroups.map((group) => {
-        const idea = group.representativeIdea;
-        const isActive = group.setPath === activeSetPath;
-        const isCurrent = group.setPath === currentSetPath;
-        const subtree = subtrees.get(group.setPath);
-        const saveCount = subtree
-          ? project.saves.filter((s) => subtree.has(s.ideaId)).length
-          : 0;
-
-        return (
-          <button
-            className={cn(
-              "relative flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[13px] transition-colors duration-150",
-              isActive ? "text-white/85" : "text-white/30 hover:text-white/50"
-            )}
-            key={group.setPath}
-            onClick={() => onSelect(idea.id)}
-            type="button"
-          >
-            {isCurrent && (
-              <span className="size-1.5 shrink-0 rounded-full bg-emerald-400/70" />
-            )}
-            <span className="font-medium">{fileTabName(idea)}</span>
-            {group.forkedFromSetPath && (
-              <span className="flex items-center gap-0.5 text-[11px] text-white/20">
-                <GitFork className="size-3" weight="bold" />
-                {group.forkedFromIdeaName}
-              </span>
-            )}
-            {saveCount > 0 && (
-              <span className="text-[11px] text-white/20 tabular-nums">
-                {saveCount}
-              </span>
-            )}
-            {isActive && (
-              <span className="absolute right-3 bottom-0 left-3 h-[2px] rounded-full bg-white/40" />
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Wrapper that draws a vertical branch line on the left side of save/group items */
-function BranchLine({
-  depth,
-  isFocused,
-  children,
-}: {
-  depth: number;
-  isFocused: boolean;
-  children: React.ReactNode;
-}) {
-  const lineLeft = 16 + depth * 20;
-
-  return (
-    <div className="relative">
-      {/* Vertical branch line */}
-      <div
-        className="absolute top-0 bottom-0 w-px transition-colors duration-150"
-        style={{
-          left: `${lineLeft + 5}px`,
-          backgroundColor: isFocused
-            ? "rgba(52, 211, 153, 0.2)"
-            : "rgba(255, 255, 255, 0.05)",
-        }}
-      />
-      <div style={{ paddingLeft: `${lineLeft + 18}px` }}>{children}</div>
     </div>
   );
 }

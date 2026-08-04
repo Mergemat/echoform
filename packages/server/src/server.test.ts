@@ -82,7 +82,9 @@ beforeAll(async () => {
 
   const service = new EchoformService(stateDir);
   const project = await service.trackProject({ projectPath: projectDir });
-  const { save } = await service.createSave(project.id, { label: "Upload fixture" });
+  const { save } = await service.createSave(project.id, {
+    label: "Upload fixture",
+  });
   if (!save) {
     throw new Error("Failed to create upload test save");
   }
@@ -167,7 +169,7 @@ describe("Origin allowlist", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN);
     expect(res.headers.get("access-control-allow-credentials")).toBe("true");
     expect(res.headers.get("access-control-allow-headers")).toContain(
-      "X-Echoform-Session-Bootstrap"
+      "X-Echoform-Session-Bootstrap",
     );
   });
 
@@ -308,6 +310,62 @@ describe("WebSocket auth", () => {
     expect(Array.isArray(parsed.roots)).toBe(true);
     expect(Array.isArray(parsed.activity)).toBe(true);
 
+    const messages: Array<{ type: string; requestId?: string }> = [];
+    ws.onmessage = (event) => {
+      messages.push(JSON.parse(String(event.data)));
+    };
+    ws.send(
+      JSON.stringify({
+        type: "discover-root-suggestions",
+        requestId: "request-success",
+      }),
+    );
+    const successDeadline = Date.now() + 3000;
+    while (
+      !messages.some(
+        (message) =>
+          message.type === "command-ack" &&
+          message.requestId === "request-success",
+      ) &&
+      Date.now() < successDeadline
+    ) {
+      await Bun.sleep(10);
+    }
+    expect(
+      messages.filter(
+        (message) =>
+          ["command-ack", "command-error"].includes(message.type) &&
+          message.requestId === "request-success",
+      ),
+    ).toHaveLength(1);
+
+    ws.send(
+      JSON.stringify({
+        type: "delete-save",
+        requestId: "request-failure",
+        projectId: "missing",
+        saveId: "missing",
+      }),
+    );
+    const failureDeadline = Date.now() + 3000;
+    while (
+      !messages.some(
+        (message) =>
+          message.type === "command-error" &&
+          message.requestId === "request-failure",
+      ) &&
+      Date.now() < failureDeadline
+    ) {
+      await Bun.sleep(10);
+    }
+    expect(
+      messages.filter(
+        (message) =>
+          ["command-ack", "command-error"].includes(message.type) &&
+          message.requestId === "request-failure",
+      ),
+    ).toHaveLength(1);
+
     ws.close();
   });
 });
@@ -327,7 +385,7 @@ describe("Path traversal protection", () => {
   test("/api/media rejects relative path traversal", async () => {
     const res = await fetch(
       `${BASE}/api/media?path=${encodeURIComponent("../../etc/passwd")}`,
-      { headers: authedHeaders() }
+      { headers: authedHeaders() },
     );
     expect(res.status).toBe(404);
   });
@@ -335,7 +393,7 @@ describe("Path traversal protection", () => {
   test("/api/media rejects arbitrary file path", async () => {
     const res = await fetch(
       `${BASE}/api/media?path=${encodeURIComponent("/tmp/somefile.wav")}`,
-      { headers: authedHeaders() }
+      { headers: authedHeaders() },
     );
     expect(res.status).toBe(404);
   });
@@ -364,7 +422,7 @@ describe("Preview upload hardening", () => {
       "file",
       new File([new Uint8Array(50 * 1024 * 1024 + 1)], "preview.wav", {
         type: "audio/wav",
-      })
+      }),
     );
 
     const res = await fetch(
@@ -373,7 +431,7 @@ describe("Preview upload hardening", () => {
         method: "POST",
         headers: authedHeaders(),
         body: formData,
-      }
+      },
     );
 
     expect(res.status).toBe(413);

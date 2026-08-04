@@ -125,9 +125,9 @@ function projectHealth(project: Project): HealthInfo {
 
 function savesLabel(count: number): string {
   if (count === 0) {
-    return "No saves";
+    return "No checkpoints";
   }
-  return `${count} save${count === 1 ? "" : "s"}`;
+  return `${count} checkpoint${count === 1 ? "" : "s"}`;
 }
 
 // ── Subcomponents ────────────────────────────────────────────────────

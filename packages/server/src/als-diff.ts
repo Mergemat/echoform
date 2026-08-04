@@ -19,8 +19,12 @@ function fuzzyEq(a: number, b: number, epsilon = 0.0001): boolean {
 
 function diffDevices(
   prev: DeviceSnapshot[],
-  curr: DeviceSnapshot[]
-): { added: string[]; removed: string[]; toggled: { name: string; enabled: boolean }[] } {
+  curr: DeviceSnapshot[],
+): {
+  added: string[];
+  removed: string[];
+  toggled: { name: string; enabled: boolean }[];
+} {
   const prevMap = new Map(prev.map((d) => [d.id, d]));
   const currMap = new Map(curr.map((d) => [d.id, d]));
 
@@ -47,7 +51,7 @@ function diffDevices(
 
 function diffClips(
   prev: string[],
-  curr: string[]
+  curr: string[],
 ): { added: string[]; removed: string[] } {
   // Clips don't have stable IDs, so we diff by name using multiset comparison
   const prevCounts = new Map<string, number>();
@@ -109,10 +113,13 @@ export function diffSets(prev: SetSnapshot, curr: SetSnapshot): SetDiff {
       : { from: prev.timeSignature, to: curr.timeSignature };
 
   // Arrangement length
-  const arrangementLengthChange =
-    fuzzyEq(prev.arrangementLength, curr.arrangementLength, 0.01)
-      ? null
-      : { from: prev.arrangementLength, to: curr.arrangementLength };
+  const arrangementLengthChange = fuzzyEq(
+    prev.arrangementLength,
+    curr.arrangementLength,
+    0.01,
+  )
+    ? null
+    : { from: prev.arrangementLength, to: curr.arrangementLength };
 
   // Scene count
   const sceneCountChange =
@@ -149,8 +156,12 @@ export function diffSets(prev: SetSnapshot, curr: SetSnapshot): SetDiff {
   }
 
   // Detect track reordering (compare order of shared track IDs)
-  const prevOrder = prev.tracks.map((t) => t.id).filter((id) => currTracks.has(id));
-  const currOrder = curr.tracks.map((t) => t.id).filter((id) => prevTracks.has(id));
+  const prevOrder = prev.tracks
+    .map((t) => t.id)
+    .filter((id) => currTracks.has(id));
+  const currOrder = curr.tracks
+    .map((t) => t.id)
+    .filter((id) => prevTracks.has(id));
   let tracksReordered = false;
   if (prevOrder.length === currOrder.length) {
     tracksReordered = prevOrder.some((id, i) => id !== currOrder[i]);
@@ -166,14 +177,15 @@ export function diffSets(prev: SetSnapshot, curr: SetSnapshot): SetDiff {
     const renamedFrom =
       prevTrack.name === currTrack.name ? undefined : prevTrack.name;
     const colorChanged = prevTrack.color !== currTrack.color;
-    const { added: addedDevices, removed: removedDevices, toggled: deviceToggles } = diffDevices(
-      prevTrack.devices,
-      currTrack.devices
-    );
+    const {
+      added: addedDevices,
+      removed: removedDevices,
+      toggled: deviceToggles,
+    } = diffDevices(prevTrack.devices, currTrack.devices);
     const clipCountDelta = currTrack.clipCount - prevTrack.clipCount;
     const { added: addedClips, removed: removedClips } = diffClips(
       prevTrack.clipNames,
-      currTrack.clipNames
+      currTrack.clipNames,
     );
     const mixerChanges = diffMixer(prevTrack, currTrack);
 

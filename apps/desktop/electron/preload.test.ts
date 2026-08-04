@@ -93,5 +93,12 @@ describe("preload", () => {
         sessionBootstrapToken: "shared-token",
       })
     );
+
+    const exposedApi = exposeInMainWorld.mock.calls[0]?.[1];
+    exposedApi.revealPath("/Music/Echoform Recoveries/Demo");
+    expect(invoke).toHaveBeenCalledWith(
+      "echoform:reveal-path",
+      "/Music/Echoform Recoveries/Demo"
+    );
   });
 });

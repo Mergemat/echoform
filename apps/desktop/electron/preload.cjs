@@ -51,6 +51,7 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
     },
     sessionBootstrapToken: preloadConfig.sessionBootstrapToken,
     pickFolder: () => renderer.invoke("echoform:pick-folder"),
+    revealPath: (path) => renderer.invoke("echoform:reveal-path", path),
     getUpdateInfo: () => renderer.invoke("echoform:get-update-info"),
     onUpdateAvailable: (callback) => {
       const handler = (_event, info) => callback(info);

@@ -1,6 +1,17 @@
 # Echoform
 
-Desktop version history for Ableton projects.
+Git-like local history for Ableton projects.
+
+Echoform watches selected local project folders, records checkpoints, compares
+Ableton set structure, supports attached audio previews, tracks multiple Ableton
+sets independently, and starts a new branch from any checkpoint in a verified
+working copy. Project files and checkpoint history stay on the machine running
+Echoform; releases may send limited usage and crash telemetry to PostHog and
+Sentry.
+
+Echoform is version-history software, not a replacement for an independent
+backup. Branching creates a separate working copy instead of overwriting the
+source project.
 
 ```bash
 bun install
@@ -19,6 +30,9 @@ bun run dev:web
 # Full repo verification
 bun run check
 
+# Fail on dependency advisories beyond the reviewed baseline
+bun run audit
+
 # Local desktop artifacts
 bun run package:mac
 
@@ -35,6 +49,15 @@ git push --follow-tags
 - Add `-- --push` to push the branch and tags from the release command.
 - GitHub Actions builds macOS and Windows artifacts from the tag and publishes the GitHub Release.
 - The website download links and in-app update checker both read the latest GitHub Release tag.
+
+## Dependency Audit
+
+`bun run audit` rejects new high or critical advisory IDs and severity regressions.
+The reviewed baseline currently accepts 19 high-severity observations across 12
+advisory IDs and no critical advisories. Observation counts remain visible in the
+output, while acceptance is always tied to a specific package and advisory ID.
+Keep the baseline explicit until upstream transitive fixes are available, and
+remove entries as advisories resolve.
 
 ## Commit Style
 

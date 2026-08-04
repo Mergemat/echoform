@@ -17,6 +17,7 @@ export interface TrackedRoot {
 
 export interface Project {
   adapter: "ableton";
+  continuedFrom: ProjectLineage | null;
   createdAt: string;
   currentIdeaId: string;
   driftStatus: DriftStatus | null;
@@ -32,6 +33,11 @@ export interface Project {
   updatedAt: string;
   watchError: string | null;
   watching: boolean;
+}
+
+export interface ProjectLineage {
+  projectId: string;
+  saveId: string;
 }
 
 export interface PendingOpen {
@@ -51,11 +57,9 @@ export interface DriftStatus {
 export interface Idea {
   baseSaveId: string;
   createdAt: string;
-  forkedFromSaveId: string | null;
   headSaveId: string;
   id: string;
   name: string;
-  parentIdeaId: string | null;
   setPath: string;
 }
 
@@ -69,6 +73,7 @@ export interface Save {
   label: string;
   metadata: ProjectMetadata;
   note: string;
+  pinned: boolean;
   previewMime: string | null;
   previewRefs: string[];
   previewRequestedAt: string | null;
@@ -95,7 +100,7 @@ export interface TrackSummaryItem {
   clipCount: number;
   color: number; // Ableton color palette index
   name: string;
-  trackCount?: number; // legacy summaries may omit this; groups include nested descendants
+  trackCount: number; // groups include nested descendants
   type: "audio" | "midi" | "return" | "group";
 }
 
@@ -117,22 +122,22 @@ export interface ChangeSummary {
 
 export interface SetDiff {
   addedTracks: { name: string; type: string }[];
-  arrangementLengthChange?: { from: number; to: number } | null;
-  locatorCountChange?: { from: number; to: number } | null;
+  arrangementLengthChange: { from: number; to: number } | null;
+  locatorCountChange: { from: number; to: number } | null;
   modifiedTracks: TrackDiff[];
   removedTracks: { name: string; type: string }[];
-  sceneCountChange?: { from: number; to: number } | null;
+  sceneCountChange: { from: number; to: number } | null;
   tempoChange: { from: number; to: number } | null;
   timeSignatureChange: { from: string; to: string } | null;
-  tracksReordered?: boolean;
+  tracksReordered: boolean;
 }
 
 export interface TrackDiff {
   addedClips: string[];
   addedDevices: string[];
   clipCountDelta: number;
-  colorChanged?: boolean;
-  deviceToggles?: { name: string; enabled: boolean }[];
+  colorChanged: boolean;
+  deviceToggles: { name: string; enabled: boolean }[];
   mixerChanges: string[];
   name: string;
   removedClips: string[];
@@ -169,6 +174,8 @@ export interface ActivityItem {
     | "project-missing"
     | "project-restored"
     | "auto-saved"
+    | "state-recovered"
+    | "storage-cleanup-deferred"
     | "watcher-error";
   message: string;
   projectId?: string | null;
@@ -196,9 +203,12 @@ export type WsEvent =
   | { type: "auto-saved"; projectId: string; save: Save }
   | { type: "error"; message: string }
   | { type: "discovered-projects"; paths: DiscoveredProject[] }
-  | { type: "root-suggestions"; suggestions: RootSuggestion[] };
+  | { type: "root-suggestions"; suggestions: RootSuggestion[] }
+  | { type: "command-ack"; requestId: string }
+  | { type: "command-error"; requestId: string; message: string; code?: number }
+  | { type: "recovery-created"; recovery: RecoveryResult };
 
-export type WsCommand =
+export type WsCommand = (
   | { type: "track-project"; projectPath: string; name?: string }
   | { type: "delete-project"; projectId: string }
   | { type: "add-root"; path: string; name?: string }
@@ -206,13 +216,6 @@ export type WsCommand =
   | { type: "sync-roots" }
   | { type: "discover-root-suggestions" }
   | { type: "create-save"; projectId: string; label?: string; note?: string }
-  | {
-      type: "branch-from-save";
-      projectId: string;
-      saveId: string;
-      name: string;
-      fileName: string;
-    }
   | { type: "open-idea"; projectId: string; ideaId: string }
   | { type: "reveal-idea-file"; projectId: string; ideaId: string }
   | { type: "adopt-drift-file"; projectId: string }
@@ -228,10 +231,23 @@ export type WsCommand =
       saveId: string;
       note?: string;
       label?: string;
+      pinned?: boolean;
     }
   | { type: "discover-projects" }
   | { type: "toggle-watching"; projectId: string; watching: boolean }
-  | { type: "delete-save"; projectId: string; saveId: string };
+  | { type: "delete-save"; projectId: string; saveId: string }
+  | { type: "recover-save"; projectId: string; saveId: string; open?: boolean }
+  | { type: "relink-project"; projectId: string; projectPath: string }
+) & { requestId: string };
+
+export interface RecoveryResult {
+  activeSetPath: string;
+  openError: string | null;
+  recoveredProjectId: string;
+  recoveredPath: string;
+  sourceProjectId: string;
+  sourceSaveId: string;
+}
 
 export interface DiscoveredProject {
   name: string;

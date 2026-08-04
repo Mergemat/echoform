@@ -10,6 +10,7 @@ declare global {
       };
       sessionBootstrapToken?: string;
       pickFolder?: () => Promise<string | null>;
+      revealPath?: (path: string) => Promise<void>;
       getUpdateInfo?: () => Promise<{
         version: string;
         url: string;
