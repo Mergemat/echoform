@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.23](https://github.com/Mergemat/echoform/compare/v0.0.22...v0.0.23) (2026-08-04)
+
+### Bug Fixes
+
+* **deps:** restore plist-compatible xmldom ([6978e7a](https://github.com/Mergemat/echoform/commit/6978e7a498d6b3535973bef962f7684ad52d8b11))
+
 ## [0.0.22](https://github.com/Mergemat/echoform/compare/v0.0.21...v0.0.22) (2026-08-04)
 
 ### Bug Fixes
