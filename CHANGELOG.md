@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.21](https://github.com/Mergemat/echoform/compare/v0.0.20...v0.0.21) (2026-08-04)
+
+### Features
+
+* harden history and clarify branching ([55c9241](https://github.com/Mergemat/echoform/commit/55c9241cee0bc75fc69ef173b8a1837e905d2fc9))
+
+### Bug Fixes
+
+* **desktop:** make analytics optional ([71aa658](https://github.com/Mergemat/echoform/commit/71aa6582411e831c7da3d8ada402f4e79abee0ec))
+
 ## [0.0.20](https://github.com/Mergemat/echoform/compare/v0.0.19...v0.0.20) (2026-04-01)
 
 ### Features
