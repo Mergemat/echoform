@@ -135,6 +135,7 @@ describe("buildTimelineSections", () => {
       summary: {
         baseSaveId: null,
         beatsPerBar: 4,
+        changes: [],
         first: false,
         headline: "Saved with no musical changes",
         lengthBeats: 64,

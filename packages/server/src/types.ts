@@ -87,7 +87,7 @@ export interface Save {
 // ── Set analysis ────────────────────────────────────────────────────
 
 /** Bump when analysis output changes so stored summaries are recomputed. */
-export const ANALYSIS_VERSION = 1;
+export const ANALYSIS_VERSION = 2;
 
 export type ChangeWeight = "none" | "minor" | "major";
 
@@ -96,7 +96,9 @@ export interface SaveSummary {
   /** The checkpoint this one was compared with; stale once that changes. */
   baseSaveId: string | null;
   beatsPerBar: number;
-  /** One line a producer would write: "New Serum 2 part in bars 9–16 · Kick +2 dB". */
+  /** Every change in words, most important first; searchable. */
+  changes: string[];
+  /** The most important change, short: "Serum 2: new part in bars 9–16". */
   headline: string;
   /** Where in the song things changed, in beats, coloured by track. */
   regions: { color: number; end: number; start: number }[];

@@ -70,14 +70,14 @@ describe("comparing versions", () => {
   test("describes the first checkpoint by its shape", () => {
     const result = analyze(null, set());
     expect(result.summary.first).toBe(true);
-    expect(result.summary.headline).toBe("2 tracks · 8 bars at 120 BPM");
+    expect(result.summary.headline).toBe("First save · 2 tracks, 8 bars at 120 BPM");
     expect(result.summary.shape.some((v) => v > 0)).toBe(true);
   });
 
   test("reports an unchanged save as having no musical changes", () => {
     const result = analyze(set(), set());
     expect(result.summary.weight).toBe("none");
-    expect(result.summary.headline).toBe("Saved with no musical changes");
+    expect(result.summary.headline).toBe("No musical changes");
     expect(result.summary.regions).toEqual([]);
   });
 
@@ -90,7 +90,7 @@ describe("comparing versions", () => {
     });
     const result = analyze(set(), after);
     expect(result.summary.weight).toBe("major");
-    expect(result.summary.headline).toBe("2-Lead: new part in bars 5–8");
+    expect(result.summary.headline).toBe("Lead: new part in bars 5–8");
     expect(result.summary.regions).toEqual([{ color: 0, end: 32, start: 16 }]);
     const added = result.tracks[1]?.clips.find((c) => c.status === "added");
     expect(added?.notes?.added).toEqual([{ d: 1, k: 67, t: 0 }]);
@@ -137,6 +137,13 @@ describe("comparing versions", () => {
     expect(changes).toContainEqual({ from: 0, to: -6, type: "volume" });
   });
 
+  test("lists every change in searchable words", () => {
+    const after = withTrack(set({ tempo: 128 }), "20", { volume: 0.5 });
+    const summary = analyze(set(), after).summary;
+    expect(summary.headline).toBe("Tempo 120 → 128 BPM");
+    expect(summary.changes).toEqual(["Tempo 120 → 128 BPM", "Lead quieter (−6.0 dB)"]);
+  });
+
   test("tells moved clips from new ones", () => {
     const after = withTrack(set(), "20", {
       clips: [{ ...lead.clips![0]!, end: 48, start: 32 }],
@@ -165,7 +172,7 @@ describe("comparing versions", () => {
 
   test("keeps removed tracks visible as removed", () => {
     const result = analyze(set(), set({ tracks: [drums] }));
-    expect(result.summary.headline).toBe("Removed 2-Lead");
+    expect(result.summary.headline).toBe("Removed Lead");
     expect(result.tracks.at(-1)?.status).toBe("removed");
   });
 });
