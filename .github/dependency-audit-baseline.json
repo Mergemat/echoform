@@ -1,5 +1,12 @@
 {
   "auditLevel": "high",
-  "reviewedAt": "2026-08-04",
-  "acceptedAdvisories": []
+  "reviewedAt": "2026-10-06",
+  "acceptedAdvisories": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "reason": "No patched release exists (all 3.x affected). Reached only through build tooling (micromatch) with repository-defined glob patterns.",
+      "severity": "high"
+    }
+  ]
 }
