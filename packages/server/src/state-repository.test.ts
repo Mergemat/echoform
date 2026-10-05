@@ -104,39 +104,19 @@ function stateWithAnalysis(message: string): AppState {
             previewStatus: "none",
             previewUpdatedAt: null,
             projectHash: "hash",
-            setDiff: {
-              addedTracks: [],
-              arrangementLengthChange: null,
-              locatorCountChange: null,
-              modifiedTracks: [
-                {
-                  addedClips: [],
-                  addedDevices: [],
-                  clipCountDelta: 0,
-                  colorChanged: false,
-                  deviceToggles: [],
-                  mixerChanges: [],
-                  name: "Track",
-                  removedClips: [],
-                  removedDevices: [],
-                  type: "audio",
-                },
-              ],
-              removedTracks: [],
-              sceneCountChange: null,
-              tempoChange: null,
-              timeSignatureChange: null,
-              tracksReordered: false,
+            summary: {
+              baseSaveId: null,
+              beatsPerBar: 4,
+              first: true,
+              headline: "1 tracks · 4 bars at 120 BPM",
+              lengthBeats: 16,
+              regions: [],
+              shape: [1],
+              touched: [],
+              trackCount: 1,
+              version: 1,
+              weight: "major",
             },
-            trackSummary: [
-              {
-                clipCount: 0,
-                color: 1,
-                name: "Track",
-                trackCount: 1,
-                type: "audio",
-              },
-            ],
           },
         ],
         updatedAt: createdAt,
@@ -243,6 +223,23 @@ describe("StateRepository", () => {
     expect((await repository.load()).state.activity[0]?.message).toBe("second");
   });
 
+  test("drops pre-v1 analysis fields when loading older state", async () => {
+    const root = await mkdtemp(join(tmpdir(), "echoform-state-repo-"));
+    roots.push(root);
+    const legacy = stateWithAnalysis("legacy");
+    const save = legacy.projects[0]!.saves[0] as any;
+    delete save.summary;
+    save.setDiff = { addedTracks: [] };
+    save.trackSummary = [];
+    await writeFile(join(root, "state.json"), JSON.stringify(legacy));
+
+    const loaded = await new StateRepository(root).load();
+
+    const loadedSave = loaded.state.projects[0]!.saves[0] as any;
+    expect(loadedSave.setDiff).toBeUndefined();
+    expect(loadedSave.trackSummary).toBeUndefined();
+  });
+
   test("rejects semantically invalid activity and recovers the previous state", async () => {
     const root = await mkdtemp(join(tmpdir(), "echoform-state-repo-"));
     roots.push(root);
@@ -314,23 +311,9 @@ describe("StateRepository", () => {
       },
     ],
     [
-      "required set diff fields",
+      "checkpoint summaries",
       (save: any) => {
-        delete save.setDiff.tracksReordered;
-      },
-    ],
-    [
-      "nested track diffs",
-      (save: any) => {
-        save.setDiff.modifiedTracks[0].deviceToggles = [
-          { name: "Device", enabled: "yes" },
-        ];
-      },
-    ],
-    [
-      "track summaries",
-      (save: any) => {
-        delete save.trackSummary[0].trackCount;
+        delete save.summary.headline;
       },
     ],
     [

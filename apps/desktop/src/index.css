@@ -1,13 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Inter Variable", sans-serif;
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --color-added: var(--added);
+  --color-removed: var(--removed);
+  --color-edited: var(--edited);
+  --color-line: var(--line);
+  --color-raised: var(--raised);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -40,35 +47,47 @@
 }
 
 /*
- * Echoform is dark-only. Text tiers:
+ * Echoform is dark-only graphite. The interface itself stays colourless:
+ * saturated colour on screen comes from the user's music (Ableton's clip
+ * palette), plus three diff states.
+ *
+ * Text tiers:
  *   foreground        – primary content
  *   muted-foreground  – secondary content, still comfortably readable
- *   subtle-foreground – metadata only (timestamps, counts); never for actions
+ *   subtle-foreground – metadata only (times, counts); never for actions
  */
 :root {
-  --background: oklch(0.16 0.004 260);
-  --sidebar: oklch(0.14 0.004 260);
-  --foreground: oklch(0.96 0.003 250);
-  --card: oklch(0.195 0.005 260);
-  --card-foreground: oklch(0.96 0.003 250);
-  --popover: oklch(0.205 0.006 260);
-  --popover-foreground: oklch(0.96 0.003 250);
-  --primary: oklch(0.96 0.003 250);
-  --primary-foreground: oklch(0.16 0.004 260);
-  --secondary: oklch(0.25 0.006 260);
-  --secondary-foreground: oklch(0.94 0.003 250);
-  --muted: oklch(0.23 0.005 260);
-  --muted-foreground: oklch(0.74 0.008 250);
-  --subtle-foreground: oklch(0.58 0.008 250);
-  --accent: oklch(0.25 0.006 260);
-  --accent-foreground: oklch(0.96 0.003 250);
-  --success: oklch(0.79 0.15 162);
-  --warning: oklch(0.83 0.13 80);
-  --destructive: oklch(0.7 0.18 25);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.7 0.01 250);
-  --radius: 0.625rem;
+  --background: #141416;
+  --sidebar: #111113;
+  --raised: #1c1c1f;
+  --line: #2a2a2e;
+  --foreground: #e9e7e3;
+  --muted-foreground: #a3a19c;
+  --subtle-foreground: #6f6d69;
+
+  --card: var(--raised);
+  --card-foreground: var(--foreground);
+  --popover: #1f1f22;
+  --popover-foreground: var(--foreground);
+  --primary: #e9e7e3;
+  --primary-foreground: #141416;
+  --secondary: #26262a;
+  --secondary-foreground: var(--foreground);
+  --muted: #222226;
+  --accent: #232327;
+  --accent-foreground: var(--foreground);
+  --border: var(--line);
+  --input: #34343a;
+  --ring: #8d8b87;
+
+  --added: #7fd6a2;
+  --removed: #f07a6a;
+  --edited: #f2c36b;
+  --success: var(--added);
+  --warning: var(--edited);
+  --destructive: var(--removed);
+
+  --radius: 0.5rem;
   color-scheme: dark;
 }
 
@@ -78,6 +97,7 @@
   }
   body {
     font-size: 13px;
+    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -117,11 +137,20 @@
   }
 }
 
-@keyframes shimmer {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(400%);
+/* Hatching for clips that were removed in this checkpoint. */
+.hatch-removed {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--removed) 55%, transparent) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }

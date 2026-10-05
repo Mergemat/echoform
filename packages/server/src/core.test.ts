@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AbletonLauncher } from "./ableton-files";
 import { EchoformService } from "./core";
+import { writeAls } from "./test-support/als";
 import type { AppState, Idea, Project, Save } from "./types";
 
 function expectPresent<T>(value: T | null | undefined): T {
@@ -855,17 +856,67 @@ describe("EchoformService history reliability", () => {
     await expect(access(manifestPath)).rejects.toThrow();
   });
 
-  test("change backfill uses central history after the working folder is lost", async () => {
-    await writeFile(join(projectDir, "sample.wav"), "sample-v1");
+  test("analysis reads from history after the working folder is lost", async () => {
+    const songPath = join(projectDir, "song.als");
+    const track = { id: "1", name: "Lead", type: "midi" as const };
+    await writeAls(songPath, { tracks: [{ ...track, clips: [] }] });
     const tracked = await svc.trackProject({ projectPath: projectDir });
     await svc.createSave(tracked.id, { label: "Base" });
-    await writeFile(join(projectDir, "sample.wav"), "sample-v2-longer");
-    await writeFile(join(projectDir, "song.als"), "version-2");
+    await writeAls(songPath, {
+      tracks: [{ ...track, clips: [{ end: 8, notes: [{ key: 60, time: 0 }], start: 4 }] }],
+    });
     const latest = expectSave(await svc.createSave(tracked.id, { auto: true }));
-    await rm(projectDir, { recursive: true, force: true });
+    await rm(projectDir, { force: true, recursive: true });
 
-    const computed = await svc.computeChanges(tracked.id, latest.id);
-    expect(computed.changes?.modifiedFiles).toContain("sample.wav");
+    const { analysis } = await svc.getSaveAnalysis(tracked.id, latest.id);
+
+    expect(analysis.summary.headline).toBe("Lead: new part in bar 2");
+    const [project] = await svc.listProjects();
+    expect(project?.saves.find((s) => s.id === latest.id)?.summary?.headline).toBe(
+      "Lead: new part in bar 2",
+    );
+  });
+
+  test("summaries are backfilled and recomputed when the previous checkpoint is deleted", async () => {
+    const songPath = join(projectDir, "song.als");
+    const lead = (clips: number) => ({
+      tracks: [
+        {
+          clips: Array.from({ length: clips }, (_, i) => ({
+            end: i * 4 + 4,
+            notes: [{ key: 60, time: 0 }],
+            start: i * 4,
+          })),
+          id: "1",
+          name: "Lead",
+          type: "midi" as const,
+        },
+      ],
+    });
+    await writeAls(songPath, lead(1));
+    const tracked = await svc.trackProject({ projectPath: projectDir });
+    await svc.createSave(tracked.id, { label: "One" });
+    await writeAls(songPath, lead(2));
+    const middle = expectSave(await svc.createSave(tracked.id, { auto: true }));
+    await writeAls(songPath, lead(3));
+    const last = expectSave(await svc.createSave(tracked.id, { auto: true }));
+
+    while ((await svc.summarizeNextSave()) !== undefined) {
+      // drain
+    }
+    let [project] = await svc.listProjects();
+    expect(project?.saves.find((s) => s.id === last.id)?.summary?.headline).toBe(
+      "Lead: new part in bar 3",
+    );
+
+    await svc.deleteSave(tracked.id, middle.id);
+    while ((await svc.summarizeNextSave()) !== undefined) {
+      // drain
+    }
+    [project] = await svc.listProjects();
+    expect(project?.saves.find((s) => s.id === last.id)?.summary?.headline).toBe(
+      "Lead: new part in bars 2–3",
+    );
   });
 
   test("deleting a tracked project only removes it from Echoform state", async () => {

@@ -80,8 +80,108 @@ export interface Save {
   previewStatus: PreviewStatus;
   previewUpdatedAt: string | null;
   projectHash: string;
-  setDiff?: SetDiff; // semantic diff of the .als XML vs. previous save
-  trackSummary?: TrackSummaryItem[]; // lightweight track list for visual thumbnails
+  /** Musical summary vs. the previous checkpoint of the same set. */
+  summary?: SaveSummary;
+}
+
+// ── Set analysis ────────────────────────────────────────────────────
+
+/** Bump when analysis output changes so stored summaries are recomputed. */
+export const ANALYSIS_VERSION = 1;
+
+export type ChangeWeight = "none" | "minor" | "major";
+
+/** Compact, stored per checkpoint: enough to draw and describe a timeline row. */
+export interface SaveSummary {
+  /** The checkpoint this one was compared with; stale once that changes. */
+  baseSaveId: string | null;
+  beatsPerBar: number;
+  /** One line a producer would write: "New Serum 2 part in bars 9–16 · Kick +2 dB". */
+  headline: string;
+  /** Where in the song things changed, in beats, coloured by track. */
+  regions: { color: number; end: number; start: number }[];
+  /** Arrangement density in fixed buckets (0–1), the song's silhouette. */
+  shape: number[];
+  lengthBeats: number;
+  /** Tracks that changed, in arrangement order. */
+  touched: { color: number; name: string }[];
+  trackCount: number;
+  version: number;
+  weight: ChangeWeight;
+  /** No earlier checkpoint to compare against. */
+  first: boolean;
+}
+
+export type ClipStatus = "same" | "added" | "removed" | "moved" | "edited";
+
+export interface MiniNote {
+  d: number; // duration, beats
+  k: number; // MIDI key
+  t: number; // time, beats from clip start
+}
+
+export interface ClipAnalysis {
+  color: number;
+  end: number;
+  kind: "midi" | "audio";
+  movedFrom: number | null;
+  name: string;
+  /** For added or edited MIDI clips: notes to draw a piano roll diff. */
+  notes: { added: MiniNote[]; kept: MiniNote[]; removed: MiniNote[] } | null;
+  sample: string | null;
+  start: number;
+  status: ClipStatus;
+}
+
+export type TrackChange =
+  | { type: "renamed"; from: string }
+  | { type: "device-added" | "device-removed"; device: string }
+  | { type: "device-on" | "device-off"; device: string }
+  /** Only the plugin's opaque state changed; may not be a user edit. */
+  | { type: "device-state"; device: string }
+  | {
+      type: "device-settings";
+      device: string;
+      params: { name: string; from: number; to: number }[];
+    }
+  | { type: "volume"; from: number; to: number }
+  | { type: "pan"; from: number; to: number }
+  | { type: "send"; index: number; from: number; to: number }
+  | { type: "muted" | "unmuted" | "soloed" | "unsoloed" }
+  | {
+      type: "automation";
+      target: string;
+      status: "added" | "removed" | "edited";
+    }
+  | { type: "session-clips"; from: number; to: number };
+
+export interface TrackAnalysis {
+  changes: TrackChange[];
+  clips: ClipAnalysis[];
+  color: number;
+  depth: number;
+  id: string;
+  name: string;
+  status: "same" | "added" | "removed" | "changed";
+  type: "audio" | "midi" | "return" | "group";
+}
+
+export type SetChange =
+  | { type: "tempo"; from: number; to: number }
+  | { type: "time-signature"; from: string; to: string }
+  | { type: "locator-added" | "locator-removed"; name: string; time: number };
+
+/** Full comparison of one checkpoint with the one before it, served on demand. */
+export interface SaveAnalysis {
+  baseSaveId: string | null;
+  beatsPerBar: number;
+  lengthBeats: number;
+  locators: { name: string; time: number }[];
+  setChanges: SetChange[];
+  summary: SaveSummary;
+  tempo: number;
+  timeSignature: string;
+  tracks: TrackAnalysis[];
 }
 
 export type PreviewStatus = "none" | "pending" | "ready" | "missing" | "error";
@@ -93,15 +193,6 @@ export interface PreviewRequestResult {
   projectId: string;
   saveId: string;
   status: PreviewStatus;
-}
-
-export interface TrackSummaryItem {
-  children?: TrackSummaryItem[];
-  clipCount: number;
-  color: number; // Ableton color palette index
-  name: string;
-  trackCount: number; // groups include nested descendants
-  type: "audio" | "midi" | "return" | "group";
 }
 
 export interface ProjectMetadata {
@@ -118,32 +209,6 @@ export interface ChangeSummary {
   modifiedFiles: string[]; // relative paths of files whose size changed
   removedFiles: string[]; // relative paths of deleted files
   sizeDelta: number; // bytes gained or lost vs. previous save
-}
-
-export interface SetDiff {
-  addedTracks: { name: string; type: string }[];
-  arrangementLengthChange: { from: number; to: number } | null;
-  locatorCountChange: { from: number; to: number } | null;
-  modifiedTracks: TrackDiff[];
-  removedTracks: { name: string; type: string }[];
-  sceneCountChange: { from: number; to: number } | null;
-  tempoChange: { from: number; to: number } | null;
-  timeSignatureChange: { from: string; to: string } | null;
-  tracksReordered: boolean;
-}
-
-export interface TrackDiff {
-  addedClips: string[];
-  addedDevices: string[];
-  clipCountDelta: number;
-  colorChanged: boolean;
-  deviceToggles: { name: string; enabled: boolean }[];
-  mixerChanges: string[];
-  name: string;
-  removedClips: string[];
-  removedDevices: string[];
-  renamedFrom?: string;
-  type: string;
 }
 
 export interface CompareResult {

@@ -61,108 +61,6 @@ function isOptionalBoolean(value: unknown): value is boolean | undefined {
   return value === undefined || typeof value === "boolean";
 }
 
-function isOptionalString(value: unknown): value is string | undefined {
-  return value === undefined || isString(value);
-}
-
-function isNumberChange(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, ["from", "to"]) &&
-    isFiniteNumber(value.from) &&
-    isFiniteNumber(value.to)
-  );
-}
-
-function isStringChange(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, ["from", "to"]) &&
-    isString(value.from) &&
-    isString(value.to)
-  );
-}
-
-function isNullableNumberChange(value: unknown): boolean {
-  return value === null || isNumberChange(value);
-}
-
-function isNamedType(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, ["name", "type"]) &&
-    isString(value.name) &&
-    isString(value.type)
-  );
-}
-
-function isTrackDiff(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, [
-      "addedClips",
-      "addedDevices",
-      "clipCountDelta",
-      "colorChanged",
-      "deviceToggles",
-      "mixerChanges",
-      "name",
-      "removedClips",
-      "removedDevices",
-      "renamedFrom",
-      "type",
-    ]) &&
-    isStringArray(value.addedClips) &&
-    isStringArray(value.addedDevices) &&
-    isFiniteNumber(value.clipCountDelta) &&
-    typeof value.colorChanged === "boolean" &&
-    Array.isArray(value.deviceToggles) &&
-    value.deviceToggles.every(
-      (toggle) =>
-        isRecord(toggle) &&
-        hasOnlyKeys(toggle, ["name", "enabled"]) &&
-        isString(toggle.name) &&
-        typeof toggle.enabled === "boolean",
-    ) &&
-    isStringArray(value.mixerChanges) &&
-    isString(value.name) &&
-    isStringArray(value.removedClips) &&
-    isStringArray(value.removedDevices) &&
-    isOptionalString(value.renamedFrom) &&
-    isString(value.type)
-  );
-}
-
-function isSetDiff(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, [
-      "addedTracks",
-      "arrangementLengthChange",
-      "locatorCountChange",
-      "modifiedTracks",
-      "removedTracks",
-      "sceneCountChange",
-      "tempoChange",
-      "timeSignatureChange",
-      "tracksReordered",
-    ]) &&
-    Array.isArray(value.addedTracks) &&
-    value.addedTracks.every(isNamedType) &&
-    isNullableNumberChange(value.arrangementLengthChange) &&
-    isNullableNumberChange(value.locatorCountChange) &&
-    Array.isArray(value.modifiedTracks) &&
-    value.modifiedTracks.every(isTrackDiff) &&
-    Array.isArray(value.removedTracks) &&
-    value.removedTracks.every(isNamedType) &&
-    isNullableNumberChange(value.sceneCountChange) &&
-    (value.tempoChange === null || isNumberChange(value.tempoChange)) &&
-    (value.timeSignatureChange === null ||
-      isStringChange(value.timeSignatureChange)) &&
-    typeof value.tracksReordered === "boolean"
-  );
-}
-
 function isChangeSummary(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -179,25 +77,15 @@ function isChangeSummary(value: unknown): boolean {
   );
 }
 
-function isTrackSummaryItem(value: unknown): boolean {
+/** Stored per-save analysis; recomputed when its version is outdated. */
+function isSaveSummary(value: unknown): boolean {
   return (
     isRecord(value) &&
-    hasOnlyKeys(value, [
-      "children",
-      "clipCount",
-      "color",
-      "name",
-      "trackCount",
-      "type",
-    ]) &&
-    (value.children === undefined ||
-      (Array.isArray(value.children) &&
-        value.children.every(isTrackSummaryItem))) &&
-    isFiniteNumber(value.clipCount) &&
-    isFiniteNumber(value.color) &&
-    isString(value.name) &&
-    isFiniteNumber(value.trackCount) &&
-    ["audio", "midi", "return", "group"].includes(String(value.type))
+    isString(value.headline) &&
+    isFiniteNumber(value.version) &&
+    Array.isArray(value.shape) &&
+    Array.isArray(value.regions) &&
+    Array.isArray(value.touched)
   );
 }
 
@@ -238,10 +126,7 @@ function isSave(value: unknown): value is Save {
     isNullableString(value.previewMime) &&
     isNullableString(value.previewRequestedAt) &&
     isNullableString(value.previewUpdatedAt) &&
-    (value.setDiff === undefined || isSetDiff(value.setDiff)) &&
-    (value.trackSummary === undefined ||
-      (Array.isArray(value.trackSummary) &&
-        value.trackSummary.every(isTrackSummaryItem))) &&
+    (value.summary === undefined || isSaveSummary(value.summary)) &&
     ["activeSetPath", "modifiedAt"].every((key) => isString(metadata[key])) &&
     isStringArray(metadata.setFiles) &&
     ["audioFiles", "fileCount", "sizeBytes"].every(
@@ -389,6 +274,11 @@ export function validateAppState(value: unknown): AppState {
           );
         }
       }
+    }
+    for (const save of project.saves as unknown as Record<string, unknown>[]) {
+      // Pre-v1 analysis fields; replaced by `summary`.
+      delete save.setDiff;
+      delete save.trackSummary;
     }
     if (project.saves.some((save) => !ideaIds.has(save.ideaId))) {
       throw new StateRepositoryError(

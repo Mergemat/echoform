@@ -146,160 +146,6 @@ export function isAls(p: string) {
   return extname(p).toLowerCase() === ".als";
 }
 
-// ── Chip builders ────────────────────────────────────────────────────
-export interface Chip {
-  kind: "neutral" | "add" | "remove" | "change";
-  label: string;
-}
-
-export function buildChips(save: Save): Chip[] {
-  const chips: Chip[] = [];
-  const sd = save.setDiff;
-  if (sd) {
-    if (sd.tempoChange) {
-      chips.push({
-        kind: "change",
-        label: `${sd.tempoChange.from}\u2192${sd.tempoChange.to} bpm`,
-      });
-    }
-    if (sd.timeSignatureChange) {
-      chips.push({
-        kind: "change",
-        label: `${sd.timeSignatureChange.from}\u2192${sd.timeSignatureChange.to}`,
-      });
-    }
-    const addByType: Record<string, number> = {};
-    const remByType: Record<string, number> = {};
-    for (const t of sd.addedTracks) {
-      addByType[t.type] = (addByType[t.type] ?? 0) + 1;
-    }
-    for (const t of sd.removedTracks) {
-      remByType[t.type] = (remByType[t.type] ?? 0) + 1;
-    }
-    const TL: Record<string, string> = {
-      audio: "Audio",
-      group: "Group",
-      midi: "MIDI",
-      return: "Return",
-    };
-    for (const [type, count] of Object.entries(addByType)) {
-      chips.push({ kind: "add", label: `+${count} ${TL[type] ?? type}` });
-    }
-    for (const [type, count] of Object.entries(remByType)) {
-      chips.push({
-        kind: "remove",
-        label: `\u2212${count} ${TL[type] ?? type}`,
-      });
-    }
-    const renames = sd.modifiedTracks.filter((t) => t.renamedFrom);
-    if (renames.length === 1) {
-      chips.push({
-        kind: "change",
-        label: `\u201c${renames[0]?.renamedFrom}\u201d\u2192\u201c${renames[0]?.name}\u201d`,
-      });
-    } else if (renames.length >= 2) {
-      chips.push({ kind: "change", label: `${renames.length} tracks renamed` });
-    }
-    let totalDeviceAdds = 0;
-    let totalDeviceRemoves = 0;
-    for (const t of sd.modifiedTracks) {
-      totalDeviceAdds += t.addedDevices.length;
-      totalDeviceRemoves += t.removedDevices.length;
-    }
-    const deviceDelta = totalDeviceAdds - totalDeviceRemoves;
-    if (deviceDelta !== 0) {
-      chips.push({
-        kind: deviceDelta > 0 ? "add" : "remove",
-        label: `${deviceDelta > 0 ? "+" : ""}${deviceDelta} device${Math.abs(deviceDelta) === 1 ? "" : "s"}`,
-      });
-    } else if (totalDeviceAdds > 0) {
-      chips.push({
-        kind: "change",
-        label: `${totalDeviceAdds} device${totalDeviceAdds === 1 ? "" : "s"} replaced`,
-      });
-    }
-    let clipDelta = 0;
-    for (const t of sd.modifiedTracks) {
-      clipDelta += t.clipCountDelta;
-    }
-    if (clipDelta !== 0) {
-      chips.push({
-        kind: clipDelta > 0 ? "add" : "remove",
-        label: `${clipDelta > 0 ? "+" : ""}${clipDelta} clip${Math.abs(clipDelta) === 1 ? "" : "s"}`,
-      });
-    }
-    if (sd.modifiedTracks.some((t) => t.mixerChanges.length > 0)) {
-      chips.push({ kind: "neutral", label: "mixer changes" });
-    }
-    // Track color changes
-    const colorChanges = sd.modifiedTracks.filter((t) => t.colorChanged).length;
-    if (colorChanges > 0) {
-      chips.push({
-        kind: "change",
-        label: `${colorChanges} track${colorChanges === 1 ? "" : "s"} recolored`,
-      });
-    }
-    // Device enable/disable toggles
-    let toggleCount = 0;
-    for (const t of sd.modifiedTracks) {
-      toggleCount += t.deviceToggles.length;
-    }
-    if (toggleCount > 0) {
-      chips.push({
-        kind: "change",
-        label: `${toggleCount} device${toggleCount === 1 ? "" : "s"} toggled`,
-      });
-    }
-    // Arrangement length
-    if (sd.arrangementLengthChange) {
-      const delta =
-        sd.arrangementLengthChange.to - sd.arrangementLengthChange.from;
-      const bars = Math.round(Math.abs(delta) / 4);
-      chips.push({
-        kind: delta > 0 ? "add" : "remove",
-        label: `${delta > 0 ? "+" : "\u2212"}${bars} bar${bars === 1 ? "" : "s"}`,
-      });
-    }
-    // Scene count
-    if (sd.sceneCountChange) {
-      const delta = sd.sceneCountChange.to - sd.sceneCountChange.from;
-      chips.push({
-        kind: delta > 0 ? "add" : "remove",
-        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} scene${Math.abs(delta) === 1 ? "" : "s"}`,
-      });
-    }
-    // Locator / cue point count
-    if (sd.locatorCountChange) {
-      const delta = sd.locatorCountChange.to - sd.locatorCountChange.from;
-      chips.push({
-        kind: delta > 0 ? "add" : "remove",
-        label: `${delta > 0 ? "+" : "\u2212"}${Math.abs(delta)} locator${Math.abs(delta) === 1 ? "" : "s"}`,
-      });
-    }
-    // Track reorder
-    if (sd.tracksReordered) {
-      chips.push({ kind: "change", label: "tracks reordered" });
-    }
-  }
-  if (save.changes) {
-    const added = save.changes.addedFiles.filter((f) => !isAls(f));
-    const removed = save.changes.removedFiles.filter((f) => !isAls(f));
-    if (added.length > 0) {
-      chips.push({
-        kind: "add",
-        label: `+${added.length} file${added.length === 1 ? "" : "s"}`,
-      });
-    }
-    if (removed.length > 0) {
-      chips.push({
-        kind: "remove",
-        label: `\u2212${removed.length} file${removed.length === 1 ? "" : "s"}`,
-      });
-    }
-  }
-  return chips;
-}
-
 // ── Retention ────────────────────────────────────────────────────────
 
 /**
@@ -341,46 +187,13 @@ export type DisplayItem =
   | { type: "group"; saves: Save[]; key: string; expanded: boolean };
 
 /**
- * A save is "minor" when analysis found no structural change. Runs of minor
- * saves collapse into one row. Anything the user cares about (named, noted,
- * pinned, previewed, latest, first) is never minor, so it is never hidden.
+ * A save is "quiet" when analysis found no musical change at all (Live was
+ * saved, nothing in the song moved). Runs of quiet saves collapse into one
+ * row. Anything the user cares about (named, noted, pinned, previewed,
+ * latest, first) is never quiet, so it is never hidden.
  */
-function isMinorSave(save: Save, keep: (save: Save) => boolean): boolean {
-  if (!save.auto || keep(save)) {
-    return false;
-  }
-  const sd = save.setDiff;
-  if (sd) {
-    if (sd.tempoChange || sd.timeSignatureChange) {
-      return false;
-    }
-    if (
-      sd.arrangementLengthChange ||
-      sd.sceneCountChange ||
-      sd.locatorCountChange
-    ) {
-      return false;
-    }
-    if (sd.tracksReordered) {
-      return false;
-    }
-    if (
-      sd.addedTracks.length ||
-      sd.removedTracks.length ||
-      sd.modifiedTracks.length
-    ) {
-      return false;
-    }
-  }
-  if (save.changes) {
-    if (save.changes.addedFiles.filter((f) => !isAls(f)).length) {
-      return false;
-    }
-    if (save.changes.removedFiles.filter((f) => !isAls(f)).length) {
-      return false;
-    }
-  }
-  return true;
+function isQuietSave(save: Save, keep: (save: Save) => boolean): boolean {
+  return save.auto && !keep(save) && save.summary?.weight === "none";
 }
 
 function buildDisplayItems(
@@ -392,10 +205,10 @@ function buildDisplayItems(
   let i = 0;
   while (i < saves.length) {
     const save = saves[i]!;
-    if (isMinorSave(save, keep)) {
+    if (isQuietSave(save, keep)) {
       const group: Save[] = [save];
       let j = i + 1;
-      while (j < saves.length && isMinorSave(saves[j]!, keep)) {
+      while (j < saves.length && isQuietSave(saves[j]!, keep)) {
         group.push(saves[j]!);
         j++;
       }

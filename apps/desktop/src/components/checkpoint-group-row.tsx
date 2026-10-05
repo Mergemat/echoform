@@ -1,43 +1,56 @@
 import { CaretRight } from "@phosphor-icons/react";
 import type { Save } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { rowGrid } from "./checkpoint-row";
 import { formatTime } from "./timeline-utils";
 
-/** A run of consecutive saves with no structural changes, collapsed into one row. */
+/** A run of saves where nothing in the song changed, collapsed into one row. */
 export function CheckpointGroupRow({
   saves,
   expanded,
+  compact = false,
   onToggle,
 }: {
+  compact?: boolean;
   saves: Save[];
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const newest = saves[0];
   const oldest = saves.at(-1);
 
   return (
     <button
       aria-expanded={expanded}
-      className="flex w-full items-center gap-4 rounded-lg py-2 pr-2 pl-3 text-left transition-colors duration-100 hover:bg-accent/40"
+      className={cn(
+        rowGrid(compact),
+        "w-full rounded-md py-1.5 pr-2 pl-2 text-left text-subtle-foreground transition-colors hover:bg-raised/60 hover:text-muted-foreground"
+      )}
       onClick={onToggle}
       type="button"
     >
-      <span aria-hidden className="w-16 shrink-0" />
-      <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+      <span />
+      <span className="flex items-center gap-1.5 text-[12px]">
         <CaretRight
           className={cn(
             "shrink-0 transition-transform duration-150",
             expanded && "rotate-90"
           )}
-          size={11}
+          size={10}
         />
-        {expanded ? "Hide" : "Show"} {saves.length} saves with small edits
-        {oldest && saves[0] && (
-          <span className="text-subtle-foreground">
-            · {formatTime(oldest.createdAt)}–{formatTime(saves[0].createdAt)}
-          </span>
-        )}
+        {saves.length} saves, nothing changed
       </span>
+      <span
+        className={cn(
+          "font-mono text-[11px] tabular-nums",
+          compact && "hidden"
+        )}
+      >
+        {oldest && newest
+          ? `${formatTime(oldest.createdAt)}–${formatTime(newest.createdAt)}`
+          : null}
+      </span>
+      <span />
     </button>
   );
 }
