@@ -1,21 +1,25 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/geist-mono";
 
+/*
+ * Same graphite as the desktop app. The page itself stays colourless; the
+ * only saturated colour comes from Ableton's track palette in the examples.
+ */
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
-  --color-surface: oklch(0.13 0.006 260);
-  --color-surface-raised: oklch(0.17 0.008 260);
-  --color-surface-overlay: oklch(0.2 0.01 260);
-  --color-edge: oklch(1 0 0 / 8%);
-  --color-edge-strong: oklch(1 0 0 / 14%);
-  --color-text-primary: oklch(0.95 0.005 250);
-  --color-text-secondary: oklch(0.6 0.015 250);
-  --color-text-tertiary: oklch(0.45 0.01 250);
-  --color-teal: oklch(0.65 0.14 182);
-  --color-teal-dim: oklch(0.45 0.1 182);
-  --color-teal-glow: oklch(0.65 0.14 182 / 20%);
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --color-surface: #141416;
+  --color-surface-raised: #1c1c1f;
+  --color-surface-overlay: #232327;
+  --color-edge: #2a2a2e;
+  --color-edge-strong: #3a3a40;
+  --color-text-primary: #e9e7e3;
+  --color-text-secondary: #a3a19c;
+  --color-text-tertiary: #6f6d69;
+  --color-added: #7fd6a2;
+  --color-removed: #f07a6a;
+  --color-edited: #f2c36b;
 }
 
 @layer base {
@@ -27,6 +31,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
+    color-scheme: dark;
   }
   body {
     min-height: 100dvh;
@@ -36,7 +41,19 @@
     background: var(--color-surface);
   }
   ::selection {
-    color: var(--color-text-primary);
-    background: var(--color-teal-glow);
+    color: var(--color-surface);
+    background: var(--color-text-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
