@@ -53,9 +53,17 @@ function formatDb(db: number): string {
 /** Live numbers default track names ("3-Audio") and renumbers them on insert. */
 const withoutTrackNumber = (name: string) => name.replace(/^\d+-/, "");
 
-/** Drop the "[2026-01-10 084550]" suffix Live adds to consolidated audio. */
+/**
+ * How a producer refers to a track: without Live's auto-number ("4-Serum 2"
+ * → "Serum 2") and without the "[2026-01-10 084550]" suffix Live adds to
+ * consolidated audio.
+ */
 export function displayName(name: string): string {
-  return name.replace(/\s*\[\d{4}-\d{2}-\d{2} \d{6}\]$/, "").trim() || name;
+  return (
+    withoutTrackNumber(name)
+      .replace(/\s*\[\d{4}-\d{2}-\d{2} \d{6}\]$/, "")
+      .trim() || name
+  );
 }
 
 // ── Clips ───────────────────────────────────────────────────────────
@@ -568,7 +576,10 @@ function phrases(
           );
           break;
         case "volume":
-          push(4, `${name} ${formatDb(change.to - change.from)}`);
+          push(
+            4,
+            `${name} ${change.to > change.from ? "louder" : "quieter"} (${formatDb(change.to - change.from)})`,
+          );
           break;
         case "muted":
         case "unmuted":
@@ -623,15 +634,15 @@ export function analyzeSets(
   const playable = after.tracks.filter((t) => t.type !== "group" && t.type !== "return");
 
   const headline = !before
-    ? `${playable.length} tracks · ${bars} bars at ${after.tempo} BPM`
-    : weight === "none"
-      ? "Saved with no musical changes"
-      : lines.slice(0, 3).join(" · ") +
-        (lines.length > 3 ? ` · +${lines.length - 3} more` : "");
+    ? `First save · ${playable.length} tracks, ${bars} bars at ${after.tempo} BPM`
+    : weight === "none" || lines.length === 0
+      ? "No musical changes"
+      : lines[0]!;
 
   const summary: SaveSummary = {
     baseSaveId,
     beatsPerBar: perBar,
+    changes: before && weight !== "none" ? lines : [],
     first: !before,
     headline,
     lengthBeats: length,
