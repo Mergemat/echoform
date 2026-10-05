@@ -56,19 +56,40 @@ async function buildSnapshotEvent(): Promise<WsEvent> {
 
 async function broadcastSnapshot(): Promise<void> {
   broadcast(await buildSnapshotEvent());
+  void summarizePendingSaves();
 }
 
-async function backfillSaveAnalysis(
-  projectId: string,
-  saveId: string,
-): Promise<void> {
+// Checkpoint summaries are computed in the background, one at a time,
+// newest first. Any change to history may make a neighbour's summary stale,
+// so callers just ask for another pass.
+let summarizing = false;
+let summarizeRequested = false;
+
+async function summarizePendingSaves(): Promise<void> {
+  if (summarizing) {
+    summarizeRequested = true;
+    return;
+  }
+  summarizing = true;
   try {
-    const { project } = await service.computeChanges(projectId, saveId);
-    broadcast({ type: "project-updated", project });
+    do {
+      summarizeRequested = false;
+      for (;;) {
+        const project = await service.summarizeNextSave();
+        if (project === undefined) {
+          break;
+        }
+        if (project) {
+          broadcast({ type: "project-updated", project });
+        }
+      }
+    } while (summarizeRequested);
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Background save analysis failed";
+      err instanceof Error ? err.message : "Checkpoint analysis failed";
     broadcast({ type: "error", message });
+  } finally {
+    summarizing = false;
   }
 }
 
@@ -173,7 +194,7 @@ const watcher = new ProjectWatcher({
         await service.handleWatchedAlsChange(projectId, changedPaths);
       if (save) {
         broadcast({ type: "auto-saved", projectId, save });
-        void backfillSaveAnalysis(projectId, save.id);
+        void summarizePendingSaves();
       }
       if (save || stateChanged) {
         broadcast({ type: "project-updated", project });
@@ -243,6 +264,7 @@ async function reconcileWatchers(): Promise<void> {
 await service.reconcileStorage();
 await service.syncRoots();
 await reconcileWatchers();
+void summarizePendingSaves();
 
 setInterval(() => {
   void service
@@ -525,19 +547,23 @@ Bun.serve({
       }
     }
 
-    // REST: compute changes for a save (backfill)
-    // e.g. /api/projects/:id/saves/:saveId/changes
+    // GET /api/projects/:id/saves/:saveId/analysis
     if (
-      url.pathname.match(/^\/api\/projects\/[^/]+\/saves\/[^/]+\/changes$/) &&
-      req.method === "POST"
+      url.pathname.match(/^\/api\/projects\/[^/]+\/saves\/[^/]+\/analysis$/) &&
+      req.method === "GET"
     ) {
       const parts = url.pathname.split("/");
       const projectId = parts[3]!;
       const saveId = parts[5]!;
       try {
-        const { changes } = await service.computeChanges(projectId, saveId);
-        await broadcastSnapshot();
-        return jsonResponse(req, { changes });
+        const { analysis, project } = await service.getSaveAnalysis(
+          projectId,
+          saveId,
+        );
+        if (project) {
+          broadcast({ type: "project-updated", project });
+        }
+        return jsonResponse(req, { analysis });
       } catch (err) {
         const status = err instanceof AppError ? err.status : 500;
         const message = err instanceof Error ? err.message : "Unknown error";
@@ -794,6 +820,7 @@ Bun.serve({
         if (result) {
           broadcast(result);
         }
+        void summarizePendingSaves();
         ws.send(
           JSON.stringify({
             type: "command-ack",

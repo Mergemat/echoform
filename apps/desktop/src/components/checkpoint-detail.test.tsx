@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,14 +78,19 @@ const project: Project = {
 };
 
 function renderCard() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <CheckpointDetail
-      idea={idea}
-      isHead
-      onClose={vi.fn()}
-      project={project}
-      save={save}
-    />
+    <QueryClientProvider client={client}>
+      <CheckpointDetail
+        idea={idea}
+        isHead
+        onClose={vi.fn()}
+        project={project}
+        save={save}
+      />
+    </QueryClientProvider>
   );
 }
 
@@ -100,6 +106,13 @@ function deferred<T>() {
 
 describe("historical checkpoint actions", () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: async () => ({ error: "No set" }),
+        ok: false,
+      })
+    );
     sendDaemonCommand.mockReset();
     sendDaemonCommand.mockResolvedValue({ requestId: "request-1" });
   });

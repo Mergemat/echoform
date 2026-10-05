@@ -37,7 +37,7 @@ function WatchedFolderRow({ root }: { root: TrackedRoot }) {
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {plural(projectCount, "project")} · scanned{" "}
-            {timeAgo(root.lastScannedAt).toLowerCase()}
+            {timeAgo(root.lastScannedAt).replace("Just now", "just now")}
           </div>
         </div>
         {!confirming && (

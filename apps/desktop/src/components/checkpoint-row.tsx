@@ -5,33 +5,30 @@ import {
   Play,
   PushPin,
 } from "@phosphor-icons/react";
-import { useMemo } from "react";
 import { usePreviewStore } from "@/lib/preview-store";
 import type { Project, Save } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { buildChips, type Chip, formatTime } from "./timeline-utils";
+import { SongStrip } from "./song-strip";
+import { formatTime } from "./timeline-utils";
 
-const MAX_CHIPS = 4;
+/**
+ * Shared column template so rows, group rows and the ruler line up.
+ * Compact (detail panel open): the description sits under the strip.
+ */
+export function rowGrid(compact: boolean): string {
+  return compact
+    ? "grid grid-cols-[4.5rem_minmax(0,1fr)_5.5rem] items-center gap-x-3"
+    : "grid grid-cols-[4.5rem_minmax(9rem,18rem)_minmax(0,1fr)_5.5rem] items-center gap-x-4";
+}
 
-export const CHIP_CLASS: Record<Chip["kind"], string> = {
-  add: "text-success bg-success/10",
-  change: "text-warning bg-warning/10",
-  neutral: "text-muted-foreground bg-muted",
-  remove: "text-destructive bg-destructive/10",
-};
-
-/** What to say when a checkpoint has no structural changes to show. */
-export function describeUnchangedSave(project: Project, save: Save): string {
+export function describeSave(project: Project, save: Save): string {
   if (!save.auto && project.continuedFrom) {
     return "Starting point of this branch";
   }
-  if (project.ideas.some((idea) => idea.baseSaveId === save.id)) {
-    return "First checkpoint of this set";
+  if (!save.summary) {
+    return "Analyzing…";
   }
-  if (save.setDiff === undefined && save.changes === undefined) {
-    return "Not analyzed yet";
-  }
-  return "Small edits — no tracks, devices or clips changed";
+  return save.summary.headline;
 }
 
 export function CheckpointRow({
@@ -39,6 +36,8 @@ export function CheckpointRow({
   isSelected,
   isHead,
   project,
+  scaleBeats,
+  compact = false,
   indented = false,
   onClick,
 }: {
@@ -46,115 +45,149 @@ export function CheckpointRow({
   isSelected: boolean;
   isHead: boolean;
   project: Project;
+  scaleBeats: number;
+  compact?: boolean;
   indented?: boolean;
   onClick: () => void;
 }) {
   const openPreviewPlayer = usePreviewStore((s) => s.openPreviewPlayer);
   const previewPlayerSaveId = usePreviewStore((s) => s.previewPlayerSaveId);
-  const chips = useMemo(() => buildChips(save), [save]);
-  const visible = chips.slice(0, MAX_CHIPS);
-  const overflow = chips.length - MAX_CHIPS;
   const isBranchStart = !save.auto && Boolean(project.continuedFrom);
   const isPlaying = previewPlayerSaveId === save.id;
-  const title = save.customLabel ? save.label.trim() : null;
+  const name = save.customLabel ? save.label.trim() : null;
+  const quiet = save.summary?.weight === "none";
 
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-4 rounded-lg py-2.5 pr-2 pl-3 transition-colors duration-100",
-        indented && "ml-6",
-        isSelected ? "bg-accent" : "hover:bg-accent/40"
+        rowGrid(compact),
+        "group relative rounded-md py-2 pr-2 pl-2 transition-colors duration-100",
+        isSelected ? "bg-raised" : "hover:bg-raised/60"
       )}
     >
-      {/* The whole row selects; nested controls sit above this layer. */}
+      {isSelected && (
+        <span
+          aria-hidden
+          className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-foreground"
+        />
+      )}
       <button
-        aria-label={`Checkpoint at ${formatTime(save.createdAt)}${title ? `: ${title}` : ""}`}
+        aria-label={`Checkpoint at ${formatTime(save.createdAt)}${name ? `: ${name}` : ""}`}
         aria-pressed={isSelected}
-        className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         onClick={onClick}
         type="button"
       />
 
       <span
         className={cn(
-          "pointer-events-none w-16 shrink-0 text-[12px] tabular-nums",
-          isSelected ? "text-foreground" : "text-muted-foreground"
+          "pointer-events-none font-mono text-[11px] tabular-nums",
+          isSelected ? "text-foreground" : "text-muted-foreground",
+          indented && "pl-2 text-subtle-foreground"
         )}
       >
         {formatTime(save.createdAt)}
       </span>
 
-      <div className="pointer-events-none flex min-w-0 flex-1 flex-col gap-1">
-        {title && (
-          <span className="truncate font-medium text-[13px] text-foreground">
-            {title}
-          </span>
-        )}
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          {visible.length === 0 ? (
-            <span className="text-[12px] text-subtle-foreground">
-              {describeUnchangedSave(project, save)}
-            </span>
-          ) : (
-            <>
-              {visible.map((chip) => (
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-px text-[11px] leading-[18px]",
-                    CHIP_CLASS[chip.kind]
-                  )}
-                  key={chip.label}
-                >
-                  {chip.label}
-                </span>
-              ))}
-              {overflow > 0 && (
-                <span className="text-[11px] text-subtle-foreground">
-                  +{overflow} more
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      {compact ? (
+        <div className="pointer-events-none min-w-0 space-y-1">
+          <div>
+            {save.summary ? (
+              <SongStrip
+                muted={quiet}
+                scaleBeats={scaleBeats}
+                summary={save.summary}
+              />
+            ) : (
+              <div className="h-6 animate-pulse rounded-sm bg-muted/60" />
+            )}
+          </div>
 
-      <div className="pointer-events-none flex shrink-0 items-center gap-2 text-subtle-foreground">
-        {save.note.trim() && <ChatText aria-label="Has a note" size={14} />}
-        {save.pinned && <PushPin aria-label="Pinned" size={14} weight="fill" />}
-        {isBranchStart && (
-          <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
-            <GitBranch size={11} />
-            Branch start
-          </span>
-        )}
+          <div className="min-w-0">
+            {name && (
+              <div className="truncate font-medium text-[13px] text-foreground">
+                {name}
+              </div>
+            )}
+            <div
+              className={cn(
+                "truncate text-[12.5px]",
+                name || quiet
+                  ? "text-subtle-foreground"
+                  : "text-muted-foreground",
+                isSelected && !name && !quiet && "text-foreground"
+              )}
+              title={describeSave(project, save)}
+            >
+              {describeSave(project, save)}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="pointer-events-none">
+            {save.summary ? (
+              <SongStrip
+                muted={quiet}
+                scaleBeats={scaleBeats}
+                summary={save.summary}
+              />
+            ) : (
+              <div className="h-6 animate-pulse rounded-sm bg-muted/60" />
+            )}
+          </div>
+
+          <div className="pointer-events-none min-w-0">
+            {name && (
+              <div className="truncate font-medium text-[13px] text-foreground">
+                {name}
+              </div>
+            )}
+            <div
+              className={cn(
+                "truncate text-[12.5px]",
+                name || quiet
+                  ? "text-subtle-foreground"
+                  : "text-muted-foreground",
+                isSelected && !name && !quiet && "text-foreground"
+              )}
+              title={describeSave(project, save)}
+            >
+              {describeSave(project, save)}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="pointer-events-none flex items-center justify-end gap-2 text-subtle-foreground">
+        {save.note.trim() && <ChatText aria-label="Has a note" size={13} />}
+        {save.pinned && <PushPin aria-label="Pinned" size={13} weight="fill" />}
+        {isBranchStart && <GitBranch aria-label="Branch start" size={13} />}
         {isHead && (
-          <span className="rounded bg-success/10 px-1.5 py-px font-medium text-[11px] text-success">
+          <span className="font-mono text-[10px] text-foreground uppercase tracking-wider">
             Latest
           </span>
         )}
+        {save.previewStatus === "ready" && (
+          <button
+            aria-label={isPlaying ? "Now playing" : "Play preview"}
+            className={cn(
+              "pointer-events-auto relative flex size-6 items-center justify-center rounded-full transition-colors",
+              isPlaying
+                ? "bg-foreground text-background"
+                : "bg-secondary text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => openPreviewPlayer(save.id, project)}
+            type="button"
+          >
+            {isPlaying ? (
+              <Pause size={10} weight="fill" />
+            ) : (
+              <Play size={10} weight="fill" />
+            )}
+          </button>
+        )}
       </div>
-
-      {save.previewStatus === "ready" ? (
-        <button
-          aria-label={isPlaying ? "Now playing" : "Play preview"}
-          className={cn(
-            "relative flex size-7 shrink-0 items-center justify-center rounded-full transition-colors duration-100",
-            isPlaying
-              ? "bg-foreground text-background"
-              : "bg-muted text-muted-foreground hover:bg-secondary hover:text-foreground"
-          )}
-          onClick={() => openPreviewPlayer(save.id, project)}
-          type="button"
-        >
-          {isPlaying ? (
-            <Pause size={11} weight="fill" />
-          ) : (
-            <Play size={11} weight="fill" />
-          )}
-        </button>
-      ) : (
-        <span aria-hidden className="size-7 shrink-0" />
-      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/logo";
 import { ProjectSearchCommand } from "@/components/project-search-command";
 import { RootManagerDialog } from "@/components/root-manager-dialog";
+import { SongStrip } from "@/components/song-strip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,6 +48,13 @@ export const ProjectItem = memo(function ProjectItem({
   );
   const status = getProjectStatus(project);
   const lastAt = lastCheckpointAt(project);
+  const latest = project.saves
+    .filter((save) => save.summary)
+    .reduce<Project["saves"][number] | null>(
+      (newest, save) =>
+        !newest || save.createdAt > newest.createdAt ? save : newest,
+      null
+    );
 
   return (
     <button
@@ -84,10 +92,20 @@ export const ProjectItem = memo(function ProjectItem({
             {project.name}
           </span>
         </span>
-        <span className="mt-0.5 block truncate text-[11px] text-subtle-foreground">
+        {latest?.summary && (
+          <span className="mt-1.5 block opacity-70">
+            <SongStrip
+              className="h-3.5"
+              muted
+              scaleBeats={latest.summary.lengthBeats}
+              summary={{ ...latest.summary, regions: [] }}
+            />
+          </span>
+        )}
+        <span className="mt-1 block truncate text-[11px] text-subtle-foreground">
           {status.tone === "ok" ? (
             lastAt ? (
-              `Last checkpoint ${timeAgo(lastAt).toLowerCase()}`
+              `Last checkpoint ${timeAgo(lastAt).replace("Just now", "just now")}`
             ) : (
               "Waiting for first save"
             )

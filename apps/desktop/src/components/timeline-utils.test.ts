@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Idea, Project, Save } from "@/lib/types";
-import type { SetDiff } from "../../../../packages/server/src/types";
 import {
-  buildChips,
   buildTimelineDisplayItems,
   buildTimelineSections,
   getSaveDisplayTitle,
@@ -123,92 +121,6 @@ describe("getSaveDisplayTitle", () => {
   });
 });
 
-function makeSaveWithDiff(setDiff?: SetDiff, changes?: Save["changes"]): Save {
-  return {
-    auto: false,
-    changes,
-    createdAt: "2024-01-01T00:00:00Z",
-    id: "save-bc",
-    ideaId: "idea-1",
-    label: "old save",
-    metadata: {
-      activeSetPath: "song.als",
-      audioFiles: 0,
-      fileCount: 1,
-      modifiedAt: "2024-01-01T00:00:00Z",
-      setFiles: ["song.als"],
-      sizeBytes: 100,
-    },
-    note: "",
-    pinned: false,
-    previewMime: null,
-    previewRefs: [],
-    previewRequestedAt: null,
-    previewStatus: "none",
-    previewUpdatedAt: null,
-    projectHash: "abc",
-    setDiff,
-  };
-}
-
-describe("buildChips", () => {
-  it("uses file changes when semantic set analysis is absent", () => {
-    const save = makeSaveWithDiff(undefined, {
-      addedFiles: ["Samples/kick.wav"],
-      modifiedFiles: [],
-      removedFiles: [],
-      sizeDelta: 1024,
-    });
-
-    expect(buildChips(save)).toEqual([{ kind: "add", label: "+1 file" }]);
-  });
-
-  it("produces chips for tempo, tracks, devices, clips, mixer, color, toggles, arrangement, scenes, locators, reorder", () => {
-    const save = makeSaveWithDiff({
-      addedTracks: [{ name: "Lead", type: "midi" }],
-      arrangementLengthChange: { from: 64, to: 128 },
-      locatorCountChange: { from: 2, to: 4 },
-      modifiedTracks: [
-        {
-          addedClips: ["clip-1"],
-          addedDevices: ["Compressor"],
-          clipCountDelta: 1,
-          colorChanged: true,
-          deviceToggles: [{ enabled: false, name: "EQ Eight" }],
-          mixerChanges: ["volume"],
-          name: "Bass",
-          removedClips: [],
-          removedDevices: [],
-          renamedFrom: "Old Bass",
-          type: "audio",
-        },
-      ],
-      removedTracks: [{ name: "Old Pad", type: "audio" }],
-      sceneCountChange: { from: 8, to: 10 },
-      tempoChange: { from: 120, to: 128 },
-      timeSignatureChange: { from: "4/4", to: "3/4" },
-      tracksReordered: true,
-    });
-    const chips = buildChips(save);
-    const labels = chips.map((c) => c.label);
-
-    expect(labels).toContain("120→128 bpm");
-    expect(labels).toContain("4/4→3/4");
-    expect(labels.some((l) => l.includes("MIDI"))).toBe(true);
-    expect(labels.some((l) => l.includes("Audio"))).toBe(true);
-    expect(labels.some((l) => l.includes("Old Bass"))).toBe(true);
-    expect(labels.some((l) => l.includes("device"))).toBe(true);
-    expect(labels.some((l) => l.includes("clip"))).toBe(true);
-    expect(labels).toContain("mixer changes");
-    expect(labels.some((l) => l.includes("recolored"))).toBe(true);
-    expect(labels.some((l) => l.includes("toggled"))).toBe(true);
-    expect(labels.some((l) => l.includes("bar"))).toBe(true);
-    expect(labels.some((l) => l.includes("scene"))).toBe(true);
-    expect(labels.some((l) => l.includes("locator"))).toBe(true);
-    expect(labels).toContain("tracks reordered");
-  });
-});
-
 describe("buildTimelineSections", () => {
   const idea = makeIdea("idea-1", { baseSaveId: "s1", headSaveId: "s5" });
 
@@ -220,11 +132,18 @@ describe("buildTimelineSections", () => {
     return {
       ...makeSave(id, idea.id, createdAt),
       auto: true,
-      changes: {
-        addedFiles: [],
-        modifiedFiles: ["song.als"],
-        removedFiles: [],
-        sizeDelta: 10,
+      summary: {
+        baseSaveId: null,
+        beatsPerBar: 4,
+        first: false,
+        headline: "Saved with no musical changes",
+        lengthBeats: 64,
+        regions: [],
+        shape: [],
+        touched: [],
+        trackCount: 4,
+        version: 1,
+        weight: "none" as const,
       },
       ...fields,
     };
