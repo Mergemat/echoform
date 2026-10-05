@@ -70,7 +70,6 @@ describe("useStore", () => {
       useStore.setState({
         activeIdeaId: null,
         activity: [],
-        compare: null,
         discoveredProjects: [],
         projects: [],
         rootSuggestions: [],
@@ -129,7 +128,6 @@ describe("useStore", () => {
     act(() =>
       useStore.setState({
         activeIdeaId: "idea-1",
-        compare: {} as never,
         selectedProjectId: "other",
         selectedSaveId: "save-1",
       })
@@ -140,7 +138,6 @@ describe("useStore", () => {
     expect(useStore.getState().selectedProjectId).toBe("proj-1");
     expect(useStore.getState().selectedSaveId).toBeNull();
     expect(useStore.getState().activeIdeaId).toBeNull();
-    expect(useStore.getState().compare).toBeNull();
   });
 
   it("toggleSave() selects, deselects, and switches saves", () => {

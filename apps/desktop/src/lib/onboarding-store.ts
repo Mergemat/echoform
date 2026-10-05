@@ -1,11 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type OnboardingStep =
-  | "welcome"
-  | "pick-folder"
-  | "how-it-works"
-  | "done";
+export type OnboardingStep = "welcome" | "pick-folder" | "done";
 
 interface OnboardingStore {
   complete: () => void;
@@ -23,7 +19,15 @@ export const useOnboardingStore = create<OnboardingStore>()(
       step: "welcome",
     }),
     {
+      // v0 had a third "how-it-works" step; resume those users at folder setup.
+      migrate: (persisted) => {
+        const state = persisted as { step?: string } | undefined;
+        return {
+          step: state?.step === "how-it-works" ? "pick-folder" : state?.step,
+        } as OnboardingStore;
+      },
       name: "echoform-onboarding",
+      version: 1,
     }
   )
 );

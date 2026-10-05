@@ -233,12 +233,12 @@ export function PreviewRequestDialog({
 
   return (
     <Dialog onOpenChange={handleDialogOpenChange} open={open}>
-      <DialogContent className="gap-0 overflow-hidden rounded-xl border border-white/[0.08] bg-[#111215] p-0 text-white sm:max-w-[480px]">
+      <DialogContent className="gap-0 overflow-hidden rounded-xl border border-border p-0 sm:max-w-[480px]">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle className="font-semibold text-base text-white/90">
+          <DialogTitle className="font-semibold text-base text-foreground">
             Add preview to checkpoint
           </DialogTitle>
-          <DialogDescription className="mt-1 text-[13px] text-white/40 leading-relaxed">
+          <DialogDescription className="mt-1 text-[13px] text-muted-foreground leading-relaxed">
             This audio becomes part of the checkpoint’s durable history. Drop a
             file here, or bounce from Ableton into the folder below.
           </DialogDescription>
@@ -247,15 +247,19 @@ export function PreviewRequestDialog({
         <div className="space-y-5 px-6 pt-5 pb-6">
           {/* What save this is for */}
           <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.05]">
-              <MusicNote className="text-white/40" size={16} weight="duotone" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
+              <MusicNote
+                className="text-muted-foreground"
+                size={16}
+                weight="duotone"
+              />
             </div>
             <div className="min-w-0">
-              <div className="truncate font-medium text-sm text-white/85">
+              <div className="truncate font-medium text-foreground text-sm">
                 {getSaveDisplayTitle(save)}
               </div>
               {idea && (
-                <div className="mt-0.5 truncate text-white/35 text-xs">
+                <div className="mt-0.5 truncate text-muted-foreground text-xs">
                   {idea.name}
                 </div>
               )}
@@ -273,8 +277,8 @@ export function PreviewRequestDialog({
           <button
             className={`flex w-full cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors disabled:cursor-default disabled:opacity-60 ${
               dragOver
-                ? "border-white/30 bg-white/[0.06]"
-                : "border-white/[0.08] bg-white/[0.02] hover:border-white/[0.15] hover:bg-white/[0.04]"
+                ? "border-border bg-muted"
+                : "border-border bg-card hover:border-border hover:bg-muted"
             }`}
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
@@ -289,72 +293,72 @@ export function PreviewRequestDialog({
             type="button"
           >
             <CloudArrowUp
-              className={`transition-colors ${dragOver ? "text-white/60" : "text-white/25"}`}
+              className={`transition-colors ${dragOver ? "text-muted-foreground" : "text-subtle-foreground"}`}
               size={24}
               weight="duotone"
             />
-            <div className="text-[13px] text-white/50">
+            <div className="text-[13px] text-muted-foreground">
               {uploading
                 ? "Uploading..."
                 : dragOver
                   ? "Drop to attach"
                   : "Drop audio file or click to browse"}
             </div>
-            <div className="text-[11px] text-white/20">
+            <div className="text-[11px] text-subtle-foreground">
               {ACCEPTED_EXTENSIONS.join(", ")}
             </div>
           </button>
 
           {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.06]" />
-            <span className="text-[11px] text-white/20 uppercase tracking-wider">
+            <div className="h-px flex-1 bg-muted" />
+            <span className="text-[11px] text-subtle-foreground uppercase tracking-wider">
               or export from Ableton
             </span>
-            <div className="h-px flex-1 bg-white/[0.06]" />
+            <div className="h-px flex-1 bg-muted" />
           </div>
 
           {/* Export folder */}
           <button
-            className="group w-full cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.03] p-4 text-left transition-colors hover:bg-white/[0.05] disabled:cursor-default disabled:opacity-60"
+            className="group w-full cursor-pointer rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-60"
             disabled={loading || revealing}
             onClick={handleRevealFolder}
             type="button"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="mb-1.5 text-white/35 text-xs">
+                <div className="mb-1.5 text-muted-foreground text-xs">
                   Export to this folder
                 </div>
-                <div className="break-all text-white/65 text-xs leading-relaxed">
+                <div className="break-all text-muted-foreground text-xs leading-relaxed">
                   {loading ? "Setting up..." : (preview?.folderPath ?? "...")}
                 </div>
               </div>
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.04] transition-colors group-hover:bg-white/[0.08]">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted transition-colors group-hover:bg-muted">
                 <FolderOpen
-                  className="text-white/35 transition-colors group-hover:text-white/55"
+                  className="text-muted-foreground transition-colors group-hover:text-muted-foreground"
                   size={15}
                   weight="duotone"
                 />
               </div>
             </div>
-            <div className="mt-2 text-[11px] text-white/25">
+            <div className="mt-2 text-[11px] text-subtle-foreground">
               {revealing ? "Opening in Finder..." : "Click to open in Finder"}
               {" · any audio filename works"}
             </div>
           </button>
 
           {error && (
-            <div className="rounded-lg border border-red-400/12 bg-red-400/8 px-3 py-2.5 text-red-300/75 text-xs leading-relaxed">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-destructive text-xs leading-relaxed">
               {error}
             </div>
           )}
 
           {/* Footer area */}
           <div className="flex items-center justify-between pt-1">
-            <div className="text-white/25 text-xs">{statusText}</div>
+            <div className="text-subtle-foreground text-xs">{statusText}</div>
             <Button
-              className="rounded-lg text-white/40 text-xs hover:text-white/70"
+              className="rounded-lg text-muted-foreground text-xs hover:text-muted-foreground"
               disabled={!idea}
               onClick={() => {
                 if (!idea) {

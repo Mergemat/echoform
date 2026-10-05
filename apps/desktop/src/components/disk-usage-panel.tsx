@@ -1,3 +1,4 @@
+import { HardDrives } from "@phosphor-icons/react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,13 +16,9 @@ import {
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { posthog } from "@/lib/posthog";
-import type { DiskUsage, DiskUsageSave } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import {
-  formatDateTime,
-  formatSize,
-  getSaveDisplayTitle,
-} from "./timeline-utils";
+import type { DiskUsage } from "@/lib/types";
+import { plural } from "@/lib/utils";
+import { formatSize } from "./timeline-utils";
 
 // ── Fetch helpers ────────────────────────────────────────────────────
 
@@ -59,125 +56,6 @@ async function compactStorage(projectId: string): Promise<number> {
     throw new Error(data.error ?? "Compaction failed");
   }
   return data.deletedCount as number;
-}
-
-// ── Sub-components ───────────────────────────────────────────────────
-
-/** SVG arc ring showing dedup efficiency. */
-function UsageRing({
-  usedBytes,
-  totalBytes,
-}: {
-  usedBytes: number;
-  totalBytes: number;
-}) {
-  const size = 60;
-  const stroke = 4;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const ratio = totalBytes > 0 ? Math.min(usedBytes / totalBytes, 1) : 0;
-  const offset = circumference * (1 - ratio);
-
-  return (
-    <svg
-      className="shrink-0 -rotate-90"
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      width={size}
-    >
-      <circle
-        className="text-white/[0.06]"
-        cx={size / 2}
-        cy={size / 2}
-        fill="none"
-        r={radius}
-        stroke="currentColor"
-        strokeWidth={stroke}
-      />
-      <circle
-        className="text-white/40 transition-all duration-500"
-        cx={size / 2}
-        cy={size / 2}
-        fill="none"
-        r={radius}
-        stroke="currentColor"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        strokeWidth={stroke}
-      />
-    </svg>
-  );
-}
-
-function StatRow({
-  label,
-  value,
-  dim,
-}: {
-  label: string;
-  value: string | number;
-  dim?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-white/35 text-xs">{label}</span>
-      <span
-        className={cn(
-          "font-mono text-xs tabular-nums",
-          dim ? "text-white/30" : "text-white/60"
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/** Horizontal bar chart showing per-save snapshot sizes. */
-function SaveSizeChart({ saves }: { saves: DiskUsageSave[] }) {
-  if (saves.length === 0) {
-    return null;
-  }
-  const maxBytes = Math.max(...saves.map((s) => s.snapshotBytes), 1);
-
-  return (
-    <div className="space-y-[3px]">
-      {saves.map((s) => {
-        const pct = (s.snapshotBytes / maxBytes) * 100;
-        return (
-          <div
-            className="group flex items-center gap-2"
-            key={s.id}
-            title={`${getSaveDisplayTitle(s)} — ${formatSize(s.snapshotBytes)} @ ${formatDateTime(s.createdAt)}`}
-          >
-            <span
-              className={cn(
-                "w-[86px] shrink-0 truncate text-[10px] transition-colors",
-                s.auto
-                  ? "text-white/20 group-hover:text-white/35"
-                  : "text-white/35 group-hover:text-white/50"
-              )}
-            >
-              {getSaveDisplayTitle(s, { compact: true })}
-            </span>
-            <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-white/[0.04]">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-300",
-                  s.auto ? "bg-white/15" : "bg-white/35"
-                )}
-                style={{ width: `${Math.max(pct, 2)}%` }}
-              />
-            </div>
-            <span className="w-[38px] shrink-0 text-right font-mono text-[10px] text-white/20 tabular-nums transition-colors group-hover:text-white/40">
-              {formatSize(s.snapshotBytes)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ── Main panel ───────────────────────────────────────────────────────
@@ -264,10 +142,8 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
         });
         const nextActionMsg =
           deleted === 0
-            ? `No automatic checkpoints older than ${days}d.`
-            : `Pruned ${deleted} automatic checkpoint${
-                deleted === 1 ? "" : "s"
-              }.`;
+            ? `Nothing to remove older than ${days} days.`
+            : `Removed ${plural(deleted, "checkpoint")}.`;
         const fresh = await fetchDiskUsage(projectId);
         setState((current) => ({
           ...current,
@@ -300,10 +176,8 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
         });
         const nextActionMsg =
           deleted === 0
-            ? "No automatic checkpoints were eligible for compaction."
-            : `Compacted ${deleted} automatic checkpoint${
-                deleted === 1 ? "" : "s"
-              }.`;
+            ? "Nothing to thin out."
+            : `Removed ${plural(deleted, "checkpoint")}.`;
         const fresh = await fetchDiskUsage(projectId);
         setState((current) => ({
           ...current,
@@ -322,138 +196,61 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
       });
   };
 
-  const dedupPct =
-    usage && usage.totalSnapshotBytes > 0
-      ? Math.round((usage.dedupSavings / usage.totalSnapshotBytes) * 100)
-      : 0;
+  const busy = compacting || pruning;
+  const eligible = usage?.eligibleAutoSaveCount ?? 0;
 
   return (
     <>
       <Popover onOpenChange={handleOpenChange} open={open}>
         <PopoverTrigger asChild>
-          <Button
-            className="h-auto px-1 py-0 font-mono text-[11px] text-white/25 tabular-nums hover:text-white/50"
-            size="sm"
-            variant="ghost"
-          >
-            {usage ? formatSize(usage.blobStorageBytes) : "Storage"}
+          <Button size="default" type="button" variant="outline">
+            <HardDrives size={15} />
+            Storage
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent
-          align="end"
-          className="w-[360px] overflow-hidden rounded-xl border-white/[0.08] bg-[#111114] p-0"
-        >
+        <PopoverContent align="end" className="w-[340px] p-0">
           <div className="space-y-4 p-4">
             {loading && !usage && (
               <div className="space-y-2">
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-8 w-2/3 rounded-lg" />
+                <Skeleton className="h-10 w-full rounded-md" />
+                <Skeleton className="h-6 w-2/3 rounded-md" />
               </div>
             )}
             {error && (
-              <div className="rounded-lg bg-red-400/[0.06] px-3 py-2 text-[11px] text-red-400/70">
+              <div
+                className="rounded-md bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                role="alert"
+              >
                 {error}
               </div>
             )}
 
             {usage && (
               <>
-                {/* Hero: ring + primary stat */}
-                <div className="flex items-center gap-4">
-                  <UsageRing
-                    totalBytes={usage.totalSnapshotBytes}
-                    usedBytes={usage.blobStorageBytes}
-                  />
-                  <div>
-                    <div className="font-semibold text-[20px] text-white/85 tabular-nums leading-tight tracking-tight">
-                      {formatSize(usage.blobStorageBytes)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-white/30">
-                      on disk
-                      {dedupPct > 0 && (
-                        <span className="text-white/20">
-                          {" "}
-                          &middot; {dedupPct}% saved by dedup
-                        </span>
-                      )}
-                    </div>
+                <div>
+                  <div className="font-semibold text-[20px] tabular-nums tracking-tight">
+                    {formatSize(usage.blobStorageBytes)}
                   </div>
+                  <p className="mt-1 text-[12px] text-muted-foreground leading-relaxed">
+                    used by {usage.totalSaveCount} checkpoints. Files that don't
+                    change between saves are stored only once.
+                  </p>
                 </div>
 
-                {/* Stats */}
-                <div className="space-y-1.5 pt-1">
-                  <StatRow
-                    label="All checkpoints"
-                    value={usage.totalSaveCount}
-                  />
-                  <StatRow label="Automatic" value={usage.autoSaveCount} />
-                  <StatRow label="Manual" value={usage.manualSaveCount} />
-                  <StatRow
-                    dim
-                    label="Dedup savings"
-                    value={formatSize(usage.dedupSavings)}
-                  />
-                  <StatRow
-                    dim
-                    label="Compactable"
-                    value={usage.eligibleAutoSaveCount}
-                  />
-                  <StatRow
-                    dim
-                    label="Largest automatic"
-                    value={formatSize(usage.largestAutoSaveBytes)}
-                  />
-                  <StatRow
-                    dim
-                    label="Oldest automatic"
-                    value={
-                      usage.oldestAutoSaveAt
-                        ? formatDateTime(usage.oldestAutoSaveAt)
-                        : "-"
-                    }
-                  />
-                </div>
-
-                {/* Per-save chart */}
-                {usage.saves.length > 0 && (
-                  <div className="pt-1">
-                    <div className="mb-2 flex items-center gap-3">
-                      <span className="font-medium text-[10px] text-white/25 uppercase tracking-wider">
-                        Checkpoints
-                      </span>
-                      <div className="ml-auto flex items-center gap-2">
-                        <span className="flex items-center gap-1 text-[10px] text-white/20">
-                          <span className="inline-block size-1.5 rounded-full bg-white/35" />
-                          manual
-                        </span>
-                        <span className="flex items-center gap-1 text-[10px] text-white/20">
-                          <span className="inline-block size-1.5 rounded-full bg-white/15" />
-                          auto
-                        </span>
+                <div className="space-y-2 border-border border-t pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-[12px]">
+                        Thin out history
                       </div>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">
+                        Keeps everything from the last 24 hours, then one
+                        checkpoint per hour, day, and week.
+                      </p>
                     </div>
-                    <SaveSizeChart saves={usage.saves} />
-                  </div>
-                )}
-
-                {/* Compact + Prune */}
-                <div className="border-white/[0.06] border-t pt-1">
-                  <div className="flex items-center justify-between pt-3">
-                    <span className="text-[11px] text-white/30">
-                      Retention compaction
-                    </span>
-                    <button
-                      className={cn(
-                        "rounded-md px-2 py-0.5 text-[11px] transition-colors",
-                        "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
-                        "disabled:pointer-events-none disabled:opacity-30"
-                      )}
-                      disabled={
-                        compacting ||
-                        pruning ||
-                        usage.eligibleAutoSaveCount === 0
-                      }
+                    <Button
+                      disabled={busy || eligible === 0}
                       onClick={() =>
                         setState((current) => ({
                           ...current,
@@ -462,30 +259,21 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
                           open: false,
                         }))
                       }
+                      size="xs"
                       type="button"
+                      variant="secondary"
                     >
-                      {compacting ? "Compacting..." : "Compact checkpoints"}
-                    </button>
+                      {compacting ? "Thinning…" : "Thin out"}
+                    </Button>
                   </div>
-                  <div className="mt-1.5 text-[10px] text-white/15">
-                    Keeps all last-24h automatic checkpoints, then one per
-                    hour/day/week.
-                  </div>
-                  <div className="flex items-center justify-between pt-3">
-                    <span className="text-[11px] text-white/30">
-                      Prune automatic checkpoints older than
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <span className="font-medium text-[12px]">
+                      Remove older than
                     </span>
                     <div className="flex gap-1">
                       {PRUNE_OPTIONS.map((opt) => (
-                        <button
-                          className={cn(
-                            "rounded-md px-2 py-0.5 text-[11px] transition-colors",
-                            "text-white/30 hover:bg-white/[0.06] hover:text-white/60",
-                            "disabled:pointer-events-none disabled:opacity-30"
-                          )}
-                          disabled={
-                            pruning || compacting || usage.autoSaveCount === 0
-                          }
+                        <Button
+                          disabled={busy || usage.autoSaveCount === 0}
                           key={opt.days}
                           onClick={() =>
                             setState((current) => ({
@@ -495,35 +283,26 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
                               open: false,
                             }))
                           }
+                          size="xs"
                           type="button"
+                          variant="ghost"
                         >
                           {opt.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    The latest and first checkpoint of each set, and any
+                    checkpoint that is pinned, named, has a note or a preview,
+                    are always kept. Your Ableton project is never touched.
+                  </p>
                   {actionMsg && (
-                    <div
-                      className="mt-2 text-[11px] text-white/60"
-                      role="status"
-                    >
+                    <div className="text-[12px] text-foreground" role="status">
                       {actionMsg}
                     </div>
                   )}
-                  <div className="mt-2 text-[10px] text-white/40">
-                    The latest checkpoint and each Ableton set's first
-                    checkpoint are never pruned.
-                  </div>
                 </div>
-
-                {/* Refresh */}
-                <button
-                  className="text-[11px] text-white/20 transition-colors hover:text-white/40"
-                  onClick={load}
-                  type="button"
-                >
-                  Refresh
-                </button>
               </>
             )}
           </div>
@@ -532,7 +311,7 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
 
       <Dialog
         onOpenChange={(nextOpen) => {
-          if (!(nextOpen || compacting || pruning)) {
+          if (!(nextOpen || busy)) {
             setState((current) => ({
               ...current,
               confirmAction: null,
@@ -541,24 +320,22 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
         }}
         open={confirmAction !== null}
       >
-        <DialogContent className="border-white/[0.12] bg-[#111215]">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-white/90">
-              Permanently remove historical automatic checkpoints?
-            </DialogTitle>
-            <DialogDescription className="text-white/55">
+            <DialogTitle>Remove older checkpoints for good?</DialogTitle>
+            <DialogDescription className="leading-relaxed">
               {confirmAction?.kind === "compact"
-                ? `This may remove up to ${usage?.eligibleAutoSaveCount ?? 0} automatic checkpoint${usage?.eligibleAutoSaveCount === 1 ? "" : "s"}, keeping the recent and hourly/daily/weekly checkpoints described in Storage.`
+                ? `This removes up to ${plural(eligible, "checkpoint")} that fall between the hourly, daily, and weekly ones it keeps.`
                 : confirmAction
-                  ? `This removes eligible automatic checkpoints older than ${confirmAction.days} days. The latest checkpoint and each Ableton set's first checkpoint remain protected.`
+                  ? `This removes checkpoints older than ${confirmAction.days} days that aren't protected.`
                   : null}{" "}
-              This cannot be undone. Manual checkpoints and Ableton files stay
-              untouched.
+              They can't be restored afterwards. Protected checkpoints and your
+              Ableton project stay untouched.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="border-white/[0.08] bg-white/[0.03]">
+          <DialogFooter>
             <Button
-              disabled={compacting || pruning}
+              disabled={busy}
               onClick={() =>
                 setState((current) => ({
                   ...current,
@@ -567,10 +344,10 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
               }
               variant="ghost"
             >
-              Keep checkpoints
+              Keep them
             </Button>
             <Button
-              disabled={compacting || pruning}
+              disabled={busy}
               onClick={() => {
                 if (confirmAction?.kind === "compact") {
                   void handleCompact();
@@ -580,7 +357,7 @@ function ProjectDiskUsagePanel({ projectId }: { projectId: string }) {
               }}
               variant="destructive"
             >
-              Confirm removal
+              Remove checkpoints
             </Button>
           </DialogFooter>
         </DialogContent>
