@@ -1,13 +1,13 @@
 import {
   ArrowRight,
-  CaretUpDown,
-  Check,
   CheckCircle,
-  Copy,
+  ClockCounterClockwise,
+  FloppyDisk,
   FolderSimple,
-  FolderSimplePlus,
+  GitBranch,
+  ListMagnifyingGlass,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -15,656 +15,225 @@ import { sendDaemonCommand } from "@/lib/daemon-client";
 import { useOnboardingStore } from "@/lib/onboarding-store";
 import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { cn, plural, shortenPath } from "@/lib/utils";
 
-// ── Helpers ─────────────────────────────────────────────────────────
-
-function shortenPath(p: string): string {
-  let s = p;
-  const parts = s.split("/");
-  if (parts.length >= 3 && parts[1] === "Users") {
-    const home = `/Users/${parts[2]}`;
-    if (s.startsWith(`${home}/`)) {
-      s = `~${s.slice(home.length)}`;
-    }
-  }
-  s = s.replace("~/Library/Mobile Documents/com~apple~CloudDocs", "~/iCloud");
-  return s;
-}
-
-// ── Step 1: Welcome ─────────────────────────────────────────────────
+const PROMISES = [
+  {
+    icon: FloppyDisk,
+    text: "Every time you save in Ableton, Echoform stores a full copy of the project, samples included, outside your project folder.",
+  },
+  {
+    icon: ListMagnifyingGlass,
+    text: "See what changed between saves: tracks, devices, clips, tempo.",
+  },
+  {
+    icon: GitBranch,
+    text: "Continue from any earlier checkpoint as a separate copy. Your current project is never overwritten.",
+  },
+];
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex flex-col items-center text-center">
-      <div className="relative">
-        <div className="absolute -inset-6 rounded-full bg-white/[0.03] blur-2xl" />
-        <Logo className="relative size-14 text-white/80" />
-      </div>
-
-      <h1 className="mt-6 font-semibold text-[28px] text-white/95 tracking-tight">
-        Welcome to Echoform
+    <div className="flex w-full max-w-md flex-col">
+      <Logo className="size-10 text-foreground" />
+      <h1 className="mt-6 font-semibold text-[26px] tracking-tight">
+        Every Ableton save, kept.
       </h1>
-      <p className="mt-2 max-w-sm text-[15px] text-white/35 leading-relaxed">
-        Automatic checkpoints for your Ableton projects. Every saved change is
-        kept outside your working folder.
+      <p className="mt-2 text-[14px] text-muted-foreground leading-relaxed">
+        Echoform quietly records a checkpoint each time you save, so you can
+        experiment freely and always get back to an earlier version.
       </p>
 
-      <div className="mt-10 flex flex-col gap-4 text-left">
-        {[
-          {
-            desc: "Echoform finds every Ableton project inside.",
-            title: "Point at your folders",
-          },
-          {
-            desc: "Changes are captured silently in the background.",
-            title: "Work like you always do",
-          },
-          {
-            desc: "Browse checkpoints, compare changes, or recover an earlier moment.",
-            title: "Go back anytime",
-          },
-        ].map((item, i) => (
-          <div className="flex items-start gap-3" key={item.title}>
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/[0.06] font-medium text-[11px] text-white/30">
-              {i + 1}
-            </div>
-            <div>
-              <div className="font-medium text-[13px] text-white/60">
-                {item.title}
-              </div>
-              <div className="mt-0.5 text-[12px] text-white/20">
-                {item.desc}
-              </div>
-            </div>
-          </div>
+      <ul className="mt-8 space-y-4">
+        {PROMISES.map(({ icon: Icon, text }) => (
+          <li className="flex gap-3" key={text}>
+            <Icon className="mt-0.5 shrink-0 text-success" size={18} />
+            <span className="text-[13px] leading-relaxed">{text}</span>
+          </li>
         ))}
-      </div>
+      </ul>
 
-      <Button
-        className="mt-10 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={onNext}
-        size="lg"
-        type="button"
-      >
-        Get started
-        <ArrowRight className="text-white/50" size={14} />
+      <p className="mt-8 flex gap-3 rounded-lg border border-border bg-card p-3 text-[12px] text-muted-foreground leading-relaxed">
+        <ClockCounterClockwise className="mt-0.5 shrink-0" size={16} />
+        Everything stays on this Mac. Echoform is version history, not a backup:
+        keep backing up your drive as usual.
+      </p>
+
+      <Button className="mt-8 self-start" onClick={onNext} size="lg">
+        Choose project folders
+        <ArrowRight size={14} />
       </Button>
     </div>
   );
 }
 
-// ── Step 2: Pick a folder ───────────────────────────────────────────
-
-function PickFolderStep() {
+function PickFolderStep({ onDone }: { onDone: () => void }) {
   const rootSuggestions = useStore((s) => s.rootSuggestions);
   const rootSuggestionsLoaded = useStore((s) => s.rootSuggestionsLoaded);
   const roots = useStore((s) => s.roots);
-  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [addedPath, setAddedPath] = useState<string | null>(null);
-  const suggestionsLoading = !rootSuggestionsLoaded;
+  const projects = useStore((s) => s.projects);
+  const [pendingPaths, setPendingPaths] = useState<string[]>([]);
 
-  // Trigger suggestion discovery on mount
   useEffect(() => {
-    if (rootSuggestionsLoaded) {
-      return;
-    }
-    fetchTimerRef.current = setTimeout(() => {
+    if (!rootSuggestionsLoaded) {
       sendDaemonCommand({ type: "discover-root-suggestions" });
-    }, 150);
-    return () => {
-      if (fetchTimerRef.current) {
-        clearTimeout(fetchTimerRef.current);
-        fetchTimerRef.current = null;
-      }
-    };
+    }
   }, [rootSuggestionsLoaded]);
+
+  const isWatched = (path: string) => roots.some((root) => root.path === path);
 
   const watchPath = (path: string, source: "picker" | "suggestion") => {
     const trimmed = path.trim();
     if (!trimmed) {
       return;
     }
-    setAddedPath(trimmed);
+    setPendingPaths((paths) => [...paths, trimmed]);
     posthog.capture("root_added", { context: "onboarding", source });
-    sendDaemonCommand({ path: trimmed, type: "add-root" });
-    sendDaemonCommand({ type: "discover-root-suggestions" });
+    sendDaemonCommand({ path: trimmed, type: "add-root" }).finally(() => {
+      setPendingPaths((paths) => paths.filter((p) => p !== trimmed));
+    });
   };
 
   const handlePickFolder = async () => {
     if (!window.echoform?.pickFolder) {
-      toast.error("Folder picker is only available in the desktop app.");
+      toast.error("The folder picker is only available in the desktop app.");
       return;
     }
     try {
       const selectedPath = await window.echoform.pickFolder();
-      if (!selectedPath) {
-        return;
+      if (selectedPath) {
+        watchPath(selectedPath, "picker");
       }
-      watchPath(selectedPath, "picker");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to open folder picker";
-      toast.error(message);
+      toast.error(
+        error instanceof Error ? error.message : "Couldn't open folder picker"
+      );
     }
   };
 
-  const hasAddedRoot = roots.length > 0;
+  const scanning = pendingPaths.length > 0;
+  const otherRoots = roots.filter(
+    (root) => !rootSuggestions.some((s) => s.path === root.path)
+  );
 
   return (
-    <div className="flex w-full max-w-md flex-col items-center text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-white/[0.06]">
-        <FolderSimplePlus className="text-white/50" size={24} />
-      </div>
-      <h2 className="mt-5 font-semibold text-white/90 text-xl tracking-tight">
-        Choose a folder to watch
-      </h2>
-      <p className="mt-2 text-[13px] text-white/30 leading-relaxed">
-        Pick a folder that contains your Ableton projects.
-        <br />
-        Echoform finds all .als files inside automatically.
+    <div className="flex w-full max-w-md flex-col">
+      <h1 className="font-semibold text-[22px] tracking-tight">
+        Where are your Ableton projects?
+      </h1>
+      <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+        Pick the folder you keep projects in. Echoform finds every project
+        inside it, including ones you create later. Nothing in these folders is
+        moved or changed.
       </p>
-      {/* Primary action: folder picker */}
-      <Button
-        className="mt-7 gap-2 rounded-xl px-6 py-5 text-sm"
-        onClick={() => void handlePickFolder()}
-        size="lg"
-        type="button"
-      >
-        <FolderSimple size={18} />
-        Browse for folder
-      </Button>
-      {/* Suggested folders — always rendered to avoid layout shift */}
-      <div className="mt-8 w-full text-left">
-        <div className="mb-3 font-medium text-[11px] text-white/20 uppercase tracking-widest">
-          Suggested folders
-        </div>
-        <div className="space-y-1.5">
-          {suggestionsLoading && rootSuggestions.length === 0 ? (
-            <div className="rounded-lg border border-white/[0.06] border-dashed px-4 py-3.5 text-center text-[12px] text-white/20">
-              Scanning for music folders...
-            </div>
-          ) : rootSuggestions.length === 0 ? (
-            <div className="rounded-lg border border-white/[0.06] border-dashed px-4 py-3.5 text-center text-[12px] text-white/20">
-              No Ableton folders found — use Browse above.
-            </div>
-          ) : (
-            rootSuggestions.map((suggestion) => {
-              const isAdded =
-                addedPath === suggestion.path ||
-                roots.some((r) => r.path === suggestion.path);
 
-              return (
-                <div
-                  className={cn(
-                    "flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 transition-all duration-200",
-                    isAdded
-                      ? "border-emerald-500/20 bg-emerald-500/[0.05]"
-                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]"
-                  )}
-                  key={suggestion.path}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] text-white/70">
-                      {shortenPath(suggestion.path)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-white/25">
-                      {suggestion.projectCount} project
-                      {suggestion.projectCount === 1 ? "" : "s"}
-                    </div>
-                  </div>
-                  {isAdded ? (
-                    <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-emerald-400/70">
-                      <CheckCircle size={14} weight="fill" />
-                      Added
-                    </div>
-                  ) : (
-                    <Button
-                      className="shrink-0 rounded-lg text-[11px]"
-                      onClick={() => watchPath(suggestion.path, "suggestion")}
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                    >
-                      Watch
-                    </Button>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Confirmation that a folder was added */}
-      {hasAddedRoot && (
-        <div className="mt-6 text-[12px] text-emerald-400/60">
-          <CheckCircle
-            className="mr-1 inline-block -translate-y-px"
-            size={13}
-            weight="fill"
-          />
-          Folder added — Echoform is now scanning your projects.
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Step 3: How it works ────────────────────────────────────────────
-
-const TIMELINE_ENTRIES = [
-  {
-    auto: false,
-    chips: [
-      { color: "emerald" as const, text: "+Bass" },
-      { color: "amber" as const, text: "~Mixer" },
-    ],
-    head: true,
-    label: "Added bass track",
-    time: "2:41 PM",
-  },
-  {
-    auto: false,
-    chips: [{ color: "amber" as const, text: "~Drums" }],
-    head: false,
-    label: "Adjusted EQ on drums",
-    time: "2:38 PM",
-  },
-  {
-    auto: true,
-    chips: [],
-    head: false,
-    label: "Auto-snapshot",
-    time: "2:30 PM",
-  },
-  {
-    auto: false,
-    chips: [
-      { color: "emerald" as const, text: "+Vocals" },
-      { color: "red" as const, text: "-Scratch" },
-    ],
-    head: false,
-    label: "New vocal take",
-    time: "2:12 PM",
-  },
-];
-
-const CHIP_STYLES = {
-  amber: "text-amber-400/80 bg-amber-400/10 border-amber-400/15",
-  emerald: "text-emerald-400/80 bg-emerald-400/10 border-emerald-400/15",
-  red: "text-red-400/80 bg-red-400/10 border-red-400/15",
-};
-
-function MockTimeline() {
-  return (
-    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      {TIMELINE_ENTRIES.map((entry, i) => (
-        <div
-          className={cn(
-            "relative flex items-center gap-2.5 py-3 pr-4 pl-4",
-            i === 0
-              ? "border-white/50 border-l-2 bg-white/[0.06]"
-              : "border-transparent border-l-2"
-          )}
-          key={entry.time}
-        >
-          {/* Timeline guide */}
-          <div
-            className="absolute top-0 bottom-0 left-[22px] w-px bg-white/[0.05]"
-            style={
-              i === 0
-                ? { backgroundColor: "rgba(255,255,255,0.05)", top: "50%" }
-                : i === TIMELINE_ENTRIES.length - 1
-                  ? { bottom: "50%" }
-                  : undefined
-            }
-          />
-
-          {/* Dot */}
-          <div
-            className={cn(
-              "relative z-10 size-2 shrink-0 rounded-full ring-2",
-              i === 0
-                ? "bg-white ring-white/20"
-                : entry.head
-                  ? "bg-emerald-400 ring-emerald-400/20"
-                  : entry.auto
-                    ? "bg-white/15 ring-white/[0.04]"
-                    : "bg-white/40 ring-white/10"
-            )}
-          />
-
-          {/* Content */}
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex items-center gap-1.5">
-              <span
-                className={cn(
-                  "truncate text-[13px] leading-tight",
-                  i === 0 ? "font-medium text-white/90" : "text-white/55"
-                )}
-              >
-                {entry.label}
-              </span>
-              {!entry.auto && (
-                <span className="shrink-0 rounded border-transparent bg-emerald-400/8 px-1 py-0 text-[10px] text-emerald-400/60 uppercase leading-tight tracking-widest">
-                  saved
-                </span>
-              )}
-            </div>
-            {entry.chips.length > 0 && (
-              <div className="flex items-center gap-1">
-                {entry.chips.map((chip) => (
-                  <span
-                    className={cn(
-                      "rounded border px-1 py-0 font-mono text-[10px] leading-tight",
-                      CHIP_STYLES[chip.color]
-                    )}
-                    key={chip.text}
-                  >
-                    {chip.text}
-                  </span>
-                ))}
-              </div>
-            )}
+      <div className="mt-6 space-y-1.5">
+        {!rootSuggestionsLoaded && rootSuggestions.length === 0 && (
+          <div className="rounded-lg border border-border border-dashed px-4 py-3 text-[12px] text-muted-foreground">
+            Looking for folders with Ableton projects…
           </div>
-
-          {/* Time */}
-          <span className="shrink-0 text-[11px] text-white/20 tabular-nums">
-            {entry.time}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MockTabs() {
-  const tabs = [
-    { active: true, current: true, name: "Summer Beat.als", saves: 24 },
-    {
-      active: false,
-      current: false,
-      name: "Summer Beat (vocal mix).als",
-      saves: 8,
-    },
-  ];
-
-  return (
-    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      {/* Tab bar */}
-      <div className="flex items-center gap-0 border-white/[0.06] border-b px-3">
-        {tabs.map((tab) => (
-          <div
-            className={cn(
-              "relative flex items-center gap-1.5 whitespace-nowrap px-4 py-3 text-[13px]",
-              tab.active ? "text-white/85" : "text-white/30"
-            )}
-            key={tab.name}
-          >
-            {tab.current && (
-              <span className="size-1.5 shrink-0 rounded-full bg-emerald-400/70" />
-            )}
-            <span className="font-medium">{tab.name}</span>
-            <span className="text-[11px] text-white/20 tabular-nums">
-              {tab.saves}
-            </span>
-            {tab.active && (
-              <span className="absolute right-3 bottom-0 left-3 h-[2px] rounded-full bg-white/40" />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Fake timeline entries beneath */}
-      <div className="px-4 py-3">
+        )}
         {[
-          { dim: false, label: "Latest checkpoint" },
-          { dim: true, label: "Earlier today" },
-          { dim: true, label: "Yesterday" },
-        ].map((row) => (
-          <div className="flex items-center gap-2.5 py-2" key={row.label}>
+          ...rootSuggestions,
+          ...otherRoots.map((root) => ({ path: root.path, projectCount: -1 })),
+        ].map((suggestion) => {
+          const watched = isWatched(suggestion.path);
+          const pending = pendingPaths.includes(suggestion.path);
+          return (
             <div
               className={cn(
-                "size-2 shrink-0 rounded-full ring-2",
-                row.dim
-                  ? "bg-white/15 ring-white/[0.04]"
-                  : "bg-emerald-400 ring-emerald-400/20"
+                "flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5",
+                watched ? "border-success/30 bg-success/5" : "border-border"
               )}
-            />
-            <span
-              className={cn(
-                "text-[13px]",
-                row.dim ? "text-white/30" : "text-white/55"
-              )}
+              key={suggestion.path}
             >
-              {row.label}
-            </span>
-          </div>
-        ))}
+              <div className="min-w-0">
+                <div className="truncate text-[13px]">
+                  {shortenPath(suggestion.path)}
+                </div>
+                {suggestion.projectCount >= 0 && (
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {plural(suggestion.projectCount, "project")} found
+                  </div>
+                )}
+              </div>
+              {watched ? (
+                <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-success">
+                  <CheckCircle size={14} weight="fill" />
+                  Watching
+                </span>
+              ) : (
+                <Button
+                  disabled={pending}
+                  onClick={() => watchPath(suggestion.path, "suggestion")}
+                  size="sm"
+                  variant="secondary"
+                >
+                  {pending ? "Adding…" : "Watch"}
+                </Button>
+              )}
+            </div>
+          );
+        })}
+        <Button
+          className="w-full"
+          onClick={() => void handlePickFolder()}
+          variant="outline"
+        >
+          <FolderSimple size={15} />
+          Choose another folder…
+        </Button>
       </div>
-    </div>
-  );
-}
 
-function MockRecovery() {
-  const projectCopies = [
-    { active: true, checkpoints: 24, current: true, name: "Working project" },
-    {
-      active: false,
-      checkpoints: 1,
-      current: false,
-      name: "Recovered checkpoint",
-    },
-  ];
-
-  return (
-    <div className="w-full overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      {/* Version selector header */}
-      <div className="flex items-center justify-between border-white/[0.06] border-b px-3 py-2.5">
+      <div className="mt-8 flex items-center justify-between gap-4">
+        <span className="text-[12px] text-muted-foreground" role="status">
+          {scanning
+            ? "Scanning for projects…"
+            : roots.length > 0
+              ? `${plural(projects.length, "project")} found in ${plural(roots.length, "folder")}`
+              : ""}
+        </span>
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-white/[0.06]">
-            <Copy className="text-white/40" size={13} />
-          </div>
-          <div>
-            <span className="block font-medium text-[13px] text-white/75">
-              Main
-            </span>
-            <span className="block text-[10px] text-emerald-400/60 uppercase tracking-wider">
-              current
-            </span>
-          </div>
+          {roots.length === 0 && (
+            <Button onClick={onDone} variant="ghost">
+              Skip for now
+            </Button>
+          )}
+          <Button disabled={roots.length === 0 || scanning} onClick={onDone}>
+            Continue
+            <ArrowRight size={14} />
+          </Button>
         </div>
-        <CaretUpDown className="text-white/25" size={12} />
-      </div>
-
-      {/* Project-copy list */}
-      <div className="p-1.5">
-        <div className="px-2 py-1.5 font-medium text-[10px] text-white/25 uppercase tracking-[0.14em]">
-          Project copies
-        </div>
-        {projectCopies.map((projectCopy) => (
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-2",
-              projectCopy.active
-                ? "bg-white/[0.08] text-white/90"
-                : "text-white/50"
-            )}
-            key={projectCopy.name}
-          >
-            <span className="flex-1 text-[13px]">{projectCopy.name}</span>
-            <span className="shrink-0 text-[10px] text-white/20 tabular-nums">
-              {projectCopy.checkpoints}
-            </span>
-            {projectCopy.current && (
-              <div className="size-1.5 shrink-0 rounded-full bg-emerald-400/70 ring-2 ring-emerald-400/20" />
-            )}
-            {projectCopy.active && (
-              <Check
-                className="shrink-0 text-white/40"
-                size={12}
-                weight="bold"
-              />
-            )}
-          </div>
-        ))}
       </div>
     </div>
   );
 }
-
-const HOW_IT_WORKS_STEPS = [
-  {
-    desc: "Every save in Ableton creates a checkpoint. Select one to inspect what changed.",
-    mockup: MockTimeline,
-    title: "Checkpoints",
-  },
-  {
-    desc: "Multiple .als files in one project each get their own tab.",
-    mockup: MockTabs,
-    title: "Tabs",
-  },
-  {
-    desc: "Continue from any checkpoint in a separate working copy. Your current project stays untouched.",
-    mockup: MockRecovery,
-    title: "Branch safely",
-  },
-];
-
-function HowItWorksStep({ onNext }: { onNext: () => void }) {
-  const [subStep, setSubStep] = useState(0);
-  const current = HOW_IT_WORKS_STEPS[subStep];
-  const isLast = subStep === HOW_IT_WORKS_STEPS.length - 1;
-  const Mockup = current.mockup;
-
-  return (
-    <div className="flex w-full max-w-md flex-col items-center text-center">
-      {/* Sub-step indicator */}
-      <div className="mb-6 flex items-center gap-1.5">
-        {HOW_IT_WORKS_STEPS.map((s) => (
-          <div
-            className={cn(
-              "h-1 rounded-full transition-all duration-300",
-              s.title === current.title
-                ? "w-5 bg-white/30"
-                : "w-1.5 bg-white/10"
-            )}
-            key={s.title}
-          />
-        ))}
-      </div>
-
-      {/* Title + description */}
-      <div
-        className="fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-400"
-        key={`text-${subStep}`}
-      >
-        <h2 className="font-semibold text-white/90 text-xl tracking-tight">
-          {current.title}
-        </h2>
-        <p className="mt-2 text-[13px] text-white/30 leading-relaxed">
-          {current.desc}
-        </p>
-      </div>
-
-      {/* Mockup */}
-      <div
-        className="fade-in slide-in-from-bottom-3 mt-6 w-full animate-in fill-mode-both duration-500"
-        key={`mockup-${subStep}`}
-        style={{ animationDelay: "80ms" }}
-      >
-        <Mockup />
-      </div>
-
-      {/* Navigation */}
-      <Button
-        className="mt-8 gap-2 rounded-xl px-7 py-5 text-sm"
-        onClick={() => {
-          if (isLast) {
-            posthog.capture("onboarding_completed");
-            onNext();
-          } else {
-            setSubStep((s) => s + 1);
-          }
-        }}
-        size="lg"
-        type="button"
-      >
-        {isLast ? "Let's go" : "Next"}
-        <ArrowRight className="text-white/50" size={14} />
-      </Button>
-    </div>
-  );
-}
-
-// ── Main Onboarding Container ───────────────────────────────────────
 
 export function WelcomeOnboarding() {
   const step = useOnboardingStore((s) => s.step);
   const setStep = useOnboardingStore((s) => s.setStep);
   const complete = useOnboardingStore((s) => s.complete);
-  const roots = useStore((s) => s.roots);
-  const projects = useStore((s) => s.projects);
-  const [transitioning, setTransitioning] = useState(false);
 
   useEffect(() => {
     posthog.capture("onboarding_started");
   }, []);
 
-  // Auto-advance to "how-it-works" once a root is added and projects are discovered
-  useEffect(() => {
-    if (step !== "pick-folder") {
-      return;
-    }
-    if (roots.length === 0) {
-      return;
-    }
-    if (projects.length === 0) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      setTransitioning(true);
-      setTimeout(() => {
-        setTransitioning(false);
-        setStep("how-it-works");
-      }, 400);
-    }, 1200);
-    return () => clearTimeout(timer);
-  }, [step, roots.length, projects.length, setStep]);
-
   return (
-    <div
-      className={cn(
-        "flex h-screen w-screen items-center justify-center bg-background transition-opacity duration-400",
-        transitioning ? "opacity-0" : "opacity-100"
-      )}
-    >
+    <div className="flex h-screen w-screen items-center justify-center overflow-y-auto bg-background px-8 py-12">
       <div
-        className={cn(
-          "flex max-w-lg flex-col items-center px-8",
-          "fade-in slide-in-from-bottom-3 animate-in fill-mode-both duration-500"
-        )}
+        className="fade-in slide-in-from-bottom-2 flex w-full animate-in justify-center duration-300"
         key={step}
       >
-        {step === "welcome" && (
+        {step === "welcome" ? (
           <WelcomeStep onNext={() => setStep("pick-folder")} />
-        )}
-        {step === "pick-folder" && <PickFolderStep />}
-        {step === "how-it-works" && <HowItWorksStep onNext={complete} />}
-      </div>
-
-      {/* Step indicator */}
-      <div className="fixed bottom-8 flex items-center gap-2">
-        {(["welcome", "pick-folder", "how-it-works"] as const).map((s) => (
-          <div
-            className={cn(
-              "h-1 rounded-full transition-all duration-300",
-              step === s ? "w-6 bg-white/30" : "w-1.5 bg-white/10"
-            )}
-            key={s}
+        ) : (
+          <PickFolderStep
+            onDone={() => {
+              posthog.capture("onboarding_completed");
+              complete();
+            }}
           />
-        ))}
+        )}
       </div>
     </div>
   );

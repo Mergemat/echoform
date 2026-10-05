@@ -4,6 +4,7 @@ import type { SetDiff } from "../../../../packages/server/src/types";
 import {
   buildChips,
   buildTimelineDisplayItems,
+  buildTimelineSections,
   getSaveDisplayTitle,
 } from "./timeline-utils";
 
@@ -205,5 +206,119 @@ describe("buildChips", () => {
     expect(labels.some((l) => l.includes("scene"))).toBe(true);
     expect(labels.some((l) => l.includes("locator"))).toBe(true);
     expect(labels).toContain("tracks reordered");
+  });
+});
+
+describe("buildTimelineSections", () => {
+  const idea = makeIdea("idea-1", { baseSaveId: "s1", headSaveId: "s5" });
+
+  function minorSave(
+    id: string,
+    createdAt: string,
+    fields: Partial<Save> = {}
+  ) {
+    return {
+      ...makeSave(id, idea.id, createdAt),
+      auto: true,
+      changes: {
+        addedFiles: [],
+        modifiedFiles: ["song.als"],
+        removedFiles: [],
+        sizeDelta: 10,
+      },
+      ...fields,
+    };
+  }
+
+  function makeProject(saves: Save[]): Project {
+    return {
+      adapter: "ableton",
+      continuedFrom: null,
+      createdAt: "2026-03-25T08:00:00",
+      currentIdeaId: idea.id,
+      driftStatus: null,
+      id: "proj-1",
+      ideas: [idea],
+      lastSeenAt: null,
+      name: "Demo",
+      pendingOpen: null,
+      presence: "active",
+      projectPath: "/tmp/demo",
+      rootIds: [],
+      saves,
+      updatedAt: "2026-03-25T08:00:00",
+      watchError: null,
+      watching: true,
+    };
+  }
+
+  const now = new Date("2026-03-25T23:00:00");
+
+  it("never hides the latest, first, or user-annotated checkpoints in a group", () => {
+    const project = makeProject([
+      minorSave("s1", "2026-03-25T10:00:00"),
+      minorSave("s2", "2026-03-25T10:05:00", { note: "keep the snare" }),
+      minorSave("s3", "2026-03-25T10:10:00", { pinned: true }),
+      minorSave("s4", "2026-03-25T10:15:00", {
+        customLabel: true,
+        label: "Drop v2",
+      }),
+      minorSave("s5", "2026-03-25T10:20:00"),
+    ]);
+
+    const [section] = buildTimelineSections(project, null, new Set(), now);
+
+    expect(section?.items.map((item) => item.type)).toEqual([
+      "save",
+      "save",
+      "save",
+      "save",
+      "save",
+    ]);
+  });
+
+  it("collapses runs of minor saves and keeps the group header when expanded", () => {
+    const project = makeProject([
+      minorSave("s1", "2026-03-25T10:00:00"),
+      minorSave("s2", "2026-03-25T10:05:00"),
+      minorSave("s3", "2026-03-25T10:10:00"),
+      minorSave("s4", "2026-03-25T10:15:00"),
+      minorSave("s5", "2026-03-25T10:20:00"),
+    ]);
+
+    const collapsed = buildTimelineSections(project, null, new Set(), now)[0];
+    expect(collapsed?.items).toHaveLength(3);
+    const group = collapsed?.items[1];
+    expect(group?.type === "group" && group.saves.map((s) => s.id)).toEqual([
+      "s4",
+      "s3",
+      "s2",
+    ]);
+
+    const expanded = buildTimelineSections(
+      project,
+      null,
+      new Set(["s4"]),
+      now
+    )[0];
+    expect(
+      expanded?.items.map((item) =>
+        item.type === "group" ? `group:${item.expanded}` : item.save.id
+      )
+    ).toEqual(["s5", "group:true", "s4", "s3", "s2", "s1"]);
+  });
+
+  it("splits checkpoints into calendar days, newest first", () => {
+    const project = makeProject([
+      makeSave("s1", idea.id, "2026-03-24T22:00:00"),
+      makeSave("s5", idea.id, "2026-03-25T09:00:00"),
+    ]);
+
+    const sections = buildTimelineSections(project, null, new Set(), now);
+
+    expect(sections.map((section) => section.label)).toEqual([
+      "Today",
+      "Yesterday",
+    ]);
   });
 });

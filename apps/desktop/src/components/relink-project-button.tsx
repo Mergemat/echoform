@@ -55,12 +55,12 @@ export function RelinkProjectButton({ projectId }: { projectId: string }) {
         {relinking ? "Verifying project..." : "Locate project"}
       </Button>
       {error && (
-        <div className="text-red-200/85 text-xs" role="alert">
+        <div className="text-destructive text-xs" role="alert">
           {error}
         </div>
       )}
       {success && (
-        <div className="text-emerald-200/80 text-xs" role="status">
+        <div className="text-success text-xs" role="status">
           Project relinked. Restoring file actions...
         </div>
       )}

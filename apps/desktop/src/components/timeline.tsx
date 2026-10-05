@@ -1,23 +1,241 @@
-import { MusicNotes, Waveform } from "@phosphor-icons/react";
-import { useCallback, useMemo, useState } from "react";
+import { MusicNotes, Warning } from "@phosphor-icons/react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { posthog } from "@/lib/posthog";
 import { useStore } from "@/lib/store";
+import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CollapsedCard } from "./collapsed-card";
-import { ExpandedCard } from "./expanded-card";
+import { CheckpointDetail } from "./checkpoint-detail";
+import { CheckpointGroupRow } from "./checkpoint-group-row";
+import { CheckpointRow } from "./checkpoint-row";
 import { RelinkProjectButton } from "./relink-project-button";
-import { GroupCard } from "./save-group";
 import { SetSelector } from "./set-selector";
-import { buildTimelineDisplayItems } from "./timeline-utils";
+import {
+  buildTimelineSections,
+  type DisplayItem,
+  type TimelineSection,
+} from "./timeline-utils";
 
-export function Timeline() {
-  return useTimelineView();
+function hasPreview(save: Project["saves"][number]) {
+  return save.previewStatus === "ready" && save.previewRefs.length > 0;
 }
 
-function useTimelineView() {
+function Banner({
+  tone,
+  children,
+  actions,
+}: {
+  tone: "warning" | "error";
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-4 border-b px-8 py-3 text-[12px] leading-relaxed",
+        tone === "warning"
+          ? "border-warning/20 bg-warning/10 text-warning"
+          : "border-destructive/20 bg-destructive/10 text-destructive"
+      )}
+      role="status"
+    >
+      <div className="flex items-start gap-2">
+        <Warning className="mt-0.5 shrink-0" size={14} />
+        <div>{children}</div>
+      </div>
+      {actions && <div className="flex shrink-0 gap-1.5">{actions}</div>}
+    </div>
+  );
+}
+
+function ProjectBanners({ project }: { project: Project }) {
+  const pendingOpen = project.pendingOpen;
+  const drift = project.driftStatus;
+
+  return (
+    <>
+      {pendingOpen && (
+        <Banner
+          actions={
+            <>
+              <Button
+                onClick={() => {
+                  posthog.capture("idea_opened_in_ableton", {
+                    source: "pending_open_banner",
+                  });
+                  sendDaemonCommand({
+                    ideaId: pendingOpen.ideaId,
+                    projectId: project.id,
+                    type: "open-idea",
+                  });
+                }}
+                size="xs"
+                variant="secondary"
+              >
+                Try again
+              </Button>
+              <Button
+                onClick={() => {
+                  posthog.capture("idea_revealed_in_finder", {
+                    source: "pending_open_banner",
+                  });
+                  sendDaemonCommand({
+                    ideaId: pendingOpen.ideaId,
+                    projectId: project.id,
+                    type: "reveal-idea-file",
+                  });
+                }}
+                size="xs"
+                variant="ghost"
+              >
+                Show in Finder
+              </Button>
+            </>
+          }
+          tone="warning"
+        >
+          Ableton didn't open <strong>{pendingOpen.setPath}</strong>.
+          {pendingOpen.error ? ` ${pendingOpen.error}` : ""}
+        </Banner>
+      )}
+
+      {drift && (
+        <Banner
+          actions={
+            drift.kind === "unknown-file" ? (
+              <Button
+                onClick={() =>
+                  sendDaemonCommand({
+                    projectId: project.id,
+                    type: "adopt-drift-file",
+                  })
+                }
+                size="xs"
+                variant="secondary"
+              >
+                Track this set
+              </Button>
+            ) : undefined
+          }
+          tone="error"
+        >
+          {drift.kind === "unknown-file" ? (
+            <>
+              <strong>{drift.setPath}</strong> was saved, but Echoform isn't
+              tracking it yet, so that save wasn't recorded.
+            </>
+          ) : (
+            <>
+              <strong>{drift.setPath}</strong> is missing from the project
+              folder. Its history is still safe here.
+            </>
+          )}
+        </Banner>
+      )}
+    </>
+  );
+}
+
+function EmptyHistory({ project }: { project: Project }) {
+  if (project.presence === "missing") {
+    return (
+      <div className="mx-auto max-w-[520px] px-8 py-16">
+        <h2 className="font-semibold text-[18px]">
+          This project's folder can't be found
+        </h2>
+        <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+          It was moved, renamed, or is on a drive that isn't connected. Locate
+          it to reconnect this project to its history.
+        </p>
+        <div className="mt-5">
+          <RelinkProjectButton projectId={project.id} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!project.watching) {
+    return (
+      <div className="mx-auto max-w-[520px] px-8 py-16">
+        <h2 className="font-semibold text-[18px]">Recording is paused</h2>
+        <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+          Resume recording above, then save in Ableton to create the first
+          checkpoint.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-[520px] px-8 py-16">
+      <MusicNotes className="text-muted-foreground" size={22} />
+      <h2 className="mt-4 font-semibold text-[18px]">
+        Save in Ableton to create the first checkpoint
+      </h2>
+      <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+        Echoform is watching this project. Each time you press{" "}
+        <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+          ⌘S
+        </kbd>{" "}
+        in Ableton, it stores a full copy of the project here. You can come back
+        to any of them later without touching your current work.
+      </p>
+    </div>
+  );
+}
+
+function TimelineSectionView({
+  section,
+  project,
+  selectedSaveId,
+  onToggleSave,
+  onToggleGroup,
+}: {
+  section: TimelineSection;
+  project: Project;
+  selectedSaveId: string | null;
+  onToggleSave: (id: string) => void;
+  onToggleGroup: (key: string) => void;
+}) {
+  const renderItem = (item: DisplayItem) => {
+    if (item.type === "group") {
+      return (
+        <CheckpointGroupRow
+          expanded={item.expanded}
+          key={`group-${item.key}`}
+          onToggle={() => onToggleGroup(item.key)}
+          saves={item.saves}
+        />
+      );
+    }
+    const { save } = item;
+    return (
+      <CheckpointRow
+        indented={item.grouped}
+        isHead={project.ideas.some((idea) => idea.headSaveId === save.id)}
+        isSelected={save.id === selectedSaveId}
+        key={`save-${save.id}`}
+        onClick={() => onToggleSave(save.id)}
+        project={project}
+        save={save}
+      />
+    );
+  };
+
+  return (
+    <section>
+      <h3 className="sticky top-0 z-10 bg-background/95 py-2 pl-3 font-medium text-[12px] text-muted-foreground backdrop-blur">
+        {section.label}
+      </h3>
+      <div className="space-y-0.5">{section.items.map(renderItem)}</div>
+    </section>
+  );
+}
+
+export function Timeline() {
   const project = useStore((s) => s.selectedProject());
+  const projectCount = useStore((s) => s.projects.length);
   const selectedSaveId = useStore((s) => s.selectedSaveId);
   const activeIdeaId = useStore((s) => s.activeIdeaId);
   const toggleSave = useStore((s) => s.toggleSave);
@@ -33,50 +251,40 @@ function useTimelineView() {
     ? project?.ideas.find((idea) => idea.id === selectedSave.ideaId)
     : undefined;
 
-  const displayItems = useMemo(() => {
-    if (!project) {
-      return [];
-    }
-    return buildTimelineDisplayItems(project, effectiveIdeaId, expandedGroups);
-  }, [project, effectiveIdeaId, expandedGroups]);
-
-  const activeSetSaves = useMemo(
+  const sections = useMemo(
     () =>
-      project?.saves.filter((save) => save.ideaId === effectiveIdeaId) ?? [],
-    [project, effectiveIdeaId]
+      project
+        ? buildTimelineSections(project, effectiveIdeaId, expandedGroups)
+        : [],
+    [project, effectiveIdeaId, expandedGroups]
   );
+
   const previewCount = useMemo(
     () =>
-      activeSetSaves.filter(
-        (s) => s.previewStatus === "ready" && s.previewRefs.length > 0
-      ).length,
-    [activeSetSaves]
+      project?.saves.filter(
+        (save) => save.ideaId === effectiveIdeaId && hasPreview(save)
+      ).length ?? 0,
+    [project, effectiveIdeaId]
   );
-  const previewSaveIds = useMemo(() => {
-    if (!(showPreviewsOnly && previewCount > 0)) {
-      return null;
-    }
-    return new Set(
-      activeSetSaves
-        .filter((s) => s.previewStatus === "ready" && s.previewRefs.length > 0)
-        .map((s) => s.id)
-    );
-  }, [activeSetSaves, previewCount, showPreviewsOnly]);
+  const filterPreviews = showPreviewsOnly && previewCount > 0;
 
-  const visibleItems = useMemo(() => {
-    if (!previewSaveIds) {
-      return displayItems;
+  const visibleSections = useMemo(() => {
+    if (!filterPreviews) {
+      return sections;
     }
-    return displayItems.filter((item) => {
-      if (item.type === "save") {
-        return previewSaveIds.has(item.save.id);
-      }
-      if (item.type === "group") {
-        return item.saves.some((s) => previewSaveIds.has(s.id));
-      }
-      return true;
-    });
-  }, [displayItems, previewSaveIds]);
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items
+          .flatMap((item): DisplayItem[] =>
+            item.type === "group"
+              ? item.saves.map((save) => ({ save, type: "save" }))
+              : [item]
+          )
+          .filter((item) => item.type === "save" && hasPreview(item.save)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [filterPreviews, sections]);
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups((prev) => {
@@ -90,306 +298,86 @@ function useTimelineView() {
     });
   }, []);
 
-  const handleSelectIdea = useCallback(
-    (ideaId: string) => {
-      setActiveIdea(ideaId);
-    },
-    [setActiveIdea]
-  );
-
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3 px-6 text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-white/[0.04]">
-            <Waveform className="text-white/15" size={22} weight="bold" />
-          </div>
-          <div className="font-medium text-[15px] text-white/25">
-            No project selected
-          </div>
-          <div className="max-w-[240px] text-[13px] text-white/15 leading-relaxed">
-            Pick a project from the sidebar to see its checkpoint timeline
-          </div>
-        </div>
+      <div className="flex h-full items-center justify-center px-8 text-center text-[13px] text-muted-foreground">
+        {projectCount === 0
+          ? "Add a watched folder from the sidebar to find your Ableton projects."
+          : "Select a project to see its checkpoints."}
       </div>
     );
   }
-
-  if (project.saves.length === 0) {
-    const isMissing = project.presence === "missing";
-    const isWatching = project.watching && !isMissing;
-
-    return (
-      <div className="h-full overflow-y-auto px-8 py-8 pb-24">
-        <div className="mx-auto max-w-[720px]">
-          <MusicNotes className="text-white/20" size={24} weight="bold" />
-          <h3 className="mt-6 max-w-[560px] text-balance font-semibold text-3xl text-white tracking-[-0.035em]">
-            {isMissing
-              ? "Reconnect this project to keep working with its history."
-              : "Make the first checkpoint by saving in Ableton."}
-          </h3>
-          {isMissing ? (
-            <div className="mt-4">
-              <p className="max-w-[58ch] text-pretty text-[14px] text-white/40 leading-relaxed">
-                This project's folder moved or is no longer available. Locate it
-                to reconnect this history to the same project.
-              </p>
-              <div className="mt-6">
-                <RelinkProjectButton projectId={project.id} />
-              </div>
-            </div>
-          ) : isWatching ? (
-            <div>
-              <p className="mt-3 max-w-[58ch] text-pretty text-[14px] text-white/40 leading-relaxed">
-                Echoform is already watching {project.name}. Open the set, work
-                as usual, then save with{" "}
-                <span className="rounded bg-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-white/40">
-                  ⌘S
-                </span>{" "}
-                — its first restorable point will appear here.
-              </p>
-              <div className="mt-12 grid grid-cols-3 gap-3">
-                {[
-                  ["1", "Open the project"],
-                  ["2", "Save with ⌘S"],
-                  ["3", "Return to inspect changes"],
-                ].map(([number, label]) => (
-                  <div
-                    className="rounded-2xl bg-white/[0.025] p-4 shadow-[0_0_0_1px_oklch(1_0_0/0.055)]"
-                    key={number}
-                  >
-                    <div className="font-semibold text-[11px] text-emerald-300/70">
-                      STEP {number}
-                    </div>
-                    <div className="mt-2 text-[13px] text-white/55">
-                      {label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 max-w-[58ch] text-pretty text-[14px] text-white/35 leading-relaxed">
-              Enable watching to start capturing saves whenever you work on this
-              project.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const pendingOpen = project.pendingOpen;
 
   return (
     <div className="flex h-full flex-col">
-      {project.ideas.length > 0 && (
-        <SetSelector
-          activeIdeaId={activeIdeaId}
-          onSelect={handleSelectIdea}
-          project={project}
-        />
-      )}
+      <ProjectBanners project={project} />
 
-      {pendingOpen && (
-        <div className="border-amber-400/10 border-b bg-amber-400/[0.04] px-5 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-amber-200/80 text-xs leading-relaxed">
-              Could not open{" "}
-              <span className="font-medium text-amber-200">
-                {pendingOpen.setPath}
-              </span>
-              .
-              {pendingOpen.error
-                ? ` ${pendingOpen.error}`
-                : " Retry or reveal it in Finder."}
-            </div>
-            <div className="flex shrink-0 gap-1.5">
-              <Button
-                onClick={() => {
-                  posthog.capture("idea_opened_in_ableton", {
-                    source: "pending_open_banner",
-                  });
-                  sendDaemonCommand({
-                    ideaId: pendingOpen.ideaId,
-                    projectId: project.id,
-                    type: "open-idea",
-                  });
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                Open Again
-              </Button>
-              <Button
-                onClick={() => {
-                  posthog.capture("idea_revealed_in_finder", {
-                    source: "pending_open_banner",
-                  });
-                  sendDaemonCommand({
-                    ideaId: pendingOpen.ideaId,
-                    projectId: project.id,
-                    type: "reveal-idea-file",
-                  });
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                Reveal
-              </Button>
-            </div>
-          </div>
+      {project.saves.length === 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <EmptyHistory project={project} />
         </div>
-      )}
-
-      {project.driftStatus && (
-        <div className="border-red-400/10 border-b bg-red-400/[0.04] px-5 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-red-200/80 text-xs leading-relaxed">
-              {project.driftStatus.kind === "unknown-file"
-                ? `Detected edits in untracked set ${project.driftStatus.setPath}.`
-                : `Ableton set ${project.driftStatus.setPath} is missing.`}
-            </div>
-            <div className="flex shrink-0 gap-1.5">
-              {project.driftStatus.kind === "unknown-file" && (
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto px-5 pb-24">
+            <div className="flex min-h-12 items-center justify-between gap-3 py-2 pl-3">
+              {project.ideas.length > 1 ? (
+                <SetSelector
+                  activeIdeaId={activeIdeaId}
+                  onSelect={setActiveIdea}
+                  project={project}
+                />
+              ) : (
+                <span className="font-medium text-[13px]">Checkpoints</span>
+              )}
+              {previewCount > 0 && (
                 <Button
-                  onClick={() =>
-                    sendDaemonCommand({
-                      projectId: project.id,
-                      type: "adopt-drift-file",
-                    })
-                  }
-                  size="sm"
-                  variant="ghost"
+                  aria-pressed={showPreviewsOnly}
+                  className={cn(!showPreviewsOnly && "text-muted-foreground")}
+                  onClick={() => setShowPreviewsOnly((v) => !v)}
+                  size="xs"
+                  type="button"
+                  variant={showPreviewsOnly ? "secondary" : "ghost"}
                 >
-                  Adopt File
+                  <MusicNotes size={13} />
+                  With previews only ({previewCount})
                 </Button>
               )}
-              <Button
-                onClick={() => {
-                  posthog.capture("idea_opened_in_ableton", {
-                    source: "drift_banner",
-                  });
-                  sendDaemonCommand({
-                    ideaId: project.currentIdeaId,
-                    projectId: project.id,
-                    type: "open-idea",
-                  });
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                Open Current Set
-              </Button>
             </div>
-          </div>
-        </div>
-      )}
 
-      {project.presence === "missing" && (
-        <div className="border-amber-400/10 border-b bg-amber-400/[0.04] px-5 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-amber-200/80 text-xs leading-relaxed">
-              This project's folder moved or is unavailable. History stays safe;
-              locate the project to restore file actions without creating a new
-              history.
-            </div>
-            <RelinkProjectButton projectId={project.id} />
-          </div>
-        </div>
-      )}
-
-      {previewCount > 0 && (
-        <div className="mx-auto flex w-full max-w-[980px] items-center gap-2 px-8 pb-3">
-          <Button
-            className={cn(
-              "gap-1.5 text-xs",
-              showPreviewsOnly
-                ? "text-white/70"
-                : "text-white/30 hover:text-white/50"
+            {visibleSections.length === 0 ? (
+              <p className="py-12 text-center text-[13px] text-muted-foreground">
+                No checkpoints for this set yet.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {visibleSections.map((section) => (
+                  <TimelineSectionView
+                    key={section.key}
+                    onToggleGroup={toggleGroup}
+                    onToggleSave={toggleSave}
+                    project={project}
+                    section={section}
+                    selectedSaveId={selectedSaveId}
+                  />
+                ))}
+              </div>
             )}
-            onClick={() => setShowPreviewsOnly((v) => !v)}
-            size="sm"
-            type="button"
-            variant={showPreviewsOnly ? "outline" : "ghost"}
-          >
-            <MusicNotes size={13} />
-            Previews
-            <span className="text-[10px] text-white/20 tabular-nums">
-              {previewCount}
-            </span>
-          </Button>
+          </div>
+
+          {selectedSave && (
+            <aside className="scrollbar-thin w-[min(46%,520px)] min-w-[400px] shrink-0 overflow-y-auto border-border border-s bg-sidebar">
+              <CheckpointDetail
+                idea={selectedIdea}
+                isHead={selectedIdea?.headSaveId === selectedSave.id}
+                key={selectedSave.id}
+                onClose={() => toggleSave(selectedSave.id)}
+                project={project}
+                save={selectedSave}
+              />
+            </aside>
+          )}
         </div>
       )}
-
-      <div className="flex min-h-0 flex-1">
-        <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto pb-24">
-          {activeSetSaves.length === 0 && (
-            <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-white/25">
-              No checkpoints for this Ableton set yet.
-            </div>
-          )}
-          {activeSetSaves.length > 0 && (
-            <div
-              className={cn(
-                "mx-auto w-full px-8 pt-3",
-                selectedSave ? "max-w-[720px]" : "max-w-[980px]"
-              )}
-            >
-              <div className="mb-4 flex items-center gap-3">
-                <h3 className="font-semibold text-[12px] text-white/45 uppercase tracking-[0.14em]">
-                  Recent activity
-                </h3>
-                <div className="h-px flex-1 bg-white/[0.055]" />
-              </div>
-              <div className="space-y-2">
-                {visibleItems.map((item) => {
-                  if (item.type === "group") {
-                    return (
-                      <div key={`group-${item.key}`}>
-                        <GroupCard
-                          expanded={expandedGroups.has(item.key)}
-                          groupKey={item.key}
-                          onToggle={() => toggleGroup(item.key)}
-                          saves={item.saves}
-                        />
-                      </div>
-                    );
-                  }
-
-                  const save = item.save;
-                  const idea = item.idea;
-                  const isHead = idea.headSaveId === save.id;
-                  const isSelected = save.id === selectedSaveId;
-
-                  return (
-                    <CollapsedCard
-                      isHead={isHead}
-                      isSelected={isSelected}
-                      key={`save-${save.id}`}
-                      onClick={() => toggleSave(save.id)}
-                      project={project}
-                      save={save}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {selectedSave && (
-          <aside className="scrollbar-thin w-[min(48%,560px)] min-w-[420px] shrink-0 overflow-y-auto border-white/[0.065] border-s bg-[#101115]">
-            <ExpandedCard
-              idea={selectedIdea}
-              isHead={selectedIdea?.headSaveId === selectedSave.id}
-              onClose={() => toggleSave(selectedSave.id)}
-              project={project}
-              save={selectedSave}
-            />
-          </aside>
-        )}
-      </div>
     </div>
   );
 }

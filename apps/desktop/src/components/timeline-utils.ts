@@ -9,13 +9,53 @@ export function fileTabName(idea: Idea): string {
 }
 
 // ── Formatters ───────────────────────────────────────────────────────
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const ampm = h >= 12 ? "pm" : "am";
-  const h12 = h % 12 || 12;
-  return `${h12}:${m}${ampm}`;
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function startOfDay(date: Date): number {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  ).getTime();
+}
+
+/** "Today", "Yesterday", "Monday", or "3 Oct" / "3 Oct 2025" for older days. */
+export function formatDayLabel(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const diffDays = Math.round(
+    (startOfDay(now) - startOfDay(date)) / 86_400_000
+  );
+  if (diffDays === 0) {
+    return "Today";
+  }
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+  if (diffDays > 1 && diffDays < 7) {
+    return date.toLocaleDateString(undefined, { weekday: "long" });
+  }
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    weekday: "short",
+    year: date.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  });
+}
+
+export function formatFullDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "long",
+    weekday: "long",
+    year: "numeric",
+  });
 }
 
 export function formatSizeDelta(bytes: number): string {
@@ -260,13 +300,53 @@ export function buildChips(save: Save): Chip[] {
   return chips;
 }
 
-// ── Auto-save grouping ───────────────────────────────────────────────
-type DisplayItem =
-  | { type: "save"; save: Save }
-  | { type: "group"; saves: Save[]; key: string };
+// ── Retention ────────────────────────────────────────────────────────
 
-function isTrivialAutoSave(save: Save): boolean {
+/**
+ * Why a checkpoint is never removed by automatic cleanup. Mirrors
+ * getProtectedSaveIds and the `save.auto` filter in
+ * packages/server/src/core.ts — keep them in sync.
+ */
+export function getKeepReasons(project: Project, save: Save): string[] {
+  const reasons: string[] = [];
+  if (project.ideas.some((idea) => idea.headSaveId === save.id)) {
+    reasons.push("latest save");
+  }
+  if (project.ideas.some((idea) => idea.baseSaveId === save.id)) {
+    reasons.push("first save");
+  }
   if (!save.auto) {
+    // Cleanup only ever removes automatic checkpoints.
+    reasons.push("created by Echoform");
+  }
+  if (save.pinned) {
+    reasons.push("pinned");
+  }
+  if (save.customLabel) {
+    reasons.push("named");
+  }
+  if (save.note.trim().length > 0) {
+    reasons.push("has a note");
+  }
+  if (save.previewRefs.length > 0 || save.previewStatus === "pending") {
+    reasons.push("has a preview");
+  }
+  return reasons;
+}
+
+// ── Grouping ─────────────────────────────────────────────────────────
+
+export type DisplayItem =
+  | { type: "save"; save: Save; grouped?: boolean }
+  | { type: "group"; saves: Save[]; key: string; expanded: boolean };
+
+/**
+ * A save is "minor" when analysis found no structural change. Runs of minor
+ * saves collapse into one row. Anything the user cares about (named, noted,
+ * pinned, previewed, latest, first) is never minor, so it is never hidden.
+ */
+function isMinorSave(save: Save, keep: (save: Save) => boolean): boolean {
+  if (!save.auto || keep(save)) {
     return false;
   }
   const sd = save.setDiff;
@@ -305,27 +385,28 @@ function isTrivialAutoSave(save: Save): boolean {
 
 function buildDisplayItems(
   saves: Save[],
-  expandedGroups: Set<string>
+  expandedGroups: Set<string>,
+  keep: (save: Save) => boolean
 ): DisplayItem[] {
   const items: DisplayItem[] = [];
   let i = 0;
   while (i < saves.length) {
     const save = saves[i]!;
-    if (isTrivialAutoSave(save)) {
+    if (isMinorSave(save, keep)) {
       const group: Save[] = [save];
       let j = i + 1;
-      while (j < saves.length && isTrivialAutoSave(saves[j]!)) {
+      while (j < saves.length && isMinorSave(saves[j]!, keep)) {
         group.push(saves[j]!);
         j++;
       }
       if (group.length >= 2) {
-        const key = group[0]?.id;
-        if (expandedGroups.has(key)) {
+        const key = group[0]!.id;
+        const expanded = expandedGroups.has(key);
+        items.push({ expanded, key, saves: group, type: "group" });
+        if (expanded) {
           for (const s of group) {
-            items.push({ save: s, type: "save" });
+            items.push({ grouped: true, save: s, type: "save" });
           }
-        } else {
-          items.push({ key, saves: group, type: "group" });
         }
         i = j;
         continue;
@@ -337,39 +418,70 @@ function buildDisplayItems(
   return items;
 }
 
-type TimelineDisplayItem =
-  | {
-      type: "save";
-      save: Save;
-      idea: Idea;
+export interface TimelineSection {
+  items: DisplayItem[];
+  key: string;
+  label: string;
+}
+
+function resolveIdea(project: Project, focusedIdeaId: string | null) {
+  return (
+    project.ideas.find(
+      (candidate) => candidate.id === (focusedIdeaId ?? project.currentIdeaId)
+    ) ?? project.ideas[0]
+  );
+}
+
+function ideaSavesNewestFirst(project: Project, idea: Idea): Save[] {
+  return project.saves
+    .filter((save) => save.ideaId === idea.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/** The focused set's checkpoints, newest first, split into calendar days. */
+export function buildTimelineSections(
+  project: Project,
+  focusedIdeaId: string | null,
+  expandedGroups: Set<string>,
+  now = new Date()
+): TimelineSection[] {
+  const idea = resolveIdea(project, focusedIdeaId);
+  if (!idea) {
+    return [];
+  }
+  const keep = (save: Save) => getKeepReasons(project, save).length > 0;
+
+  const days = new Map<string, Save[]>();
+  for (const save of ideaSavesNewestFirst(project, idea)) {
+    const d = new Date(save.createdAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const bucket = days.get(key);
+    if (bucket) {
+      bucket.push(save);
+    } else {
+      days.set(key, [save]);
     }
-  | {
-      type: "group";
-      saves: Save[];
-      key: string;
-      idea: Idea;
-    };
+  }
+
+  return [...days].map(([key, saves]) => ({
+    items: buildDisplayItems(saves, expandedGroups, keep),
+    key,
+    label: formatDayLabel(saves[0]!.createdAt, now),
+  }));
+}
+
+type TimelineDisplayItem = DisplayItem & { idea: Idea };
 
 export function buildTimelineDisplayItems(
   project: Project,
   focusedIdeaId: string | null,
   expandedGroups: Set<string>
 ): TimelineDisplayItem[] {
-  const idea =
-    project.ideas.find(
-      (candidate) => candidate.id === (focusedIdeaId ?? project.currentIdeaId)
-    ) ?? project.ideas[0];
+  const idea = resolveIdea(project, focusedIdeaId);
   if (!idea) {
     return [];
   }
-
-  const saves = project.saves
-    .filter((save) => save.ideaId === idea.id)
-    .slice()
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  return buildDisplayItems(saves, expandedGroups).map((item) => ({
-    ...item,
-    idea,
-  }));
+  return buildTimelineSections(project, idea.id, expandedGroups).flatMap(
+    (section) => section.items.map((item) => ({ ...item, idea }))
+  );
 }
