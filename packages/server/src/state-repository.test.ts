@@ -107,6 +107,7 @@ function stateWithAnalysis(message: string): AppState {
             summary: {
               baseSaveId: null,
               beatsPerBar: 4,
+              changes: [],
               first: true,
               headline: "1 tracks · 4 bars at 120 BPM",
               lengthBeats: 16,

@@ -3,7 +3,6 @@ import { abletonColor } from "@/lib/ableton-colors";
 import { displayTrackName } from "@/lib/track-name";
 import type { ClipAnalysis, SaveAnalysis, TrackAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { BarRuler } from "./song-strip";
 
 const LABEL_WIDTH = "9.5rem";
 
@@ -236,6 +235,44 @@ export function ArrangementMap({
           unchanged
         </span>
       </div>
+    </div>
+  );
+}
+
+/** Bar numbers along the top of the arrangement map. */
+export function BarRuler({
+  scaleBeats,
+  beatsPerBar,
+  className,
+}: {
+  scaleBeats: number;
+  beatsPerBar: number;
+  className?: string;
+}) {
+  const totalBars = Math.max(1, Math.ceil(scaleBeats / beatsPerBar));
+  const step = [1, 2, 4, 8, 16, 32, 64].find((s) => totalBars / s <= 8) ?? 128;
+  const marks: number[] = [];
+  for (let bar = 1; bar <= totalBars; bar += step) {
+    marks.push(bar);
+  }
+  return (
+    <div
+      className={cn(
+        "relative h-4 font-mono text-[10px] text-subtle-foreground",
+        className
+      )}
+    >
+      {marks.map((bar) => (
+        <span
+          className="absolute top-0 -translate-x-px border-line border-l pl-1 leading-4"
+          key={bar}
+          style={{
+            left: `${(((bar - 1) * beatsPerBar) / Math.max(scaleBeats, 1)) * 100}%`,
+          }}
+        >
+          {bar}
+        </span>
+      ))}
     </div>
   );
 }

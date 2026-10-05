@@ -1,4 +1,4 @@
-import { MusicNotes, Warning } from "@phosphor-icons/react";
+import { MagnifyingGlass, MusicNotes, Warning } from "@phosphor-icons/react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { sendDaemonCommand } from "@/lib/daemon-client";
@@ -8,10 +8,9 @@ import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CheckpointDetail } from "./checkpoint-detail";
 import { CheckpointGroupRow } from "./checkpoint-group-row";
-import { CheckpointRow, rowGrid } from "./checkpoint-row";
+import { CheckpointRow, matchesSearch } from "./checkpoint-row";
 import { RelinkProjectButton } from "./relink-project-button";
 import { SetSelector } from "./set-selector";
-import { BarRuler } from "./song-strip";
 import {
   buildTimelineSections,
   type DisplayItem,
@@ -190,15 +189,13 @@ function TimelineSectionView({
   section,
   project,
   selectedSaveId,
-  scaleBeats,
-  compact,
+  query,
   onToggleSave,
   onToggleGroup,
 }: {
   section: TimelineSection;
   project: Project;
-  scaleBeats: number;
-  compact: boolean;
+  query: string;
   selectedSaveId: string | null;
   onToggleSave: (id: string) => void;
   onToggleGroup: (key: string) => void;
@@ -207,7 +204,6 @@ function TimelineSectionView({
     if (item.type === "group") {
       return (
         <CheckpointGroupRow
-          compact={compact}
           expanded={item.expanded}
           key={`group-${item.key}`}
           onToggle={() => onToggleGroup(item.key)}
@@ -218,25 +214,34 @@ function TimelineSectionView({
     const { save } = item;
     return (
       <CheckpointRow
-        compact={compact}
         indented={item.grouped}
         isHead={project.ideas.some((idea) => idea.headSaveId === save.id)}
         isSelected={save.id === selectedSaveId}
         key={`save-${save.id}`}
         onClick={() => onToggleSave(save.id)}
         project={project}
+        query={query}
         save={save}
-        scaleBeats={scaleBeats}
       />
     );
   };
 
+  const saveCount = section.items.reduce(
+    (sum, item) => sum + (item.type === "group" ? item.saves.length : 1),
+    0
+  );
+
   return (
     <section>
-      <h3 className="py-2 pl-2 font-medium text-[12px] text-muted-foreground">
-        {section.label}
+      <h3 className="flex items-baseline gap-3 pt-6 pb-2 pl-3">
+        <span className="font-semibold text-[20px] text-foreground tracking-tight">
+          {section.label}
+        </span>
+        <span className="text-[12px] text-subtle-foreground">
+          {saveCount} {saveCount === 1 ? "save" : "saves"}
+        </span>
       </h3>
-      <div className="space-y-0.5">{section.items.map(renderItem)}</div>
+      <div>{section.items.map(renderItem)}</div>
     </section>
   );
 }
@@ -250,6 +255,7 @@ export function Timeline() {
   const setActiveIdea = useStore((s) => s.setActiveIdea);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPreviewsOnly, setShowPreviewsOnly] = useState(false);
+  const [query, setQuery] = useState("");
 
   const effectiveIdeaId = activeIdeaId ?? project?.currentIdeaId ?? null;
   const selectedSave = project?.saves.find(
@@ -267,19 +273,6 @@ export function Timeline() {
     [project, effectiveIdeaId, expandedGroups]
   );
 
-  // All strips share one scale, so rows line up bar for bar and the song
-  // visibly grows down the history.
-  const scale = useMemo(() => {
-    const summaries =
-      project?.saves
-        .filter((save) => save.ideaId === effectiveIdeaId)
-        .flatMap((save) => (save.summary ? [save.summary] : [])) ?? [];
-    return {
-      beats: Math.max(1, ...summaries.map((s) => s.lengthBeats)),
-      perBar: summaries.at(-1)?.beatsPerBar ?? 4,
-    };
-  }, [project, effectiveIdeaId]);
-
   const previewCount = useMemo(
     () =>
       project?.saves.filter(
@@ -288,11 +281,16 @@ export function Timeline() {
     [project, effectiveIdeaId]
   );
   const filterPreviews = showPreviewsOnly && previewCount > 0;
+  const searching = query.trim().length > 0;
 
+  // Filtering flattens collapsed groups so every matching save is visible.
   const visibleSections = useMemo(() => {
-    if (!filterPreviews) {
+    if (!(filterPreviews || searching)) {
       return sections;
     }
+    const keep = (save: Project["saves"][number]) =>
+      (!filterPreviews || hasPreview(save)) &&
+      (!searching || matchesSearch(save, query));
     return sections
       .map((section) => ({
         ...section,
@@ -300,12 +298,12 @@ export function Timeline() {
           .flatMap((item): DisplayItem[] =>
             item.type === "group"
               ? item.saves.map((save) => ({ save, type: "save" }))
-              : [item]
+              : [{ save: item.save, type: "save" }]
           )
-          .filter((item) => item.type === "save" && hasPreview(item.save)),
+          .filter((item) => item.type === "save" && keep(item.save)),
       }))
       .filter((section) => section.items.length > 0);
-  }, [filterPreviews, sections]);
+  }, [filterPreviews, searching, query, sections]);
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups((prev) => {
@@ -365,35 +363,51 @@ export function Timeline() {
                   </Button>
                 )}
               </div>
-              <div
-                className={cn(
-                  rowGrid(Boolean(selectedSave)),
-                  "pr-2 pb-1.5 pl-2"
-                )}
-              >
-                <span className="font-mono text-[10px] text-subtle-foreground">
-                  bar
-                </span>
-                <BarRuler beatsPerBar={scale.perBar} scaleBeats={scale.beats} />
-                <span />
-                <span />
+              <div className="pb-2.5">
+                <label className="flex h-8 items-center gap-2 rounded-md border border-line bg-raised px-2.5 text-[13px] focus-within:border-input">
+                  <MagnifyingGlass
+                    className="shrink-0 text-subtle-foreground"
+                    size={13}
+                  />
+                  <input
+                    className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-subtle-foreground"
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setQuery("");
+                      }
+                    }}
+                    placeholder="Find a change — try “bass”, “tempo”, “louder”"
+                    value={query}
+                  />
+                  {searching && (
+                    <span className="shrink-0 text-[11px] text-subtle-foreground">
+                      {visibleSections.reduce(
+                        (sum, s) => sum + s.items.length,
+                        0
+                      )}{" "}
+                      found
+                    </span>
+                  )}
+                </label>
               </div>
             </div>
 
             {visibleSections.length === 0 ? (
               <p className="py-12 text-center text-[13px] text-muted-foreground">
-                No checkpoints for this set yet.
+                {searching
+                  ? `No saves in this set mention “${query.trim()}”.`
+                  : "No checkpoints for this set yet."}
               </p>
             ) : (
-              <div className="space-y-4">
+              <div>
                 {visibleSections.map((section) => (
                   <TimelineSectionView
-                    compact={Boolean(selectedSave)}
                     key={section.key}
                     onToggleGroup={toggleGroup}
                     onToggleSave={toggleSave}
                     project={project}
-                    scaleBeats={scale.beats}
+                    query={query}
                     section={section}
                     selectedSaveId={selectedSaveId}
                   />
@@ -403,7 +417,7 @@ export function Timeline() {
           </div>
 
           {selectedSave && (
-            <aside className="scrollbar-thin w-[min(58%,760px)] min-w-[480px] shrink-0 overflow-y-auto border-line border-s bg-sidebar">
+            <aside className="scrollbar-thin w-[min(60%,780px)] min-w-[480px] shrink-0 overflow-y-auto border-line border-s bg-sidebar">
               <CheckpointDetail
                 idea={selectedIdea}
                 isHead={selectedIdea?.headSaveId === selectedSave.id}
