@@ -11,9 +11,6 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { diffSets, isEmptyDiff } from "./als-diff";
-import type { SetSnapshot } from "./als-parser";
-import { extractTrackSummary, parseAlsFile } from "./als-parser";
 import { mapWithConcurrency } from "./async-utils";
 import type { ManifestEntry } from "./blob-store";
 import {
@@ -33,8 +30,9 @@ import {
 } from "./ableton-files";
 import { discoverProjectsInRoot, discoverRootSuggestions } from "./discovery";
 import { STATE_DIRNAME } from "./paths";
-import { formatDiffAsLabel } from "./smart-naming";
 import { captureStoredSnapshot, recoverStoredSnapshot } from "./history-store";
+import { type LiveSet, readLiveSet } from "./live-set";
+import { analyzeSets } from "./set-compare";
 import { StateRepository } from "./state-repository";
 import type {
   ActivityItem,
@@ -52,10 +50,11 @@ import type {
   RootSuggestion,
   RecoveryResult,
   Save,
-  SetDiff,
+  SaveAnalysis,
+  SaveSummary,
   TrackedRoot,
-  TrackSummaryItem,
 } from "./types";
+import { ANALYSIS_VERSION } from "./types";
 
 const AUDIO_EXTENSIONS = new Set([
   ".aif",
@@ -80,6 +79,7 @@ interface ProjectSnapshot {
 const MAX_ACTIVITY_ITEMS = 80;
 const WALK_CONCURRENCY = 32;
 const AUTO_COMPACT_MAX_AUTO_SAVES = 100;
+const LIVE_SET_CACHE_SIZE = 4;
 const AUTO_COMPACT_MAX_BLOB_STORAGE_BYTES = 2 * 1024 * 1024 * 1024;
 const PREVIEW_FILE_BASENAME = "preview";
 const PREVIEW_EXTENSIONS = [".wav", ".aif", ".aiff", ".mp3", ".m4a"] as const;
@@ -339,6 +339,10 @@ function autoLabel(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function isSameSummary(a: SaveSummary | undefined, b: SaveSummary): boolean {
+  return a !== undefined && JSON.stringify(a) === JSON.stringify(b);
+}
+
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -484,41 +488,6 @@ function computeAutoSavesToCompact(project: Project, now = new Date()): Save[] {
   return autoSaves.filter((save) => !kept.has(save.id));
 }
 
-/** Attempt to compute the semantic .als diff between two .als blob paths.
- *  Returns the diff and the current snapshot. Never throws. */
-async function tryComputeSetDiff(
-  prevAlsPath: string,
-  currAlsPath: string,
-): Promise<{
-  diff: SetDiff | undefined;
-  currSnapshot: SetSnapshot | undefined;
-}> {
-  try {
-    const [prevSnapshot, currSnapshot] = await Promise.all([
-      parseAlsFile(prevAlsPath),
-      parseAlsFile(currAlsPath),
-    ]);
-    const diff = diffSets(prevSnapshot, currSnapshot);
-    return {
-      diff: isEmptyDiff(diff) ? undefined : diff,
-      currSnapshot,
-    };
-  } catch {
-    return { diff: undefined, currSnapshot: undefined };
-  }
-}
-
-/** Parse a single .als file for track summary. Never throws. */
-async function tryParseSnapshot(
-  alsPath: string,
-): Promise<SetSnapshot | undefined> {
-  try {
-    return await parseAlsFile(alsPath);
-  } catch {
-    return undefined;
-  }
-}
-
 /** Find the blob hash for the active .als file in a manifest's entries. */
 function findAlsHashInEntries(
   entries: ManifestEntry[],
@@ -528,22 +497,6 @@ function findAlsHashInEntries(
     manifestFileEntries(entries).find((e) => e.relativePath === activeSetPath)
       ?.blobHash ?? null
   );
-}
-
-/** Find the blob hash for a previous save's active .als file by reading its manifest. */
-async function findPrevAlsHash(
-  historyDir: string,
-  prevSave: Save,
-): Promise<string | null> {
-  try {
-    const manifest = await readManifest(historyDir, prevSave.id);
-    return findAlsHashInEntries(
-      manifest.files,
-      prevSave.metadata.activeSetPath,
-    );
-  } catch {
-    return null;
-  }
 }
 
 async function findAlsHashForSave(
@@ -578,49 +531,6 @@ async function computeManifestChangeSummary(
   } catch {
     return undefined;
   }
-}
-
-async function computeSemanticSaveData(
-  historyDir: string,
-  prevSave: Save | null,
-  save: Pick<Save, "id" | "metadata">,
-): Promise<{
-  setDiff: SetDiff | undefined;
-  trackSummary: TrackSummaryItem[] | undefined;
-}> {
-  const currAlsHash = await findAlsHashForSave(
-    historyDir,
-    save.id,
-    save.metadata.activeSetPath,
-  );
-
-  if (prevSave) {
-    const prevAlsHash = await findPrevAlsHash(historyDir, prevSave);
-    if (prevAlsHash && currAlsHash) {
-      const result = await tryComputeSetDiff(
-        getBlobPath(historyDir, prevAlsHash),
-        getBlobPath(historyDir, currAlsHash),
-      );
-      return {
-        setDiff: result.diff,
-        trackSummary: result.currSnapshot
-          ? extractTrackSummary(result.currSnapshot)
-          : undefined,
-      };
-    }
-  }
-
-  if (currAlsHash) {
-    const parsed = await tryParseSnapshot(getBlobPath(historyDir, currAlsHash));
-    if (parsed) {
-      return {
-        setDiff: undefined,
-        trackSummary: extractTrackSummary(parsed),
-      };
-    }
-  }
-
-  return { setDiff: undefined, trackSummary: undefined };
 }
 
 // ── Async Mutex ─────────────────────────────────────────────────────
@@ -670,6 +580,8 @@ export class EchoformService {
   private readonly mutex = new AsyncMutex();
   private readonly launcher: AbletonLauncher;
   private readonly recoveryRoot: string;
+  private readonly liveSetCache = new Map<string, Promise<LiveSet>>();
+  private readonly unreadableSaves = new Set<string>();
   private readonly ideaPathIndex = new Map<string, Map<string, string>>();
   private readonly previewPathIndex = new Map<
     string,
@@ -856,9 +768,10 @@ export class EchoformService {
         await this.storageKeepSaveIds(project),
       );
       await Promise.all(
-        deletedSaves.map((save) =>
+        deletedSaves.flatMap((save) => [
           this.clearManagedPreviewFiles(save.previewRefs),
-        ),
+          rm(this.analysisCachePath(project.id, save.id), { force: true }),
+        ]),
       );
     } catch (error) {
       pushActivity(
@@ -1718,26 +1631,9 @@ export class EchoformService {
           metadata,
         )
       : undefined;
-    let setDiff: SetDiff | undefined;
-    let trackSummary: TrackSummaryItem[] | undefined;
-    if (!input?.auto) {
-      const semanticData = await computeSemanticSaveData(
-        this.projectHistoryDir(project.id),
-        saveBaseline,
-        {
-          id: saveId,
-          metadata,
-        },
-      );
-      setDiff = semanticData.setDiff;
-      trackSummary = semanticData.trackSummary;
-    }
-
     const save: Save = {
       id: saveId,
-      label:
-        input?.label?.trim() ||
-        (input?.auto ? formatDiffAsLabel(setDiff, changes) : autoLabel()),
+      label: input?.label?.trim() || autoLabel(),
       customLabel: Boolean(input?.label?.trim()),
       note: input?.note?.trim() || "",
       pinned: input?.pinned ?? false,
@@ -1752,8 +1648,6 @@ export class EchoformService {
       metadata,
       auto: input?.auto ?? false,
       changes,
-      setDiff,
-      trackSummary,
     };
     project.saves.push(save);
     idea.headSaveId = save.id;
@@ -2363,90 +2257,155 @@ export class EchoformService {
   }
 
   /** Compute changes for a save that doesn't have them yet (backfill). */
-  async computeChanges(
+  // ── Analysis ────────────────────────────────────────────────────
+
+  /** The checkpoint a save is compared with: the one before it in the same set. */
+  private previousSaveInIdea(project: Project, save: Save): Save | null {
+    return (
+      project.saves
+        .filter((s) => s.ideaId === save.ideaId && s.createdAt < save.createdAt)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+    );
+  }
+
+  private analysisCachePath(projectId: string, saveId: string): string {
+    return join(this.projectHistoryDir(projectId), "analysis", `${saveId}.json`);
+  }
+
+  /** Parsing a large set takes about a second; neighbouring saves share sets. */
+  private readLiveSetCached(blobPath: string): Promise<LiveSet> {
+    const cached = this.liveSetCache.get(blobPath);
+    if (cached) {
+      this.liveSetCache.delete(blobPath);
+      this.liveSetCache.set(blobPath, cached);
+      return cached;
+    }
+    const pending = readLiveSet(blobPath);
+    pending.catch(() => this.liveSetCache.delete(blobPath));
+    this.liveSetCache.set(blobPath, pending);
+    while (this.liveSetCache.size > LIVE_SET_CACHE_SIZE) {
+      const oldest = this.liveSetCache.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.liveSetCache.delete(oldest);
+    }
+    return pending;
+  }
+
+  private async liveSetForSave(
+    projectId: string,
+    save: Save,
+  ): Promise<LiveSet | null> {
+    const historyDir = this.projectHistoryDir(projectId);
+    const hash = await findAlsHashForSave(
+      historyDir,
+      save.id,
+      save.metadata.activeSetPath,
+    );
+    return hash ? this.readLiveSetCached(getBlobPath(historyDir, hash)) : null;
+  }
+
+  /**
+   * Compare a checkpoint's Ableton set with the previous checkpoint of the same
+   * set. Reads only from Echoform's history, so it works after the working
+   * folder is gone. Results are cached on disk and the compact summary is
+   * stored on the save.
+   */
+  async getSaveAnalysis(
     projectId: string,
     saveId: string,
-  ): Promise<{ project: Project; changes: ChangeSummary | null }> {
-    const analysisTarget = await this.withLock(async () => {
+  ): Promise<{ analysis: SaveAnalysis; project: Project | null }> {
+    const { save, previous } = await this.withLock(async () => {
       const state = await this.loadState();
       const project = requireProject(state, projectId);
-      const save = requireSave(project, saveId);
-
-      if (save.changes && save.setDiff !== undefined && save.trackSummary) {
-        return {
-          project,
-          save,
-          prevSave: null,
-          missingChanges: false,
-          missingSemantic: false,
-        };
-      }
-
-      const ideaSaves = project.saves.filter((s) => s.ideaId === save.ideaId);
-      const idx = ideaSaves.findIndex((s) => s.id === saveId);
-      const prevSave = idx > 0 ? ideaSaves[idx - 1] : null;
-
-      return {
-        project,
-        save,
-        prevSave,
-        missingChanges: !save.changes && Boolean(prevSave),
-        missingSemantic: save.setDiff === undefined || !save.trackSummary,
-      };
+      const target = requireSave(project, saveId);
+      return { previous: this.previousSaveInIdea(project, target), save: target };
     });
+    const baseSaveId = previous?.id ?? null;
+    const cachePath = this.analysisCachePath(projectId, saveId);
 
-    if (!(analysisTarget.missingChanges || analysisTarget.missingSemantic)) {
-      return {
-        project: analysisTarget.project,
-        changes: analysisTarget.save.changes ?? null,
-      };
+    let analysis: SaveAnalysis | null = null;
+    try {
+      const cached = JSON.parse(await readFile(cachePath, "utf8")) as SaveAnalysis;
+      if (
+        cached.baseSaveId === baseSaveId &&
+        cached.summary.version === ANALYSIS_VERSION
+      ) {
+        analysis = cached;
+      }
+    } catch {
+      // No usable cache; analyze below.
     }
 
-    const computedChanges =
-      analysisTarget.missingChanges && analysisTarget.prevSave
-        ? await computeManifestChangeSummary(
-            this.projectHistoryDir(analysisTarget.project.id),
-            analysisTarget.prevSave,
-            analysisTarget.save.id,
-            analysisTarget.save.metadata,
-          )
-        : analysisTarget.save.changes;
+    if (!analysis) {
+      const after = await this.liveSetForSave(projectId, save);
+      if (!after) {
+        throw new AppError("This checkpoint has no Ableton set to analyze.", 404);
+      }
+      const before = previous ? await this.liveSetForSave(projectId, previous) : null;
+      analysis = analyzeSets(before, after, baseSaveId);
+      await mkdir(dirname(cachePath), { recursive: true });
+      await writeFile(cachePath, JSON.stringify(analysis));
+    }
 
-    const semanticData = analysisTarget.missingSemantic
-      ? await computeSemanticSaveData(
-          this.projectHistoryDir(analysisTarget.project.id),
-          analysisTarget.prevSave,
-          analysisTarget.save,
-        )
-      : {
-          setDiff: analysisTarget.save.setDiff,
-          trackSummary: analysisTarget.save.trackSummary,
-        };
+    const project = await this.storeSummary(projectId, saveId, analysis.summary);
+    return { analysis, project };
+  }
 
+  /** Persist a summary if it differs; returns the project when state changed. */
+  private async storeSummary(
+    projectId: string,
+    saveId: string,
+    summary: SaveSummary,
+  ): Promise<Project | null> {
     return this.withLock(async () => {
       const state = await this.loadState();
-      const project = requireProject(state, projectId);
-      const save = requireSave(project, saveId);
-      let dirty = false;
-
-      if (!save.changes && computedChanges) {
-        save.changes = computedChanges;
-        dirty = true;
+      const project = state.projects.find((p) => p.id === projectId);
+      const save = project?.saves.find((s) => s.id === saveId);
+      if (!(project && save) || isSameSummary(save.summary, summary)) {
+        return null;
       }
-      if (save.setDiff === undefined && semanticData.setDiff !== undefined) {
-        save.setDiff = semanticData.setDiff;
-        dirty = true;
-      }
-      if (!save.trackSummary && semanticData.trackSummary) {
-        save.trackSummary = semanticData.trackSummary;
-        dirty = true;
-      }
-
-      if (dirty) {
-        await this.saveState(state);
-      }
-      return { project, changes: save.changes ?? null };
+      save.summary = summary;
+      await this.saveState(state);
+      return project;
     });
+  }
+
+  /**
+   * Summarize the newest checkpoint whose summary is missing or stale.
+   * Returns the updated project, or null when everything is current.
+   */
+  async summarizeNextSave(): Promise<Project | null | undefined> {
+    const next = await this.withLock(async () => {
+      const state = await this.loadState();
+      const candidates = state.projects.flatMap((project) =>
+        project.saves
+          .filter((save) => !this.unreadableSaves.has(save.id))
+          .filter((save) => {
+            const summary = save.summary;
+            return (
+              !summary ||
+              summary.version !== ANALYSIS_VERSION ||
+              summary.baseSaveId !==
+                (this.previousSaveInIdea(project, save)?.id ?? null)
+            );
+          })
+          .map((save) => ({ createdAt: save.createdAt, projectId: project.id, saveId: save.id })),
+      );
+      return candidates.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    });
+    if (!next) {
+      return undefined;
+    }
+    try {
+      const { project } = await this.getSaveAnalysis(next.projectId, next.saveId);
+      return project;
+    } catch {
+      // Unreadable or unparseable set; don't retry it this session.
+      this.unreadableSaves.add(next.saveId);
+      return null;
+    }
   }
 
   /** Get disk usage statistics for a project. */

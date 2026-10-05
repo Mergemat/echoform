@@ -8,7 +8,8 @@ import {
   TrashSimple,
   X,
 } from "@phosphor-icons/react";
-import { type ReactNode, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,298 +22,119 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sendDaemonCommand } from "@/lib/daemon-client";
-import { basename } from "@/lib/path";
 import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
-import type { Idea, Project, Save, SetDiff, TrackDiff } from "@/lib/types";
+import type { Idea, Project, Save, SaveAnalysis } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { describeUnchangedSave } from "./checkpoint-row";
+import { ArrangementMap, type SelectedClip } from "./arrangement-map";
+import { ChangeList } from "./change-list";
+import { describeSave } from "./checkpoint-row";
+import { PianoRollDiff } from "./piano-roll-diff";
 import { PreviewRequestDialog } from "./preview-request-dialog";
 import {
   fileTabName,
   formatFullDateTime,
-  formatSize,
+  formatTime,
   getKeepReasons,
   getSaveDisplayTitle,
-  isAls,
-  isAudio,
 } from "./timeline-utils";
-import { TrackList } from "./track-list";
 
-const TRACK_TYPE: Record<string, string> = {
-  audio: "Audio",
-  group: "Group",
-  midi: "MIDI",
-  return: "Return",
-};
-
-/** Fingerprint a track's changes so identical edits can be grouped. */
-function trackChangeKey(t: TrackDiff): string {
-  return [
-    t.addedDevices.slice().sort().join(","),
-    t.removedDevices.slice().sort().join(","),
-    t.deviceToggles
-      .map((d) => `${d.name}:${d.enabled}`)
-      .sort()
-      .join(","),
-    String(t.clipCountDelta),
-    t.mixerChanges.slice().sort().join(","),
-    String(t.colorChanged),
-    t.renamedFrom ?? "",
-  ].join("|");
+async function fetchAnalysis(
+  projectId: string,
+  saveId: string
+): Promise<SaveAnalysis> {
+  const res = await fetch(
+    `/api/projects/${projectId}/saves/${saveId}/analysis`
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error ?? "This checkpoint couldn't be analyzed.");
+  }
+  return data.analysis as SaveAnalysis;
 }
 
-function groupModifiedTracks(tracks: TrackDiff[]): TrackDiff[][] {
-  const groups = new Map<string, TrackDiff[]>();
-  for (const t of tracks) {
-    const key = trackChangeKey(t);
-    groups.set(key, [...(groups.get(key) ?? []), t]);
+/** Open the most interesting MIDI clip in the piano roll by default. */
+function defaultClip(analysis: SaveAnalysis): SelectedClip | null {
+  for (const status of ["edited", "added"] as const) {
+    for (const track of analysis.tracks) {
+      const clip = track.clips.find((c) => c.status === status && c.notes);
+      if (clip) {
+        return { clip, track };
+      }
+    }
   }
-  return [...groups.values()];
+  return null;
 }
 
 function Section({
   title,
-  aside,
   children,
 }: {
   title: string;
-  aside?: ReactNode;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <section>
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="font-medium text-[12px] text-muted-foreground">
-          {title}
-        </h3>
-        {aside && (
-          <span className="text-[11px] text-subtle-foreground">{aside}</span>
-        )}
-      </div>
+      <h3 className="mb-2 font-medium text-[12px] text-muted-foreground">
+        {title}
+      </h3>
       {children}
     </section>
   );
 }
 
-function ValueChange({
-  label,
-  from,
-  to,
-}: {
-  label: string;
-  from: ReactNode;
-  to: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-[12px]">
-      <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
-      <span className="text-subtle-foreground tabular-nums">{from}</span>
-      <span className="text-subtle-foreground">→</span>
-      <span className="font-medium tabular-nums">{to}</span>
-    </div>
-  );
-}
+function SongChanges({ projectId, save }: { projectId: string; save: Save }) {
+  const query = useQuery({
+    queryFn: () => fetchAnalysis(projectId, save.id),
+    queryKey: [
+      "analysis",
+      projectId,
+      save.id,
+      save.summary?.baseSaveId ?? null,
+    ],
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const [picked, setPicked] = useState<SelectedClip | null>(null);
 
-function TrackChanges({ tracks }: { tracks: TrackDiff[] }) {
-  return (
-    <>
-      {groupModifiedTracks(tracks).map((group) => {
-        const rep = group[0]!;
-        const details: { text: string; className?: string }[] = [];
-        if (rep.renamedFrom && group.length === 1) {
-          details.push({ text: `renamed from “${rep.renamedFrom}”` });
-        }
-        if (rep.addedDevices.length > 0) {
-          details.push({
-            className: "text-success",
-            text: `added ${rep.addedDevices.join(", ")}`,
-          });
-        }
-        if (rep.removedDevices.length > 0) {
-          details.push({
-            className: "text-destructive",
-            text: `removed ${rep.removedDevices.join(", ")}`,
-          });
-        }
-        for (const toggle of rep.deviceToggles) {
-          details.push({
-            text: `${toggle.name} turned ${toggle.enabled ? "on" : "off"}`,
-          });
-        }
-        if (rep.clipCountDelta !== 0) {
-          const n = Math.abs(rep.clipCountDelta);
-          details.push({
-            className:
-              rep.clipCountDelta > 0 ? "text-success" : "text-destructive",
-            text: `${rep.clipCountDelta > 0 ? "+" : "−"}${n} clip${n === 1 ? "" : "s"}`,
-          });
-        }
-        if (rep.mixerChanges.length > 0) {
-          details.push({ text: rep.mixerChanges.join(", ") });
-        }
-        if (rep.colorChanged) {
-          details.push({ text: "color changed" });
-        }
-
-        return (
-          <div className="text-[12px]" key={trackChangeKey(rep)}>
-            <div className="flex items-baseline gap-2">
-              <span className="font-medium">
-                {group.map((t) => t.name).join(", ")}
-              </span>
-              {group.length === 1 && (
-                <span className="text-[11px] text-subtle-foreground">
-                  {TRACK_TYPE[rep.type] ?? rep.type}
-                </span>
-              )}
-            </div>
-            {details.length > 0 && (
-              <div className="mt-0.5 text-muted-foreground">
-                {details.map((d, i) => (
-                  <span className={d.className} key={d.text}>
-                    {i > 0 && (
-                      <span className="text-subtle-foreground"> · </span>
-                    )}
-                    {d.text}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-function SetChanges({ sd }: { sd: SetDiff }) {
-  const hasValueChanges =
-    sd.tempoChange ||
-    sd.timeSignatureChange ||
-    sd.arrangementLengthChange ||
-    sd.sceneCountChange ||
-    sd.locatorCountChange;
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border bg-card p-3">
-      {hasValueChanges && (
-        <div className="space-y-1">
-          {sd.tempoChange && (
-            <ValueChange
-              from={sd.tempoChange.from}
-              label="Tempo"
-              to={`${sd.tempoChange.to} BPM`}
-            />
-          )}
-          {sd.timeSignatureChange && (
-            <ValueChange
-              from={sd.timeSignatureChange.from}
-              label="Time sig."
-              to={sd.timeSignatureChange.to}
-            />
-          )}
-          {sd.arrangementLengthChange && (
-            <ValueChange
-              from={`${Math.round(sd.arrangementLengthChange.from / 4)} bars`}
-              label="Length"
-              to={`${Math.round(sd.arrangementLengthChange.to / 4)} bars`}
-            />
-          )}
-          {sd.sceneCountChange && (
-            <ValueChange
-              from={sd.sceneCountChange.from}
-              label="Scenes"
-              to={sd.sceneCountChange.to}
-            />
-          )}
-          {sd.locatorCountChange && (
-            <ValueChange
-              from={sd.locatorCountChange.from}
-              label="Locators"
-              to={sd.locatorCountChange.to}
-            />
-          )}
-        </div>
-      )}
-      {sd.addedTracks.length > 0 && (
-        <div className="space-y-0.5 text-[12px]">
-          {sd.addedTracks.map((t) => (
-            <div className="text-success" key={`add-${t.type}-${t.name}`}>
-              + {t.name}{" "}
-              <span className="text-[11px] text-subtle-foreground">
-                {TRACK_TYPE[t.type] ?? t.type} track added
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      {sd.removedTracks.length > 0 && (
-        <div className="space-y-0.5 text-[12px]">
-          {sd.removedTracks.map((t) => (
-            <div className="text-destructive" key={`rem-${t.type}-${t.name}`}>
-              − <span className="line-through">{t.name}</span>{" "}
-              <span className="text-[11px] text-subtle-foreground">
-                {TRACK_TYPE[t.type] ?? t.type} track removed
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      {sd.modifiedTracks.length > 0 && (
-        <div className="space-y-2">
-          <TrackChanges tracks={sd.modifiedTracks} />
-        </div>
-      )}
-      {sd.tracksReordered && (
-        <div className="text-[12px] text-muted-foreground">
-          Tracks were reordered
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FileChanges({ save }: { save: Save }) {
-  const changes = save.changes;
-  if (!changes) {
-    return null;
-  }
-  const notSet = (f: string) => !isAls(f);
-  const addedAudio = changes.addedFiles.filter((f) => notSet(f) && isAudio(f));
-  const removedAudio = changes.removedFiles.filter(
-    (f) => notSet(f) && isAudio(f)
-  );
-  const otherCount = [
-    ...changes.addedFiles,
-    ...changes.removedFiles,
-    ...changes.modifiedFiles,
-  ].filter((f) => notSet(f) && !isAudio(f)).length;
-
-  if (addedAudio.length + removedAudio.length + otherCount === 0) {
-    return null;
-  }
-
-  return (
-    <Section title="Files">
-      <div className="space-y-0.5 rounded-lg border border-border bg-card p-3 text-[12px]">
-        {addedAudio.map((f) => (
-          <div className="truncate text-success" key={`a-${f}`} title={f}>
-            + {basename(f)}
-          </div>
-        ))}
-        {removedAudio.map((f) => (
-          <div className="truncate text-destructive" key={`r-${f}`} title={f}>
-            − <span className="line-through">{basename(f)}</span>
-          </div>
-        ))}
-        {otherCount > 0 && (
-          <div className="text-muted-foreground">
-            {otherCount} other file{otherCount === 1 ? "" : "s"} changed
-          </div>
-        )}
+  if (query.isPending) {
+    return (
+      <div className="space-y-2" role="status">
+        <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+        <div className="h-40 animate-pulse rounded-lg bg-raised" />
+        <span className="sr-only">Reading the Ableton set…</span>
       </div>
-    </Section>
+    );
+  }
+  if (query.isError) {
+    return (
+      <p
+        className="rounded-lg border border-line px-3 py-3 text-[12.5px] text-muted-foreground"
+        role="alert"
+      >
+        {query.error.message}
+      </p>
+    );
+  }
+
+  const analysis = query.data;
+  const selection = picked ?? defaultClip(analysis);
+  return (
+    <div className="space-y-6">
+      <ArrangementMap
+        analysis={analysis}
+        onSelectClip={setPicked}
+        selected={selection}
+      />
+      {selection && (
+        <PianoRollDiff
+          beatsPerBar={analysis.beatsPerBar}
+          selection={selection}
+        />
+      )}
+      <Section title="What changed">
+        <ChangeList analysis={analysis} />
+      </Section>
+    </div>
   );
 }
 
@@ -346,10 +168,6 @@ export function CheckpointDetail({
     error: null,
     pending: false,
   });
-  const [analysis, setAnalysis] = useState<{
-    error: string | null;
-    pending: boolean;
-  }>({ error: null, pending: false });
   const [dialog, setDialog] = useState<
     "none" | "branch" | "delete" | "preview"
   >("none");
@@ -365,13 +183,6 @@ export function CheckpointDetail({
 
   const keepReasons = getKeepReasons(project, save);
   const isBranchStart = !save.auto && Boolean(project.continuedFrom);
-  const sd = save.setDiff;
-  const needsAnalysis =
-    save.changes === undefined || sd === undefined || !save.trackSummary;
-  const trackCount = save.trackSummary?.reduce(
-    (sum, track) => sum + track.trackCount,
-    0
-  );
 
   const commitEdit = async () => {
     const nextLabel = labelVal.trim();
@@ -433,27 +244,6 @@ export function CheckpointDetail({
     }
   };
 
-  const handleAnalyze = async () => {
-    posthog.capture("save_analysis_requested");
-    setAnalysis({ error: null, pending: true });
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/saves/${save.id}/changes`,
-        { method: "POST" }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Analysis failed.");
-      }
-      setAnalysis({ error: null, pending: false });
-    } catch (error) {
-      setAnalysis({
-        error: error instanceof Error ? error.message : "Analysis failed.",
-        pending: false,
-      });
-    }
-  };
-
   const handleBranch = async () => {
     setBranch((b) => ({ ...b, error: null, pending: true }));
     try {
@@ -503,24 +293,30 @@ export function CheckpointDetail({
   };
 
   return (
-    <div className="space-y-6 px-6 pt-5 pb-10">
-      <header>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            {isHead && (
-              <span className="rounded bg-success/10 px-1.5 py-px font-medium text-success">
-                Latest
+    <div className="space-y-7 px-6 pt-5 pb-12">
+      <header className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-[22px] text-foreground tabular-nums tracking-tight">
+                {formatTime(save.createdAt)}
               </span>
-            )}
-            {isBranchStart && (
-              <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-px text-muted-foreground">
-                <GitBranch size={11} />
-                Branch start
-              </span>
-            )}
-            <span className="text-muted-foreground">
-              {idea ? `${fileTabName(idea)}.als` : "Checkpoint"}
-            </span>
+              {isHead && (
+                <span className="font-mono text-[10px] text-foreground uppercase tracking-wider">
+                  Latest
+                </span>
+              )}
+              {isBranchStart && (
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <GitBranch size={11} />
+                  Branch start
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 text-[12px] text-subtle-foreground">
+              {formatFullDateTime(save.createdAt)}
+              {idea ? ` · ${fileTabName(idea)}.als` : ""}
+            </div>
           </div>
           <Button
             aria-label="Close"
@@ -533,9 +329,10 @@ export function CheckpointDetail({
             <X size={14} />
           </Button>
         </div>
+
         <Input
           aria-label="Checkpoint name"
-          className="mt-2 -ml-2 h-9 rounded-md border-transparent bg-transparent px-2 font-semibold text-[17px] shadow-none placeholder:font-normal placeholder:text-subtle-foreground hover:border-border focus-visible:border-input focus-visible:bg-card focus-visible:ring-0 dark:bg-transparent"
+          className="-ml-2 h-9 rounded-md border-transparent bg-transparent px-2 font-semibold text-[18px] tracking-tight shadow-none placeholder:font-normal placeholder:text-subtle-foreground hover:border-line focus-visible:border-input focus-visible:bg-raised focus-visible:ring-0 dark:bg-transparent"
           onBlur={commitEdit}
           onChange={(e) => setLabelVal(e.target.value)}
           onKeyDown={(e) => {
@@ -546,100 +343,66 @@ export function CheckpointDetail({
           placeholder="Name this checkpoint…"
           value={labelVal}
         />
-        <div className="mt-1 text-[12px] text-muted-foreground">
-          Saved {formatFullDateTime(save.createdAt)}
-        </div>
-      </header>
-
-      {/* Primary actions */}
-      <div className="space-y-2">
-        <Button
-          className="w-full"
-          onClick={() => {
-            setBranch({ advanced: false, error: null, pending: false });
-            setDialog("branch");
-          }}
-          type="button"
-        >
-          <GitBranch size={15} />
-          Continue from here
-        </Button>
-        <p className="px-1 text-[11px] text-muted-foreground leading-relaxed">
-          Opens this checkpoint in Ableton as a separate copy. Your current
-          project is not changed.
+        <p className="text-[13px] text-muted-foreground leading-relaxed">
+          {describeSave(project, save)}
         </p>
-        <Button
-          className="w-full"
-          onClick={() => {
-            if (save.previewStatus === "ready") {
-              openPreviewPlayer(save.id, project);
-            } else {
-              setDialog("preview");
-            }
-          }}
-          type="button"
-          variant="outline"
-        >
-          <MusicNote size={15} />
-          {save.previewStatus === "ready"
-            ? "Listen to preview"
-            : "Attach an audio preview"}
-        </Button>
-        {save.previewStatus === "ready" && (
-          <button
-            className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={() => setDialog("preview")}
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <Button
+            onClick={() => {
+              setBranch({ advanced: false, error: null, pending: false });
+              setDialog("branch");
+            }}
             type="button"
           >
-            Replace preview
-          </button>
-        )}
+            <GitBranch size={14} />
+            Continue from here
+          </Button>
+          <Button
+            onClick={() => {
+              if (save.previewStatus === "ready") {
+                openPreviewPlayer(save.id, project);
+              } else {
+                setDialog("preview");
+              }
+            }}
+            type="button"
+            variant="outline"
+          >
+            <MusicNote size={14} />
+            {save.previewStatus === "ready" ? "Listen" : "Attach audio"}
+          </Button>
+          {save.previewStatus === "ready" && (
+            <Button
+              className="text-muted-foreground"
+              onClick={() => setDialog("preview")}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Replace audio
+            </Button>
+          )}
+        </div>
+        <p className="text-[11.5px] text-subtle-foreground">
+          Continue from here opens this version in Ableton as a separate copy.
+          Your current project is not changed.
+        </p>
         {(save.previewStatus === "missing" ||
           save.previewStatus === "error") && (
-          <p className="px-1 text-[11px] text-warning">
+          <p className="text-[12px] text-warning">
             {save.previewStatus === "missing"
-              ? "The preview file is missing. Attach it again."
-              : "The preview couldn't be imported. Attach it again."}
+              ? "The audio preview file is missing. Attach it again."
+              : "The audio preview couldn't be imported. Attach it again."}
           </p>
         )}
-      </div>
+      </header>
 
-      <Section title="What changed since the previous save">
-        {sd ? (
-          <SetChanges sd={sd} />
-        ) : (
-          <div className="rounded-lg border border-border bg-card p-3 text-[12px] text-muted-foreground">
-            {describeUnchangedSave(project, save)}.
-          </div>
-        )}
-        {needsAnalysis && (
-          <div className="mt-2 flex items-center gap-3">
-            <Button
-              disabled={analysis.pending}
-              onClick={() => void handleAnalyze()}
-              size="xs"
-              type="button"
-              variant="outline"
-            >
-              {analysis.pending && (
-                <CircleNotch className="animate-spin" size={12} />
-              )}
-              {analysis.pending ? "Analyzing…" : "Analyze changes"}
-            </Button>
-            {analysis.error && (
-              <span className="text-[11px] text-destructive" role="alert">
-                {analysis.error}
-              </span>
-            )}
-          </div>
-        )}
-      </Section>
-
-      <FileChanges save={save} />
+      <SongChanges projectId={projectId} save={save} />
 
       <Section title="Note">
         <Textarea
-          className="min-h-[72px] resize-none rounded-lg border-border bg-card text-[12px] leading-relaxed placeholder:text-subtle-foreground focus-visible:ring-0 dark:bg-card"
+          className="min-h-[72px] resize-none rounded-lg border-line bg-raised text-[12.5px] leading-relaxed placeholder:text-subtle-foreground focus-visible:ring-0 dark:bg-raised"
           onBlur={commitEdit}
           onChange={(e) => setNoteVal(e.target.value)}
           placeholder="What were you trying here? What to fix next?"
@@ -649,7 +412,7 @@ export function CheckpointDetail({
           <div
             className={cn(
               "mt-1.5 text-[11px]",
-              edit.error ? "text-destructive" : "text-muted-foreground"
+              edit.error ? "text-destructive" : "text-subtle-foreground"
             )}
             role={edit.error ? "alert" : "status"}
           >
@@ -661,45 +424,12 @@ export function CheckpointDetail({
         )}
       </Section>
 
-      {save.trackSummary && save.trackSummary.length > 0 && (
-        <Section aside={`${trackCount} tracks`} title="Tracks in this version">
-          <div className="rounded-lg border border-border bg-card p-1.5">
-            <TrackList tracks={save.trackSummary} />
-          </div>
-        </Section>
-      )}
-
-      <Section title="Stored copy">
-        <div className="space-y-1 text-[12px]">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Project size</span>
-            <span className="tabular-nums">
-              {formatSize(save.metadata.sizeBytes)}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Files</span>
-            <span className="tabular-nums">
-              {save.metadata.fileCount} ({save.metadata.audioFiles} audio)
-            </span>
-          </div>
-          {save.metadata.setFiles.length > 1 && (
-            <div className="flex justify-between gap-4">
-              <span className="shrink-0 text-muted-foreground">Sets</span>
-              <span className="truncate text-right">
-                {save.metadata.setFiles.map((f) => basename(f)).join(", ")}
-              </span>
-            </div>
-          )}
-        </div>
-      </Section>
-
-      <div className="space-y-3 border-border border-t pt-5">
+      <footer className="space-y-3 border-line border-t pt-5">
         <div className="flex items-start gap-2 text-[12px]">
           <ShieldCheck
             className={cn(
               "mt-px shrink-0",
-              keepReasons.length > 0 ? "text-success" : "text-muted-foreground"
+              keepReasons.length > 0 ? "text-success" : "text-subtle-foreground"
             )}
             size={15}
           />
@@ -756,7 +486,7 @@ export function CheckpointDetail({
             {pin.error}
           </div>
         )}
-      </div>
+      </footer>
 
       <Dialog
         onOpenChange={(open) => {

@@ -8,9 +8,10 @@ import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CheckpointDetail } from "./checkpoint-detail";
 import { CheckpointGroupRow } from "./checkpoint-group-row";
-import { CheckpointRow } from "./checkpoint-row";
+import { CheckpointRow, rowGrid } from "./checkpoint-row";
 import { RelinkProjectButton } from "./relink-project-button";
 import { SetSelector } from "./set-selector";
+import { BarRuler } from "./song-strip";
 import {
   buildTimelineSections,
   type DisplayItem,
@@ -189,11 +190,15 @@ function TimelineSectionView({
   section,
   project,
   selectedSaveId,
+  scaleBeats,
+  compact,
   onToggleSave,
   onToggleGroup,
 }: {
   section: TimelineSection;
   project: Project;
+  scaleBeats: number;
+  compact: boolean;
   selectedSaveId: string | null;
   onToggleSave: (id: string) => void;
   onToggleGroup: (key: string) => void;
@@ -202,6 +207,7 @@ function TimelineSectionView({
     if (item.type === "group") {
       return (
         <CheckpointGroupRow
+          compact={compact}
           expanded={item.expanded}
           key={`group-${item.key}`}
           onToggle={() => onToggleGroup(item.key)}
@@ -212,6 +218,7 @@ function TimelineSectionView({
     const { save } = item;
     return (
       <CheckpointRow
+        compact={compact}
         indented={item.grouped}
         isHead={project.ideas.some((idea) => idea.headSaveId === save.id)}
         isSelected={save.id === selectedSaveId}
@@ -219,13 +226,14 @@ function TimelineSectionView({
         onClick={() => onToggleSave(save.id)}
         project={project}
         save={save}
+        scaleBeats={scaleBeats}
       />
     );
   };
 
   return (
     <section>
-      <h3 className="sticky top-0 z-10 bg-background/95 py-2 pl-3 font-medium text-[12px] text-muted-foreground backdrop-blur">
+      <h3 className="py-2 pl-2 font-medium text-[12px] text-muted-foreground">
         {section.label}
       </h3>
       <div className="space-y-0.5">{section.items.map(renderItem)}</div>
@@ -258,6 +266,19 @@ export function Timeline() {
         : [],
     [project, effectiveIdeaId, expandedGroups]
   );
+
+  // All strips share one scale, so rows line up bar for bar and the song
+  // visibly grows down the history.
+  const scale = useMemo(() => {
+    const summaries =
+      project?.saves
+        .filter((save) => save.ideaId === effectiveIdeaId)
+        .flatMap((save) => (save.summary ? [save.summary] : [])) ?? [];
+    return {
+      beats: Math.max(1, ...summaries.map((s) => s.lengthBeats)),
+      perBar: summaries.at(-1)?.beatsPerBar ?? 4,
+    };
+  }, [project, effectiveIdeaId]);
 
   const previewCount = useMemo(
     () =>
@@ -318,30 +339,45 @@ export function Timeline() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto px-5 pb-24">
-            <div className="flex min-h-12 items-center justify-between gap-3 py-2 pl-3">
-              {project.ideas.length > 1 ? (
-                <SetSelector
-                  activeIdeaId={activeIdeaId}
-                  onSelect={setActiveIdea}
-                  project={project}
-                />
-              ) : (
-                <span className="font-medium text-[13px]">Checkpoints</span>
-              )}
-              {previewCount > 0 && (
-                <Button
-                  aria-pressed={showPreviewsOnly}
-                  className={cn(!showPreviewsOnly && "text-muted-foreground")}
-                  onClick={() => setShowPreviewsOnly((v) => !v)}
-                  size="xs"
-                  type="button"
-                  variant={showPreviewsOnly ? "secondary" : "ghost"}
-                >
-                  <MusicNotes size={13} />
-                  With previews only ({previewCount})
-                </Button>
-              )}
+          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto px-4 pb-24">
+            <div className="sticky top-0 z-10 -mx-4 border-line border-b bg-background/95 px-4 backdrop-blur">
+              <div className="flex min-h-11 items-center justify-between gap-3 pt-1 pl-2">
+                {project.ideas.length > 1 ? (
+                  <SetSelector
+                    activeIdeaId={activeIdeaId}
+                    onSelect={setActiveIdea}
+                    project={project}
+                  />
+                ) : (
+                  <span className="font-medium text-[13px]">Checkpoints</span>
+                )}
+                {previewCount > 0 && (
+                  <Button
+                    aria-pressed={showPreviewsOnly}
+                    className={cn(!showPreviewsOnly && "text-muted-foreground")}
+                    onClick={() => setShowPreviewsOnly((v) => !v)}
+                    size="xs"
+                    type="button"
+                    variant={showPreviewsOnly ? "secondary" : "ghost"}
+                  >
+                    <MusicNotes size={13} />
+                    With audio only ({previewCount})
+                  </Button>
+                )}
+              </div>
+              <div
+                className={cn(
+                  rowGrid(Boolean(selectedSave)),
+                  "pr-2 pb-1.5 pl-2"
+                )}
+              >
+                <span className="font-mono text-[10px] text-subtle-foreground">
+                  bar
+                </span>
+                <BarRuler beatsPerBar={scale.perBar} scaleBeats={scale.beats} />
+                <span />
+                <span />
+              </div>
             </div>
 
             {visibleSections.length === 0 ? (
@@ -352,10 +388,12 @@ export function Timeline() {
               <div className="space-y-4">
                 {visibleSections.map((section) => (
                   <TimelineSectionView
+                    compact={Boolean(selectedSave)}
                     key={section.key}
                     onToggleGroup={toggleGroup}
                     onToggleSave={toggleSave}
                     project={project}
+                    scaleBeats={scale.beats}
                     section={section}
                     selectedSaveId={selectedSaveId}
                   />
@@ -365,7 +403,7 @@ export function Timeline() {
           </div>
 
           {selectedSave && (
-            <aside className="scrollbar-thin w-[min(46%,520px)] min-w-[400px] shrink-0 overflow-y-auto border-border border-s bg-sidebar">
+            <aside className="scrollbar-thin w-[min(58%,760px)] min-w-[480px] shrink-0 overflow-y-auto border-line border-s bg-sidebar">
               <CheckpointDetail
                 idea={selectedIdea}
                 isHead={selectedIdea?.headSaveId === selectedSave.id}
