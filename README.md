@@ -53,8 +53,8 @@ git push --follow-tags
 ## Dependency Audit
 
 `bun run audit` rejects new high or critical advisory IDs and severity regressions.
-The reviewed baseline currently accepts 19 high-severity observations across 12
-advisory IDs and no critical advisories. Observation counts remain visible in the
+The reviewed baseline currently accepts one high-severity advisory (`braces`,
+which has no patched release yet). Observation counts remain visible in the
 output, while acceptance is always tied to a specific package and advisory ID.
 Keep the baseline explicit until upstream transitive fixes are available, and
 remove entries as advisories resolve.
