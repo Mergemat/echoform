@@ -531,7 +531,7 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
                   <span
                     className={`shrink-0 rounded-full px-1.5 py-0.5 font-medium text-[10px] ${
                       isANewer
-                        ? "border border-emerald-400/15 bg-emerald-400/10 text-emerald-400/80"
+                        ? "border border-success/20 bg-success/10 text-success"
                         : "border border-border bg-muted text-muted-foreground"
                     }`}
                   >
@@ -620,7 +620,7 @@ function usePreviewPlayerView({ project, save, onClose }: PreviewPlayerProps) {
                     className={`shrink-0 rounded-full px-1.5 py-0.5 font-medium text-[10px] ${
                       isANewer
                         ? "border border-border bg-muted text-muted-foreground"
-                        : "border border-emerald-400/15 bg-emerald-400/10 text-emerald-400/80"
+                        : "border border-success/20 bg-success/10 text-success"
                     }`}
                   >
                     {isANewer ? "Older" : "Newer"}

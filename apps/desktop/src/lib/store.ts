@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type {
   ActivityItem,
-  CompareResult,
   DiscoveredProject,
   Project,
   RootSuggestion,
@@ -19,7 +18,6 @@ interface Store {
     roots: TrackedRoot[],
     activity: ActivityItem[]
   ) => void;
-  compare: CompareResult | null;
   discoveredProjects: DiscoveredProject[];
   projects: Project[];
   rootSuggestions: RootSuggestion[];
@@ -32,7 +30,6 @@ interface Store {
   selectedSaveId: string | null;
   selectProject: (id: string | null) => void;
   setActiveIdea: (id: string) => void;
-  setCompare: (compare: CompareResult | null) => void;
   setDiscoveredProjects: (projects: DiscoveredProject[]) => void;
   setRootSuggestions: (suggestions: RootSuggestion[]) => void;
   snapshotReceived: boolean;
@@ -113,7 +110,6 @@ export const useStore = create<Store>((set, get) => ({
         state.activeIdeaId
       ),
     })),
-  compare: null,
   discoveredProjects: [],
   projects: [],
   rootSuggestions: [],
@@ -139,7 +135,6 @@ export const useStore = create<Store>((set, get) => ({
   selectProject: (id) =>
     set({
       activeIdeaId: null,
-      compare: null,
       selectedProjectId: id,
       selectedSaveId: null,
     }),
@@ -149,7 +144,6 @@ export const useStore = create<Store>((set, get) => ({
       activeIdeaId: id,
       selectedSaveId: null,
     }),
-  setCompare: (compare) => set({ compare }),
 
   setDiscoveredProjects: (projects) => set({ discoveredProjects: projects }),
   setRootSuggestions: (suggestions) =>

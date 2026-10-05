@@ -22,5 +22,35 @@ export function timeAgo(iso: string | null | undefined): string {
     return `${hours}h ago`;
   }
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  if (days < 30) {
+    return `${days}d ago`;
+  }
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Replace the home directory with ~ and the iCloud Drive container with ~/iCloud. */
+export function shortenPath(path: string): string {
+  let short = path;
+  const parts = short.split("/");
+  if (parts.length >= 3 && (parts[1] === "Users" || parts[1] === "home")) {
+    const home = `/${parts[1]}/${parts[2]}`;
+    if (short === home) {
+      return "~";
+    }
+    if (short.startsWith(`${home}/`)) {
+      short = `~${short.slice(home.length)}`;
+    }
+  }
+  return short.replace(
+    "~/Library/Mobile Documents/com~apple~CloudDocs",
+    "~/iCloud"
+  );
+}
+
+export function plural(count: number, noun: string, pluralNoun = `${noun}s`) {
+  return `${count} ${count === 1 ? noun : pluralNoun}`;
 }

@@ -16,6 +16,9 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogContent: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
+  DialogDescription: ({ children }: { children: ReactNode }) => (
+    <p>{children}</p>
+  ),
   DialogHeader: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -45,7 +48,6 @@ describe("RootManagerDialog", () => {
     useStore.setState({
       activeIdeaId: null,
       activity: [],
-      compare: null,
       discoveredProjects: [],
       projects: [],
       rootSuggestions: [],

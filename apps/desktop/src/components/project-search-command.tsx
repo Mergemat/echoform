@@ -1,12 +1,4 @@
-import {
-  CheckCircle,
-  Circle,
-  CircleNotch,
-  Clock,
-  Pause,
-  Plus,
-  Warning,
-} from "@phosphor-icons/react";
+import { CheckCircle, CircleNotch, Plus } from "@phosphor-icons/react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Command,
@@ -21,9 +13,14 @@ import {
 import { sendDaemonCommand } from "@/lib/daemon-client";
 import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
+import {
+  getProjectStatus,
+  lastCheckpointAt,
+  STATUS_DOT_CLASS,
+} from "@/lib/project-status";
 import { useStore } from "@/lib/store";
 import type { DiscoveredProject, Project } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, plural, shortenPath, timeAgo } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -32,26 +29,6 @@ const MAX_SEARCH_RESULTS = 100;
 const DISCOVER_DELAY_MS = 0;
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-function formatRelative(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(ms / 60_000);
-  if (m < 1) {
-    return "just now";
-  }
-  if (m < 60) {
-    return `${m}m ago`;
-  }
-  const h = Math.floor(m / 60);
-  if (h < 24) {
-    return `${h}h ago`;
-  }
-  const d = Math.floor(h / 24);
-  if (d < 7) {
-    return `${d}d ago`;
-  }
-  return new Date(iso).toLocaleDateString();
-}
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
@@ -81,55 +58,6 @@ function buildNameCounts(projects: Project[]): Map<string, number> {
   return counts;
 }
 
-/** Returns the last N path segments as a disambiguator, e.g. "~/Music/Projects" */
-function shortenPath(fullPath: string, segments = 2): string {
-  const parts = fullPath.replace(/\/+$/, "").split("/");
-  const tail = parts.slice(-segments).join("/");
-  return parts.length > segments ? `~/${tail}` : tail;
-}
-
-interface HealthInfo {
-  className: string;
-  icon: React.ReactNode;
-  label: string;
-}
-
-function projectHealth(project: Project): HealthInfo {
-  if (project.presence === "missing") {
-    return {
-      className: "text-amber-400",
-      icon: <Warning className="size-3" weight="fill" />,
-      label: "Missing",
-    };
-  }
-  if (project.watchError) {
-    return {
-      className: "text-red-400",
-      icon: <Warning className="size-3" weight="fill" />,
-      label: "Error",
-    };
-  }
-  if (!project.watching) {
-    return {
-      className: "text-white/30",
-      icon: <Pause className="size-3" weight="fill" />,
-      label: "Paused",
-    };
-  }
-  return {
-    className: "text-emerald-400",
-    icon: <Circle className="size-2" weight="fill" />,
-    label: "Watching",
-  };
-}
-
-function savesLabel(count: number): string {
-  if (count === 0) {
-    return "No checkpoints";
-  }
-  return `${count} checkpoint${count === 1 ? "" : "s"}`;
-}
-
 // ── Subcomponents ────────────────────────────────────────────────────
 
 function TrackedProjectRow({
@@ -141,32 +69,37 @@ function TrackedProjectRow({
   isActive: boolean;
   showPath: boolean;
 }) {
-  const health = projectHealth(project);
+  const status = getProjectStatus(project);
 
   return (
     <>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className={cn("shrink-0", health.className)}>{health.icon}</span>
+      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <span
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            STATUS_DOT_CLASS[status.tone]
+          )}
+          title={status.label}
+        />
         <div className="min-w-0 flex-1">
           <span className="block truncate">{project.name}</span>
           {showPath && (
-            <span className="block truncate text-[10px] text-muted-foreground/60">
-              {shortenPath(project.projectPath, 3)}
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {shortenPath(project.projectPath)}
             </span>
           )}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2.5">
-        {isActive && (
-          <CheckCircle className="size-3.5 text-white/50" weight="fill" />
+      <div className="flex shrink-0 items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
+        {isActive && <CheckCircle className="size-3.5" weight="fill" />}
+        <span>
+          {project.saves.length === 0
+            ? "No checkpoints"
+            : plural(project.saves.length, "checkpoint")}
+        </span>
+        {lastCheckpointAt(project) && (
+          <span>{timeAgo(lastCheckpointAt(project))}</span>
         )}
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
-          {savesLabel(project.saves.length)}
-        </span>
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          <Clock className="size-3" />
-          {formatRelative(project.updatedAt)}
-        </span>
       </div>
     </>
   );
@@ -176,11 +109,11 @@ function DiscoveredProjectRow({ project }: { project: DiscoveredProject }) {
   return (
     <>
       <span className="flex min-w-0 items-center gap-2">
-        <Plus className="size-3.5 shrink-0 text-emerald-400" />
+        <Plus className="size-3.5 shrink-0 text-success" />
         <span className="truncate">{project.name}</span>
       </span>
-      <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
-        {project.setFiles.length} .als
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        Start recording · {plural(project.setFiles.length, "set")}
       </span>
     </>
   );
@@ -239,9 +172,10 @@ export function ProjectSearchCommand({
 
   const sortedProjects = useMemo(
     () =>
-      [...projects].sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      [...projects].sort((a, b) =>
+        (lastCheckpointAt(b) ?? b.updatedAt).localeCompare(
+          lastCheckpointAt(a) ?? a.updatedAt
+        )
       ),
     [projects]
   );
@@ -359,7 +293,7 @@ export function ProjectSearchCommand({
           {untrackedResults.length > 0 && (
             <>
               <CommandSeparator />
-              <CommandGroup heading="Discovered — not tracked">
+              <CommandGroup heading="Found on disk, not recorded yet">
                 {untrackedResults.map((project) => (
                   <CommandItem
                     className="flex items-center justify-between gap-3"

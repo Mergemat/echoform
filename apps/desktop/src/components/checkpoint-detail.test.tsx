@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Idea, Project, Save } from "@/lib/types";
-import { ExpandedCard } from "./expanded-card";
+import { CheckpointDetail } from "./checkpoint-detail";
 
 const { sendDaemonCommand } = vi.hoisted(() => ({
   sendDaemonCommand: vi.fn(),
@@ -78,7 +78,7 @@ const project: Project = {
 
 function renderCard() {
   return render(
-    <ExpandedCard
+    <CheckpointDetail
       idea={idea}
       isHead
       onClose={vi.fn()}

@@ -12,6 +12,7 @@ function getSets(project: Project) {
     .sort((a, b) => fileTabName(a.idea).localeCompare(fileTabName(b.idea)));
 }
 
+/** One tab per .als file in the project; each has its own history. */
 export function SetSelector({
   project,
   activeIdeaId,
@@ -25,7 +26,7 @@ export function SetSelector({
   const sets = useMemo(() => getSets(project), [project]);
 
   return (
-    <div className="mx-auto flex w-full max-w-[980px] flex-wrap gap-2 px-8 pt-3 pb-5">
+    <div className="flex flex-wrap gap-1">
       {sets.map(({ idea, saveCount }) => {
         const isActive = idea.id === focusedId;
         const isCurrent = idea.id === project.currentIdeaId;
@@ -33,25 +34,21 @@ export function SetSelector({
           <button
             aria-pressed={isActive}
             className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-2 font-medium text-[12px] transition-[background-color,color] duration-100",
+              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 font-medium text-[12px] transition-colors duration-100",
               isActive
-                ? "bg-white/10 text-white"
-                : "bg-white/[0.035] text-white/40 hover:bg-white/[0.06] hover:text-white/65"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}
             key={idea.id}
             onClick={() => onSelect(idea.id)}
+            title={`${idea.setPath}${isCurrent ? " · saved most recently" : ""}`}
             type="button"
           >
+            {isCurrent && <span className="size-1.5 rounded-full bg-success" />}
             {fileTabName(idea)}
-            <span className="text-[10px] text-white/25 tabular-nums">
+            <span className="text-[11px] text-subtle-foreground tabular-nums">
               {saveCount}
             </span>
-            {isCurrent && (
-              <span
-                className="size-1.5 rounded-full bg-emerald-400"
-                title="Current in Ableton"
-              />
-            )}
           </button>
         );
       })}

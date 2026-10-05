@@ -1,20 +1,10 @@
 import {
   ArrowCircleUp,
-  Eye,
-  EyeSlash,
-  FolderSimplePlus,
+  FolderSimple,
+  GitBranch,
   MagnifyingGlass,
-  WarningCircle,
 } from "@phosphor-icons/react";
-import {
-  type KeyboardEvent,
-  memo,
-  type PointerEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/logo";
 import { ProjectSearchCommand } from "@/components/project-search-command";
 import { RootManagerDialog } from "@/components/root-manager-dialog";
@@ -27,48 +17,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAppUpdate } from "@/hooks/use-app-update";
-import { sendDaemonCommand } from "@/lib/daemon-client";
+import { useConnectionStore } from "@/lib/connection-store";
 import { posthog } from "@/lib/posthog";
 import { usePreviewStore } from "@/lib/preview-store";
+import {
+  getProjectStatus,
+  lastCheckpointAt,
+  STATUS_DOT_CLASS,
+  STATUS_TEXT_CLASS,
+} from "@/lib/project-status";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 
-function projectHealth(project: Project): {
-  label: string;
-  dotClass: string;
-  textClass: string;
-} | null {
-  if (project.presence === "missing") {
-    return {
-      dotClass: "bg-amber-400",
-      label: "Missing",
-      textClass: "text-amber-400/80",
-    };
-  }
-  if (project.watchError) {
-    return {
-      dotClass: "bg-red-400",
-      label: "Error",
-      textClass: "text-red-400/80",
-    };
-  }
-  if (!project.watching) {
-    return {
-      dotClass: "bg-white/20",
-      label: "Paused",
-      textClass: "text-white/30",
-    };
-  }
-  return null;
-}
+const IS_MAC =
+  typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
 
 export const ProjectItem = memo(function ProjectItem({
   project,
@@ -81,144 +45,62 @@ export const ProjectItem = memo(function ProjectItem({
   const closePreviewPlayer = usePreviewStore(
     (state) => state.closePreviewPlayer
   );
-  const health = projectHealth(project);
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-    event.preventDefault();
-    handleSelect();
-  };
-
-  const handleSelect = () => {
-    posthog.capture("project_selected", { source: "sidebar" });
-    closePreviewPlayer();
-    selectProject(project.id);
-  };
+  const status = getProjectStatus(project);
+  const lastAt = lastCheckpointAt(project);
 
   return (
-    <div
+    <button
+      aria-current={selected ? "page" : undefined}
       className={cn(
-        "group w-full cursor-pointer select-none rounded-xl px-3 py-2.5 text-left transition-[background-color,color,box-shadow] duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20",
+        "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         selected
-          ? "bg-white/[0.08] text-white shadow-[0_0_0_1px_oklch(1_0_0/0.06)]"
-          : "text-white/45 hover:bg-white/[0.035] hover:text-white/70"
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
       )}
-      onClick={handleSelect}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
+      onClick={() => {
+        posthog.capture("project_selected", { source: "sidebar" });
+        closePreviewPlayer();
+        selectProject(project.id);
+      }}
+      type="button"
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            health?.dotClass ?? "bg-emerald-400"
+      <span
+        aria-hidden
+        className={cn(
+          "mt-[5px] size-2 shrink-0 rounded-full",
+          STATUS_DOT_CLASS[status.tone]
+        )}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          {project.continuedFrom && (
+            <GitBranch
+              aria-label="Branch"
+              className="shrink-0 text-subtle-foreground"
+              size={12}
+            />
           )}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate font-medium text-[12px] leading-tight">
-              {project.name}
+          <span className="truncate font-medium text-[13px] leading-snug">
+            {project.name}
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-subtle-foreground">
+          {status.tone === "ok" ? (
+            lastAt ? (
+              `Last checkpoint ${timeAgo(lastAt).toLowerCase()}`
+            ) : (
+              "Waiting for first save"
+            )
+          ) : (
+            <span className={STATUS_TEXT_CLASS[status.tone]}>
+              {status.label}
             </span>
-            <span className="text-[10px] text-white/20 tabular-nums">
-              {project.saves.length}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-[10px]">
-            {health && <span className={health.textClass}>{health.label}</span>}
-            <span className="text-white/20 tabular-nums">
-              {project.saves.length > 0
-                ? timeAgo(project.saves.at(-1)?.createdAt)
-                : "No checkpoints"}
-            </span>
-          </div>
-        </div>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              className={cn(
-                "shrink-0 opacity-0 transition-opacity duration-100 group-focus-within:opacity-100 group-hover:opacity-100",
-                project.watching ? "text-emerald-400" : "text-white/30"
-              )}
-              disabled={project.presence === "missing"}
-              onClick={(event) => {
-                event.stopPropagation();
-                posthog.capture("watching_toggled", {
-                  watching: !project.watching,
-                });
-                sendDaemonCommand({
-                  projectId: project.id,
-                  type: "toggle-watching",
-                  watching: !project.watching,
-                });
-              }}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              {project.watching ? <Eye size={14} /> : <EyeSlash size={14} />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            {project.presence === "missing"
-              ? "Missing on disk"
-              : project.watching
-                ? "Pause protection"
-                : "Resume protection"}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      {project.watchError && (
-        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-red-300/70">
-          <WarningCircle className="shrink-0" size={12} />
-          <span className="truncate">{project.watchError}</span>
-        </div>
-      )}
-    </div>
+          )}
+        </span>
+      </span>
+    </button>
   );
 });
-
-function FolderManagerButton() {
-  const [managerOpen, setManagerOpen] = useState(false);
-  const openedFromPointerRef = useRef(false);
-
-  const openManager = () => setManagerOpen(true);
-
-  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-    openedFromPointerRef.current = true;
-    openManager();
-  };
-
-  const handleClick = () => {
-    if (openedFromPointerRef.current) {
-      openedFromPointerRef.current = false;
-      return;
-    }
-    openManager();
-  };
-
-  return (
-    <>
-      <button
-        className="font-medium text-[11px] text-emerald-300/70 transition-colors duration-100 hover:text-emerald-300"
-        onClick={handleClick}
-        onPointerDown={handlePointerDown}
-        type="button"
-      >
-        Manage folders
-      </button>
-
-      <RootManagerDialog onOpenChange={setManagerOpen} open={managerOpen} />
-    </>
-  );
-}
 
 function UpdateButton() {
   const { updateAvailable, version, openUpdate } = useAppUpdate();
@@ -230,27 +112,24 @@ function UpdateButton() {
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            className="text-emerald-400/70 hover:text-emerald-400"
-            onClick={() => setDialogOpen(true)}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <ArrowCircleUp size={16} />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Update available</TooltipContent>
-      </Tooltip>
+      <Button
+        className="w-full justify-start text-success"
+        onClick={() => setDialogOpen(true)}
+        size="sm"
+        type="button"
+        variant="ghost"
+      >
+        <ArrowCircleUp size={15} />
+        Update available
+      </Button>
 
       <Dialog onOpenChange={setDialogOpen} open={dialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Available</DialogTitle>
+            <DialogTitle>Update available</DialogTitle>
             <DialogDescription>
-              Echoform v{version} is ready. Download and install to update.
+              Echoform v{version} is ready to download. Your projects and
+              history are not affected by updating.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -262,7 +141,7 @@ function UpdateButton() {
               }}
               type="button"
             >
-              Download Update
+              Download update
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -271,78 +150,40 @@ function UpdateButton() {
   );
 }
 
-const VirtualizedProjectList = memo(function VirtualizedProjectList({
-  projects,
-  selectedProjectId,
-  isEmpty,
-}: {
-  projects: Project[];
-  selectedProjectId: string | null;
-  isEmpty: boolean;
-}) {
-  if (isEmpty) {
-    return (
-      <div className="min-h-0 flex-1 px-2 py-1">
-        <div className="px-3 py-8 text-center">
-          <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-white/[0.04]">
-            <FolderSimplePlus className="text-white/15" size={18} />
-          </div>
-          <div className="mt-3 font-medium text-[13px] text-white/30">
-            No projects found
-          </div>
-          <div className="mt-1 text-[11px] text-white/15 leading-relaxed">
-            Add a music folder above to start
-            <br />
-            protecting your sessions.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+function ConnectionStatus() {
+  const connected = useConnectionStore((s) => s.connected);
   return (
-    <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2">
-      <div className="px-2 pb-2 font-semibold text-[10px] text-white/25 uppercase tracking-[0.14em]">
-        Recent projects
-      </div>
-      <div className="space-y-0.5">
-        {projects.map((project) => (
-          <ProjectItem
-            key={project.id}
-            project={project}
-            selected={project.id === selectedProjectId}
-          />
-        ))}
-      </div>
-    </div>
+    <span
+      className={cn(
+        "flex items-center gap-1.5 text-[11px]",
+        connected ? "text-subtle-foreground" : "text-warning"
+      )}
+      title={
+        connected
+          ? "Echoform's background service is running"
+          : "Reconnecting to Echoform's background service"
+      }
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          connected ? "bg-success" : "animate-pulse bg-warning"
+        )}
+      />
+      {connected ? "Running" : "Reconnecting"}
+    </span>
   );
-});
+}
 
 export function AppSidebar() {
   const projects = useStore((state) => state.projects);
+  const roots = useStore((state) => state.roots);
   const selectedProjectId = useStore((state) => state.selectedProjectId);
   const [searchOpen, setSearchOpen] = useState(false);
-  const searchOpenedFromPointerRef = useRef(false);
-  const openSearch = () => setSearchOpen(true);
-
-  const handleSearchPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-    searchOpenedFromPointerRef.current = true;
-    openSearch();
-  };
-
-  const handleSearchClick = () => {
-    if (searchOpenedFromPointerRef.current) {
-      searchOpenedFromPointerRef.current = false;
-      return;
-    }
-    openSearch();
-  };
+  const [foldersOpen, setFoldersOpen] = useState(false);
 
   useEffect(() => {
-    const handler = (e: globalThis.KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setSearchOpen(true);
@@ -354,74 +195,89 @@ export function AppSidebar() {
 
   const sorted = useMemo(
     () =>
-      [...projects].sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      [...projects].sort((a, b) =>
+        (lastCheckpointAt(b) ?? b.updatedAt).localeCompare(
+          lastCheckpointAt(a) ?? a.updatedAt
+        )
       ),
     [projects]
   );
 
   return (
-    <TooltipProvider>
-      <aside className="flex h-full w-full flex-col overflow-hidden border-white/[0.065] border-e bg-white/[0.014]">
-        {/* Header – padded below macOS traffic lights */}
-        <div className="shrink-0 px-4 pt-10 pb-4">
-          <div
-            className="flex items-center justify-between"
-            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-          >
-            <div className="flex items-center gap-2">
-              <Logo className="size-4 text-white/85" />
-              <h1 className="font-semibold text-[15px] text-white/85 tracking-tight">
-                Echoform
-              </h1>
-            </div>
-            <div
-              className="flex items-center gap-0.5"
-              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            >
-              <UpdateButton />
-              <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 font-semibold text-[9px] text-emerald-300/70 uppercase tracking-wider">
-                Live
-              </span>
-            </div>
-          </div>
-
-          <button
-            className="mt-4 flex h-9 w-full items-center gap-2 rounded-xl bg-white/[0.035] px-3 text-[12px] text-white/25 shadow-[0_0_0_1px_oklch(1_0_0/0.055)] transition-[background-color,color,box-shadow] duration-100 hover:bg-white/[0.055] hover:text-white/45 hover:shadow-[0_0_0_1px_oklch(1_0_0/0.09)]"
-            onClick={handleSearchClick}
-            onPointerDown={handleSearchPointerDown}
-            type="button"
-          >
-            <MagnifyingGlass className="shrink-0 text-white/20" size={13} />
-            <span className="flex-1 text-left">Find a project</span>
-            <kbd className="font-mono text-[9px] text-white/15">
-              {navigator.platform?.includes("Mac") ? "\u2318K" : "Ctrl+K"}
-            </kbd>
-          </button>
+    <aside className="flex h-full w-full flex-col border-border border-e bg-sidebar">
+      {/* Padded below the macOS traffic lights; the strip is draggable. */}
+      <div
+        className="flex shrink-0 items-center justify-between px-4 pt-11 pb-3"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+      >
+        <div className="flex items-center gap-2">
+          <Logo className="size-4 text-foreground" />
+          <span className="font-semibold text-[14px] tracking-tight">
+            Echoform
+          </span>
         </div>
+        <ConnectionStatus />
+      </div>
 
-        {/* Project list */}
-        <VirtualizedProjectList
-          isEmpty={projects.length === 0}
-          projects={sorted}
-          selectedProjectId={selectedProjectId}
-        />
+      <div className="shrink-0 px-3 pb-3">
+        <button
+          className="flex h-8 w-full items-center gap-2 rounded-lg border border-border bg-background/60 px-2.5 text-[12px] text-subtle-foreground transition-colors duration-100 hover:border-input hover:text-muted-foreground"
+          onClick={() => setSearchOpen(true)}
+          type="button"
+        >
+          <MagnifyingGlass className="shrink-0" size={13} />
+          <span className="flex-1 text-left">Find a project</span>
+          <kbd className="font-mono text-[10px]">
+            {IS_MAC ? "⌘K" : "Ctrl+K"}
+          </kbd>
+        </button>
+      </div>
 
-        <div className="m-3 rounded-xl bg-white/[0.025] p-3 shadow-[0_0_0_1px_oklch(1_0_0/0.05)]">
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-white/25">Protected projects</span>
-            <span className="text-white/50 tabular-nums">
-              {projects.length}
-            </span>
-          </div>
-          <div className="mt-2">
-            <FolderManagerButton />
-          </div>
-        </div>
-      </aside>
+      <div className="flex items-baseline justify-between px-5 pb-1.5">
+        <span className="font-medium text-[11px] text-subtle-foreground">
+          Projects
+        </span>
+        <span className="text-[11px] text-subtle-foreground tabular-nums">
+          {projects.length}
+        </span>
+      </div>
 
+      <nav className="scrollbar-thin min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+        {sorted.length === 0 ? (
+          <p className="px-3 py-6 text-center text-[12px] text-muted-foreground leading-relaxed">
+            No projects yet. Add the folder where you keep your Ableton
+            projects.
+          </p>
+        ) : (
+          sorted.map((project) => (
+            <ProjectItem
+              key={project.id}
+              project={project}
+              selected={project.id === selectedProjectId}
+            />
+          ))
+        )}
+      </nav>
+
+      <div className="shrink-0 space-y-1 border-border border-t p-2">
+        <UpdateButton />
+        <Button
+          className="w-full justify-start text-muted-foreground"
+          onClick={() => setFoldersOpen(true)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <FolderSimple size={15} />
+          Watched folders
+          <span className="ml-auto text-[11px] text-subtle-foreground tabular-nums">
+            {roots.length}
+          </span>
+        </Button>
+      </div>
+
+      <RootManagerDialog onOpenChange={setFoldersOpen} open={foldersOpen} />
       <ProjectSearchCommand onOpenChange={setSearchOpen} open={searchOpen} />
-    </TooltipProvider>
+    </aside>
   );
 }

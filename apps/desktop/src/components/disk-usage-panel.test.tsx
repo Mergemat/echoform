@@ -55,18 +55,18 @@ describe("storage cleanup confirmation", () => {
     render(<DiskUsagePanel projectId="project-1" />);
 
     await user.click(screen.getByRole("button", { name: "Storage" }));
-    await screen.findByText("Retention compaction");
-    await user.click(
-      screen.getByRole("button", { name: "Compact checkpoints" })
-    );
+    await screen.findByText("Thin out history");
+    await user.click(screen.getByRole("button", { name: "Thin out" }));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByText("Permanently remove historical automatic checkpoints?")
+      screen.getByText("Remove older checkpoints for good?")
     ).toBeVisible();
-    expect(screen.getByText(/up to 3 automatic checkpoints/i)).toBeVisible();
+    expect(screen.getByText(/up to 3 checkpoints/i)).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove checkpoints" })
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
@@ -102,22 +102,20 @@ describe("storage cleanup confirmation", () => {
 
     const view = render(<DiskUsagePanel projectId="project-1" />);
     await user.click(screen.getByRole("button", { name: "Storage" }));
-    await screen.findByText("Retention compaction");
-    await user.click(
-      screen.getByRole("button", { name: "Compact checkpoints" })
-    );
-    expect(screen.getByText(/up to 3 automatic checkpoints/i)).toBeVisible();
+    await screen.findByText("Thin out history");
+    await user.click(screen.getByRole("button", { name: "Thin out" }));
+    expect(screen.getByText(/up to 3 checkpoints/i)).toBeVisible();
 
     view.rerender(<DiskUsagePanel projectId="project-2" />);
     await user.click(screen.getByRole("button", { name: "Storage" }));
-    await screen.findAllByText("8 KB");
-    expect(screen.queryByText(/up to 3 auto-checkpoints/i)).toBeNull();
+    await screen.findByText("8 KB");
+    expect(screen.queryByText(/up to 3 checkpoints/i)).toBeNull();
 
+    await user.click(screen.getByRole("button", { name: "Thin out" }));
+    expect(screen.getByText(/up to 1 checkpoint\b/i)).toBeVisible();
     await user.click(
-      screen.getByRole("button", { name: "Compact checkpoints" })
+      screen.getByRole("button", { name: "Remove checkpoints" })
     );
-    expect(screen.getByText(/up to 1 automatic checkpoint/i)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Confirm removal" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(

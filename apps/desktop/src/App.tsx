@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
+import { Logo } from "@/components/logo";
 import { PreviewPlayer } from "@/components/preview-player";
 import { ProjectHeader } from "@/components/project-header";
 import { AppSidebar } from "@/components/sidebar";
 import { Timeline } from "@/components/timeline";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { WelcomeOnboarding } from "@/components/welcome-onboarding";
 import { useDaemonSync } from "@/hooks/use-daemon-sync";
 import { usePreviewStatusToasts } from "@/hooks/use-preview-status-toasts";
@@ -16,35 +18,28 @@ import { useStore } from "@/lib/store";
 function AppLoading() {
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-5">
-        <div className="h-1 w-24 overflow-hidden rounded-full bg-white/[0.06]">
-          <div className="h-full w-2/5 animate-[shimmer_1.6s_ease-in-out_infinite] rounded-full bg-white/15" />
-        </div>
-        <span className="text-[13px] text-white/20">Loading projects...</span>
+      <div className="flex flex-col items-center gap-4">
+        <Logo className="size-8 animate-pulse text-muted-foreground" />
+        <span className="text-[13px] text-muted-foreground">
+          Starting Echoform…
+        </span>
       </div>
     </div>
   );
 }
 
-function ConnectionIndicator() {
+function ConnectionBanner() {
   const connected = useConnectionStore((s) => s.connected);
-  const snapshotReceived = useStore((s) => s.snapshotReceived);
-
-  // Don't show "reconnecting" on first load — the app loading screen handles it
-  if (!snapshotReceived) {
-    return null;
-  }
-
   if (connected) {
     return null;
   }
-
   return (
-    <div className="fade-in slide-in-from-top-2 fixed top-3 left-1/2 z-50 -translate-x-1/2 animate-in duration-300">
-      <div className="flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-[12px] text-white/40 shadow-black/20 shadow-lg backdrop-blur-xl">
-        <div className="size-1.5 shrink-0 animate-pulse rounded-full bg-amber-400/70" />
-        Reconnecting...
-      </div>
+    <div
+      className="border-warning/20 border-b bg-warning/10 px-6 py-2 text-[12px] text-warning"
+      role="status"
+    >
+      Lost connection to Echoform's background service. Reconnecting — saves
+      made in Ableton meanwhile are picked up once it's back.
     </div>
   );
 }
@@ -78,8 +73,9 @@ function App() {
     });
   }, [connected, onboardingStep, projects.length, snapshotReceived]);
 
-  // Show loading screen while waiting for initial connection + snapshot
-  if (!(connected && snapshotReceived)) {
+  // Only block on the very first snapshot; later disconnects show a banner
+  // so the user keeps seeing their history.
+  if (!snapshotReceived) {
     return (
       <>
         <AppLoading />
@@ -88,40 +84,41 @@ function App() {
     );
   }
 
-  // Show onboarding when not completed yet
   if (onboardingStep !== "done") {
     return (
-      <>
+      <TooltipProvider delayDuration={400}>
         <WelcomeOnboarding />
         <Toaster />
-      </>
+      </TooltipProvider>
     );
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0d0e11] text-foreground">
-      <div className="w-[252px] shrink-0">
-        <AppSidebar />
-      </div>
-
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ProjectHeader />
-        <div className="min-h-0 flex-1">
-          <Timeline />
+    <TooltipProvider delayDuration={400}>
+      <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+        <div className="w-[248px] shrink-0">
+          <AppSidebar />
         </div>
-        {selectedProject && previewSave && (
-          <PreviewPlayer
-            key={previewSave.id}
-            onClose={closePreviewPlayer}
-            project={selectedProject}
-            save={previewSave}
-          />
-        )}
-      </main>
 
-      <ConnectionIndicator />
-      <Toaster />
-    </div>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <ConnectionBanner />
+          <ProjectHeader />
+          <div className="min-h-0 flex-1">
+            <Timeline />
+          </div>
+          {selectedProject && previewSave && (
+            <PreviewPlayer
+              key={previewSave.id}
+              onClose={closePreviewPlayer}
+              project={selectedProject}
+              save={previewSave}
+            />
+          )}
+        </main>
+
+        <Toaster />
+      </div>
+    </TooltipProvider>
   );
 }
 

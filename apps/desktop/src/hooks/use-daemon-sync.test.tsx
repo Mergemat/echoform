@@ -4,7 +4,8 @@ import type { WsEvent } from "@/lib/types";
 import { useDaemonSync } from "./use-daemon-sync";
 
 let daemonEventListener: ((event: WsEvent) => void) | null = null;
-const { toastSuccess, toastWarning } = vi.hoisted(() => ({
+const { selectProject, toastSuccess, toastWarning } = vi.hoisted(() => ({
+  selectProject: vi.fn(),
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
 }));
@@ -43,6 +44,7 @@ vi.mock("@/lib/store", () => ({
       applySnapshot: vi.fn(),
       projects: [],
       selectedProjectId: null,
+      selectProject,
       setDiscoveredProjects: vi.fn(),
       setRootSuggestions: vi.fn(),
     }),
@@ -57,6 +59,7 @@ function HookHarness() {
 describe("useDaemonSync recovery feedback", () => {
   beforeEach(() => {
     daemonEventListener = null;
+    selectProject.mockReset();
     toastSuccess.mockReset();
     toastWarning.mockReset();
     window.echoform = {
@@ -121,5 +124,45 @@ describe("useDaemonSync recovery feedback", () => {
       })
     );
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("switches to the new branch once it arrives in the next snapshot", async () => {
+    render(<HookHarness />);
+    await waitFor(() => expect(daemonEventListener).not.toBeNull());
+
+    daemonEventListener?.({
+      recovery: {
+        activeSetPath: "/Music/Echoform Recoveries/Demo/song.als",
+        openError: null,
+        recoveredPath: "/Music/Echoform Recoveries/Demo",
+        recoveredProjectId: "branch-1",
+        sourceProjectId: "project-1",
+        sourceSaveId: "save-1",
+      },
+      type: "recovery-created",
+    });
+    expect(selectProject).not.toHaveBeenCalled();
+
+    daemonEventListener?.({
+      activity: [],
+      projects: [
+        { id: "project-1", saves: [] },
+        { id: "branch-1", saves: [] },
+      ] as never,
+      roots: [],
+      type: "snapshot",
+    });
+    expect(selectProject).toHaveBeenCalledWith("branch-1");
+
+    daemonEventListener?.({
+      activity: [],
+      projects: [
+        { id: "project-1", saves: [] },
+        { id: "branch-1", saves: [] },
+      ] as never,
+      roots: [],
+      type: "snapshot",
+    });
+    expect(selectProject).toHaveBeenCalledTimes(1);
   });
 });

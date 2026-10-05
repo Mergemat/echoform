@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useConnectionStore } from "@/lib/connection-store";
 import {
@@ -13,6 +13,10 @@ import { usePreviewStore } from "@/lib/preview-store";
 import { useStore } from "@/lib/store";
 
 export function useDaemonSync() {
+  // A new branch arrives in the snapshot that follows "recovery-created";
+  // remember it so we can switch to it as soon as it exists.
+  const pendingBranchIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const unsubscribeCommandFailures = subscribeCommandFailures(({ error }) => {
       toast.error(error.message);
@@ -23,6 +27,15 @@ export function useDaemonSync() {
       switch (event.type) {
         case "snapshot":
           store.applySnapshot(event.projects, event.roots, event.activity);
+          if (
+            pendingBranchIdRef.current &&
+            event.projects.some(
+              (project) => project.id === pendingBranchIdRef.current
+            )
+          ) {
+            store.selectProject(pendingBranchIdRef.current);
+            pendingBranchIdRef.current = null;
+          }
           syncAppProfile({
             project_count: event.projects.length,
             root_count: event.roots.length,
@@ -35,14 +48,20 @@ export function useDaemonSync() {
         case "project-updated":
           store.applyProjectUpdate(event.project);
           break;
-        case "auto-saved":
+        case "auto-saved": {
           posthog.capture("save_created", {
             auto: true,
           });
-          toast.success(`Checkpoint created for ${event.save.label}`);
+          const projectName = store.projects.find(
+            (project) => project.id === event.projectId
+          )?.name;
+          toast.success("Checkpoint recorded", {
+            description: projectName,
+          });
           return;
+        }
         case "change-detected":
-          toast.info(`Changes detected in ${event.projectName}`);
+          // The checkpoint itself (or an error) follows; one toast per save.
           return;
         case "discovered-projects":
           store.setDiscoveredProjects(event.paths);
@@ -51,7 +70,9 @@ export function useDaemonSync() {
           store.setRootSuggestions(event.suggestions);
           return;
         case "recovery-created": {
-          const { openError, recoveredPath } = event.recovery;
+          const { openError, recoveredPath, recoveredProjectId } =
+            event.recovery;
+          pendingBranchIdRef.current = recoveredProjectId;
           const revealPath = window.echoform?.revealPath;
           const options = {
             action: revealPath
