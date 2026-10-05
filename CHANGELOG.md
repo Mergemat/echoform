@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.24](https://github.com/Mergemat/echoform/compare/v0.0.23...v0.0.24) (2026-10-05)
+
+### Features
+
+* analyze checkpoints musically and redesign history around the song ([c2313d7](https://github.com/Mergemat/echoform/commit/c2313d72330316b5b94496eb841c590482b280be))
+* **desktop:** rework history UI so it states what it actually does ([a74ffda](https://github.com/Mergemat/echoform/commit/a74ffda8dc72ab0a2a6e5b051133e1e8f238f34c))
+* plain-language history with change search ([73c0970](https://github.com/Mergemat/echoform/commit/73c0970436e3d30c0e1af20e4c3f3eb74cb4e864))
+
+### Bug Fixes
+
+* **deps:** patch high and critical dependency advisories ([20f3579](https://github.com/Mergemat/echoform/commit/20f3579efbd804629e37723eca7ea4e8610abe00))
+* **desktop:** only load electron inside the preload's electron runtime ([c579f34](https://github.com/Mergemat/echoform/commit/c579f34e0780c36b63814b4cd352a5c6b483bdf0))
+
 ## [0.0.23](https://github.com/Mergemat/echoform/compare/v0.0.22...v0.0.23) (2026-08-04)
 
 ### Bug Fixes
