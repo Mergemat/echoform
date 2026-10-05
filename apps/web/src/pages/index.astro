@@ -2,12 +2,12 @@
 import "../styles/global.css";
 import DownloadDropdown from "../components/download-dropdown.astro";
 
-const title = "Echoform — Version history for Ableton projects";
+const title = "Echoform — Every Ableton save, kept";
 const description =
-  "Git-like checkpoints, diffs, branches, previews, and recovery for Ableton Live projects.";
+  "Echoform keeps every save of your Ableton projects, says what changed in plain words, and opens any earlier version as a separate copy.";
 const siteUrl = new URL("https://echoform.app");
 const canonicalUrl = new URL(Astro.url.pathname, siteUrl);
-const socialImageUrl = new URL("/screenshot.webp", siteUrl);
+const socialImageUrl = new URL("/og.jpg", siteUrl);
 const repo = "https://github.com/Mergemat/echoform";
 
 const releaseRes = await fetch(`${repo}/releases/latest`, {
@@ -59,6 +59,42 @@ const downloads = [
   },
 ] as const;
 
+// Real lines from a project's history; colours are Ableton's track palette.
+const historyExample = [
+  {
+    change: ": new part in bars 5–20",
+    color: "#5CFFE8",
+    name: "Serum lead in",
+    size: "lg",
+    time: "1:52 PM",
+    track: "Serum 2",
+  },
+  {
+    change: ": new audio in bars 14–20",
+    color: "#19E9FF",
+    size: "lg",
+    time: "1:50 PM",
+    track: "Hats",
+  },
+  {
+    change: ": clips edited in bars 1–4",
+    color: "#25FFA8",
+    size: "lg",
+    time: "1:50 PM",
+    track: "Vocal Chop",
+  },
+  {
+    before: "Pro-Q 4 on ",
+    change: ": Band 2 Gain",
+    color: "#F2C36B",
+    size: "sm",
+    time: "11:43 PM",
+    track: "Group",
+  },
+  { change: "Tempo 153 → 144 BPM", size: "lg", time: "3:04 PM" },
+  { change: "No musical changes", size: "none", time: "3:04 PM" },
+] as const;
+
 const githubIcon = `<svg class="h-4 w-4" viewBox="0 0 1024 1024" fill="currentColor"><path fill-rule="evenodd" d="M512 0C229.12 0 0 229.12 0 512c0 226.56 146.56 417.92 350.08 485.76 25.6 4.48 35.2-10.88 35.2-24.32 0-12.16-.64-52.48-.64-95.36-128.64 23.68-161.92-31.36-172.16-60.16-5.76-14.72-30.72-60.16-52.48-72.32-17.92-9.6-43.52-33.28-.64-33.92 40.32-.64 69.12 37.12 78.72 52.48 46.08 77.44 119.68 55.68 149.12 42.24 4.48-33.28 17.92-55.68 32.64-68.48-113.92-12.8-232.96-56.96-232.96-252.8 0-55.68 19.84-101.76 52.48-137.6-5.12-12.8-23.04-65.28 5.12-135.68 0 0 42.88-13.44 140.8 52.48 40.96-11.52 84.48-17.28 128-17.28s87.04 5.76 128 17.28c97.92-66.56 140.8-52.48 140.8-52.48 28.16 70.4 10.24 122.88 5.12 135.68 32.64 35.84 52.48 81.28 52.48 137.6 0 196.48-119.68 240-233.6 252.8 18.56 16 34.56 46.72 34.56 94.72 0 68.48-.64 123.52-.64 140.8 0 13.44 9.6 29.44 35.2 24.32C877.44 929.92 1024 737.92 1024 512 1024 229.12 794.88 0 512 0" clip-rule="evenodd"/></svg>`;
 const jsonLd = {
   "@context": "https://schema.org",
@@ -67,10 +103,11 @@ const jsonLd = {
   description,
   downloadUrl: dl.macArm,
   image: socialImageUrl.toString(),
+  license: "https://www.gnu.org/licenses/gpl-3.0.html",
   name: "Echoform",
   operatingSystem: "macOS, Windows",
   sameAs: [repo],
-  screenshot: socialImageUrl.toString(),
+  screenshot: new URL("/app-checkpoint.webp", siteUrl).toString(),
   softwareVersion: version,
   url: siteUrl.toString(),
 };
@@ -83,7 +120,7 @@ const jsonLd = {
     <title>{title}</title>
     <meta content={description} name="description">
     <meta content="index, follow" name="robots">
-    <meta content="#0f1115" name="theme-color">
+    <meta content="#141416" name="theme-color">
     <link href={canonicalUrl.toString()} rel="canonical">
     <link href="/favicon.ico" rel="icon" sizes="any">
     <link href="/favicon.svg" rel="icon" type="image/svg+xml">
@@ -95,8 +132,10 @@ const jsonLd = {
     <meta content={description} property="og:description">
     <meta content={canonicalUrl.toString()} property="og:url">
     <meta content={socialImageUrl.toString()} property="og:image">
+    <meta content="1200" property="og:image:width">
+    <meta content="630" property="og:image:height">
     <meta
-      content="Echoform desktop app showing project history, checkpoints, and change previews."
+      content="Echoform showing a project's saves, with what changed in each one and an arrangement view of the selected save."
       property="og:image:alt"
     >
     <meta content="summary_large_image" name="twitter:card">
@@ -110,22 +149,19 @@ const jsonLd = {
     />
   </head>
   <body>
-    <!-- NAV -->
     <nav
-      class="fixed top-0 left-0 right-0 z-50 border-b border-edge bg-surface/80 backdrop-blur-xl"
+      class="fixed top-0 right-0 left-0 z-50 border-edge border-b bg-surface/85 backdrop-blur-xl"
     >
       <div
-        class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
+        class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6"
       >
         <a class="flex items-center gap-2.5 text-text-primary" href="/">
-          <img alt="" class="h-6 w-6" src="/echoform.svg">
-          <span class="text-[15px] font-semibold tracking-[-0.02em]"
-            >Echoform</span
-          >
+          <img alt="" class="h-5 w-5" src="/echoform.svg">
+          <span class="font-semibold text-[15px] tracking-tight">Echoform</span>
         </a>
         <div class="flex items-center gap-4">
           <a
-            aria-label="GitHub"
+            aria-label="Echoform on GitHub"
             class="flex items-center justify-center text-text-secondary transition-colors hover:text-text-primary"
             href={repo}
           >
@@ -140,297 +176,260 @@ const jsonLd = {
       </div>
     </nav>
 
-    <!-- HERO -->
-    <section
-      class="relative flex min-h-[85dvh] flex-col items-center justify-center px-6 pt-28"
-    >
-      <!-- Gradient glow -->
-      <div
-        class="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-teal/[0.04] blur-[120px]"
-      ></div>
-
-      <div class="relative mx-auto max-w-2xl text-center">
-        <div
-          class="mb-6 inline-flex items-center gap-2 rounded-full border border-edge px-3 py-1"
-        >
-          <span class="h-1.5 w-1.5 rounded-full bg-teal animate-pulse"></span>
-          <span
-            class="text-[12px] font-medium tracking-wide text-text-secondary uppercase"
-            >v{version}</span
+    <main>
+      <!-- HERO -->
+      <section class="px-6 pt-36 pb-10">
+        <div class="mx-auto max-w-3xl text-center">
+          <p class="font-mono text-[12px] text-text-tertiary">
+            v{version}
+            · free for macOS and Windows
+          </p>
+          <h1
+            class="mt-5 font-semibold text-[clamp(2.6rem,6vw,4.4rem)] leading-[1.02] tracking-[-0.04em]"
           >
+            Every Ableton save,<br class="hidden sm:block">
+            kept.
+          </h1>
+          <p
+            class="mx-auto mt-6 max-w-xl text-[17px] text-text-secondary leading-relaxed"
+          >
+            Echoform keeps a copy of your project each time you save, tells you
+            what changed in plain words, and opens any earlier version without
+            touching the one you're working on.
+          </p>
+          <div class="mt-9 flex flex-col items-center gap-3">
+            <DownloadDropdown
+              buttonLabel="Download for macOS"
+              dynamicLabel={true}
+              macLabel="Download for macOS"
+              options={downloads}
+              variant="hero"
+              winLabel="Download for Windows"
+            />
+            <a
+              class="text-[13px] text-text-tertiary transition-colors hover:text-text-secondary"
+              href={repo}
+            >
+              Open source, GPL-3.0
+            </a>
+          </div>
         </div>
 
-        <h1
-          class="text-[clamp(2.25rem,5vw,3.5rem)] font-bold leading-[1.08] tracking-[-0.035em] text-text-primary"
-        >
-          Git-like history for<br>Ableton projects
-        </h1>
-
-        <p
-          class="mx-auto mt-5 max-w-md text-[16px] leading-relaxed text-text-secondary"
-        >
-          Keep a local history of project changes. Compare checkpoints, attach
-          audio previews, and branch safely from an earlier checkpoint.
-        </p>
-
-        <div class="mt-8 flex flex-col items-center gap-3">
-          <DownloadDropdown
-            buttonLabel="Download for macOS"
-            dynamicLabel={true}
-            macLabel="Download for macOS"
-            options={downloads}
-            variant="hero"
-            winLabel="Download for Windows"
-          />
-        </div>
-      </div>
-
-      <div class="relative mx-auto mt-16 w-full max-w-4xl">
-        <div
-          class="overflow-hidden rounded-md border border-edge bg-surface-raised shadow-2xl shadow-black/50 ring-1 ring-white/5"
-        >
-          <div class="relative aspect-[16/9] bg-surface-raised">
+        <figure class="mx-auto mt-16 max-w-6xl">
+          <div
+            class="overflow-hidden rounded-xl border border-edge-strong bg-surface-raised shadow-2xl shadow-black/60"
+          >
             <img
-              alt="Echoform desktop app showing project history, checkpoints, and change previews."
-              class="h-full w-full object-cover object-top"
+              alt="Echoform showing a project's saves. Each save says what changed, like “Serum 2: new part in bars 5–20”. The selected save shows the new part in the arrangement and its notes in a piano roll."
+              class="block h-auto w-full"
               decoding="async"
               fetchpriority="high"
+              height="1475"
               loading="eager"
-              src="/screenshot.webp"
+              src="/app-checkpoint.webp"
+              width="2400"
             >
-            <div
-              class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/12 to-transparent"
-            ></div>
           </div>
-        </div>
-        <!-- Bottom fade -->
-        <div
-          class="pointer-events-none absolute -bottom-px left-0 right-0 h-32 bg-gradient-to-t from-surface to-transparent"
-        ></div>
-      </div>
-    </section>
+        </figure>
+      </section>
 
-    <!-- FEATURES -->
-    <section class="mx-auto max-w-5xl px-6 py-24">
-      <div
-        class="grid gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-2 lg:grid-cols-3"
+      <!-- WHAT CHANGED -->
+      <section
+        class="mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 md:grid-cols-[1fr_1.15fr]"
       >
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
+        <div>
+          <h2
+            class="font-semibold text-[clamp(1.7rem,3vw,2.4rem)] leading-tight tracking-[-0.03em]"
           >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Automatic tracking
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Project file changes create checkpoints automatically. No commits or
-            commands required.
+            Each save says what changed.
+          </h2>
+          <p
+            class="mt-4 max-w-md text-[16px] text-text-secondary leading-relaxed"
+          >
+            Echoform reads your Live Set and compares it with the save before,
+            so you see the music, not file names.
           </p>
+          <ul class="mt-7 space-y-2.5 text-[15px] text-text-secondary">
+            <li>New parts, and the bars they're in</li>
+            <li>Notes added or removed, shown in a piano roll</li>
+            <li>Devices added, switched off or tweaked</li>
+            <li>Tempo, faders in dB, sends and automation</li>
+          </ul>
         </div>
 
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
-          >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Audio preview
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Attach an exported audio file to a checkpoint and play it with a
-            waveform in the app.
-          </p>
-        </div>
+        <ol
+          aria-label="Example history"
+          class="rounded-xl border border-edge bg-surface-raised p-3"
+        >
+          {historyExample.map((row) => (
+            <li class="grid grid-cols-[4.5rem_1.5rem_1fr] items-center gap-x-3 px-3">
+              <span class="font-mono text-[12px] text-text-secondary">{row.time}</span>
+              <span class="relative flex h-full min-h-11 items-center justify-center">
+                <span class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-edge" />
+                <span
+                  class:list={[
+                    "relative rounded-full",
+                    row.size === "lg" && "h-3.5 w-3.5",
+                    row.size === "sm" && "h-2.5 w-2.5",
+                    row.size === "none" && "h-2 w-2 border-[1.5px] border-text-tertiary bg-surface-raised",
+                  ]}
+                  style={row.size === "none" ? undefined : `background:${"color" in row ? row.color : "#a3a19c"}`}
+                />
+              </span>
+              <span class="py-2.5">
+                {"name" in row && (
+                  <span class="block font-semibold text-[16px] tracking-tight">{row.name}</span>
+                )}
+                <span class:list={["text-[14px]", row.size === "none" ? "text-text-tertiary" : "text-text-secondary"]}>
+                  {"before" in row && row.before}
+                  {"track" in row && (
+                    <span class="font-medium" style={`color:${row.color}`}>{row.track}</span>
+                  )}
+                  {row.change}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
-          >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M9 12h6M12 9v6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Track changes
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            See what changed between checkpoints — tracks added, removed, or
-            renamed.
-          </p>
-        </div>
-
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
-          >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Safe branching
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Start a new branch from any checkpoint in a verified working copy.
-          </p>
-        </div>
-
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
-          >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Creative directions
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Detect multiple Ableton sets as separate directions and focus each
-            checkpoint history.
-          </p>
-        </div>
-
-        <div class="bg-surface p-6">
-          <div
-            class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-surface-overlay"
-          >
-            <svg
-              class="h-4 w-4 text-teal"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M9 4h6l1 3H8L9 4z"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-          <h3 class="text-[14px] font-semibold text-text-primary">
-            Disk awareness
-          </h3>
-          <p class="mt-1.5 text-[13px] leading-relaxed text-text-secondary">
-            Monitor storage usage per project. Prune old checkpoints to reclaim
-            space.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA -->
-    <section class="mx-auto max-w-5xl px-6 py-24">
-      <div
-        class="relative rounded-xl border border-edge bg-surface-raised p-12 text-center"
+      <!-- FIND -->
+      <section
+        class="mx-auto grid max-w-6xl items-center gap-12 px-6 py-24 md:grid-cols-[1.15fr_1fr]"
       >
         <div
-          class="pointer-events-none absolute inset-0 bg-gradient-to-br from-teal/[0.06] via-transparent to-transparent"
-        ></div>
+          class="order-2 rounded-xl border border-edge bg-surface-raised p-5 md:order-1"
+        >
+          <div
+            class="flex h-10 items-center gap-2.5 rounded-lg border border-edge-strong bg-surface px-3 text-[15px]"
+          >
+            <svg
+              class="h-4 w-4 shrink-0 text-text-tertiary"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" stroke-linecap="round" />
+            </svg>
+            <span>louder</span>
+            <span class="ml-auto font-mono text-[11px] text-text-tertiary"
+              >2 found</span
+            >
+          </div>
+          <ul class="mt-3 space-y-1 text-[14px]">
+            <li class="grid grid-cols-[4.5rem_1fr] rounded-md px-3 py-2.5">
+              <span class="font-mono text-[12px] text-text-secondary"
+                >10:12 PM</span
+              >
+              <span class="text-text-secondary">
+                <span class="font-medium" style="color:#FFA529">Kick</span>{" "}
+                louder (+2.0 dB)
+              </span>
+            </li>
+            <li class="grid grid-cols-[4.5rem_1fr] rounded-md px-3 py-2.5">
+              <span class="font-mono text-[12px] text-text-secondary"
+                >Yesterday</span
+              >
+              <span class="text-text-secondary">
+                <span class="font-medium" style="color:#8BC5FF">Sub Bass</span>
+                {" "}
+                louder (+1.5 dB)
+              </span>
+            </li>
+          </ul>
+        </div>
+        <div class="order-1 md:order-2">
+          <h2
+            class="font-semibold text-[clamp(1.7rem,3vw,2.4rem)] leading-tight tracking-[-0.03em]"
+          >
+            Find the moment it changed.
+          </h2>
+          <p
+            class="mt-4 max-w-md text-[16px] text-text-secondary leading-relaxed"
+          >
+            “When did the bass get quieter?” Type a track, a device or a word
+            like “tempo” or “louder”, and the history narrows to the saves where
+            that changed.
+          </p>
+        </div>
+      </section>
+
+      <!-- GO BACK -->
+      <section class="mx-auto max-w-6xl px-6 py-24">
+        <div class="max-w-2xl">
+          <h2
+            class="font-semibold text-[clamp(1.7rem,3vw,2.4rem)] leading-tight tracking-[-0.03em]"
+          >
+            Go back without losing anything.
+          </h2>
+          <p class="mt-4 text-[16px] text-text-secondary leading-relaxed">
+            Liked last night's version better? Continue from any save: Echoform
+            rebuilds it as a separate project, checks every file, and opens it
+            in Ableton. The project you're working on stays exactly as it is.
+          </p>
+        </div>
+        <dl
+          class="mt-12 grid gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-3"
+        >
+          <div class="bg-surface p-6">
+            <dt class="font-semibold text-[15px]">Nothing to remember</dt>
+            <dd class="mt-2 text-[14px] text-text-secondary leading-relaxed">
+              Point it at your projects folder. Every time you save in Ableton,
+              you get a version you can come back to.
+            </dd>
+          </div>
+          <div class="bg-surface p-6">
+            <dt class="font-semibold text-[15px]">Keep the good ones</dt>
+            <dd class="mt-2 text-[14px] text-text-secondary leading-relaxed">
+              Name a save, add a note or attach a bounce to listen back. Those
+              are never cleaned up automatically.
+            </dd>
+          </div>
+          <div class="bg-surface p-6">
+            <dt class="font-semibold text-[15px]">Every set in the project</dt>
+            <dd class="mt-2 text-[14px] text-text-secondary leading-relaxed">
+              A “Save As” gets its own history, so alternate versions don't get
+              mixed up.
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- CTA -->
+      <section class="mx-auto max-w-6xl px-6 py-24 text-center">
         <h2
-          class="relative text-[clamp(1.5rem,3vw,2rem)] font-bold tracking-[-0.03em] text-text-primary"
+          class="font-semibold text-[clamp(1.9rem,4vw,3rem)] tracking-[-0.035em]"
         >
-          Keep past directions within reach.
+          Save as often as you like.
         </h2>
-        <p
-          class="relative mx-auto mt-3 max-w-sm text-[15px] text-text-secondary"
-        >
-          Free and open source. macOS and Windows.
-        </p>
         <DownloadDropdown
           buttonLabel="Download Echoform"
           options={downloads}
           variant="cta"
         />
-      </div>
-    </section>
+        <p
+          class="mx-auto mt-10 max-w-xl text-[13px] text-text-tertiary leading-relaxed"
+        >
+          Your projects and their history stay on your computer. Echoform is
+          version history, not a backup, so keep backing up your drive. Releases
+          send limited usage and crash reports to help fix problems.
+        </p>
+      </section>
+    </main>
 
-    <!-- FOOTER -->
-    <footer class="border-t border-edge">
+    <footer class="border-edge border-t">
       <div
-        class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6"
+        class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6 text-[13px] text-text-tertiary"
       >
-        <div class="flex items-center gap-2 text-[13px] text-text-tertiary">
-          <img alt="" class="h-4 w-4 opacity-40" src="/echoform.svg">
-          <span>Echoform</span>
-        </div>
+        <span class="flex items-center gap-2">
+          <img alt="" class="h-4 w-4 opacity-50" src="/echoform.svg">
+          Echoform v{version}
+        </span>
         <a
-          aria-label="GitHub"
-          class="flex items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
+          aria-label="Echoform on GitHub"
+          class="flex items-center justify-center transition-colors hover:text-text-secondary"
           href={repo}
         >
           <Fragment set:html={githubIcon} />
@@ -512,7 +511,7 @@ const jsonLd = {
       const selector = isWin ? '[data-dl="win"]' : '[data-dl="mac-arm"]';
       for (const el of document.querySelectorAll(selector)) {
         const badge = document.createElement("span");
-        badge.className = "ml-auto text-[10px] font-medium text-teal";
+        badge.className = "ml-auto text-[10px] font-medium text-text-secondary";
         badge.textContent = "Recommended";
         el.appendChild(badge);
       }
