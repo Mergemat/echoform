@@ -1,7 +1,5 @@
 "use strict";
 
-const { contextBridge, ipcRenderer } = require("electron");
-
 function readAdditionalArgument(argv, name) {
   const prefix = `--${name}=`;
   const match = argv.find((arg) => arg.startsWith(prefix));
@@ -63,7 +61,11 @@ function exposeEchoformApi(electron, preloadConfig = resolvePreloadConfig()) {
   });
 }
 
-exposeEchoformApi({ contextBridge, ipcRenderer });
+// Only touch the Electron module inside Electron. Requiring it from plain Node
+// (unit tests) resolves the binary path and can trigger a binary download.
+if (process.versions.electron) {
+  exposeEchoformApi(require("electron"));
+}
 
 module.exports = {
   exposeEchoformApi,
